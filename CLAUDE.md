@@ -652,6 +652,10 @@ condition que la base de comptes/perfs **survive** aux redémarrages (pas d'opti
     uniquement) par une liste de `CREATE TABLE` exécutés un par un ; sur Postgres,
     `INTEGER PRIMARY KEY AUTOINCREMENT` devient `SERIAL PRIMARY KEY` par simple substitution de
     texte (seule vraie différence de dialecte entre les deux moteurs sur ce bloc).
+    ⚠️ RÈGLE À RETENIR : toute création de table DOIT passer par
+    `_executer_creation_table()` (ou vivre dans `_TABLES_BASE`), JAMAIS par un `conn.execute()`
+    direct — sinon elle contourne cette traduction et plante sur Postgres (voir le bug du
+    25/08/2026 ci-dessous).
   - Les `INSERT OR IGNORE` (syntaxe SQLite) sont devenus `ON CONFLICT (...) DO NOTHING`
     (portable, supporté par SQLite 3.24+ ET Postgres).
   - Chaque INSERT dont le code appelant a besoin de l'id généré porte maintenant `RETURNING id`
@@ -668,14 +672,21 @@ condition que la base de comptes/perfs **survive** aux redémarrages (pas d'opti
   `curseur.rowcount == 1` (peu fiable pour un INSERT ignoré par `ON CONFLICT DO NOTHING RETURNING`).
   Suite complète re-testée après coup : 194 tests, tous OK — comportement SQLite strictement
   inchangé.
-- Dépendance ajoutée : `psycopg[binary]` (`backend/requirements.txt`) — import vérifié en local
-  (`python -c "import psycopg"` → OK), mais voir avertissement ci-dessous.
-- ⚠️ NON TESTÉ EN CONDITIONS RÉELLES CONTRE POSTGRES : pas de serveur Postgres (Docker/psql)
-  disponible localement pour valider le chemin Postgres de bout en bout (création des tables,
-  un vrai cycle CRUD…) — même situation que pour Fly.io en son temps. Le chemin SQLite (par
-  défaut, utilisé par toute la suite de tests) est lui entièrement validé. À VALIDER dès que
-  Hafiz a un vrai `DATABASE_URL` Neon (voir étapes manuelles ci-dessous) : lancer le serveur en
-  local avec cette variable définie et vérifier `/sante` + une inscription + une perf ajoutée.
+- BUG DÉCOUVERT ET CORRIGÉ AU PREMIER VRAI DÉPLOIEMENT (25/08/2026) :
+  `psycopg.errors.SyntaxError: syntax error at or near "AUTOINCREMENT"` au démarrage sur
+  Render+Neon. Cause : 5 tables ajoutées à `initialiser()` APRÈS la migration (`cycles`,
+  `cycle_programmes`, `objectifs_series`, `groupes_exercices`, `planning`) appelaient
+  `conn.execute()` directement avec leur `CREATE TABLE` brut — elles contournaient donc la
+  traduction `AUTOINCREMENT` → `SERIAL` qui ne vivait que dans `_executer_tables_base()`, la
+  boucle du schéma de base. Le piège venait de la FORME du code : la traduction était enfouie
+  dans une fonction dédiée au seul `_TABLES_BASE`, rien n'empêchait d'ajouter une table à côté.
+  Corrigé en extrayant la traduction dans `_executer_creation_table(conn, sql)`, utilisée par
+  TOUTES les créations de tables (schéma de base ET ajouts ultérieurs) — un seul chemin possible.
+- Dépendance ajoutée : `psycopg[binary]` (`backend/requirements.txt`).
+- ✅ VALIDÉ EN CONDITIONS RÉELLES (25/08/2026) contre le vrai Neon, après le correctif ci-dessus :
+  `GET /sante` → `{"statut":"ok"}` et `GET /joueurs` renvoie les 5 joueurs de démo avec leurs
+  performances — donc les tables ont bien été CRÉÉES sur Postgres *et* remplies (une vraie
+  écriture, pas juste un démarrage). Le chemin SQLite reste couvert par toute la suite de tests.
 
 ### Réveil du serveur, côté app (`src/api.js`, `App.js`)
 
@@ -691,26 +702,63 @@ condition que la base de comptes/perfs **survive** aux redémarrages (pas d'opti
   L'écran de chargement affiche « 🔄 Réveil du serveur… (jusqu'à 1 min) » au lieu de
   « ⏳ Connexion au serveur… » pendant ce second essai — pour ne pas laisser croire à une panne.
 
-### Étapes manuelles (Hafiz — comptes externes, impossible à faire à sa place)
+### Déploiement effectif — fait le 25/08/2026
 
-1. **Neon** (base de données) : créer un compte gratuit sur https://neon.tech (pas de carte
-   bancaire), créer un projet Postgres, copier la chaîne de connexion `DATABASE_URL` fournie
-   (commence par `postgresql://...`).
-2. **Pousser le code sur GitHub** si pas déjà fait — Render se branche sur un dépôt GitHub pour
-   déployer (pas de dépôt distant configuré sur ce projet au moment de l'écriture).
-3. **Render** (serveur web) : créer un compte gratuit sur https://render.com, « New + » →
-   « Web Service », connecter le dépôt GitHub. Configurer :
-   - Root Directory : `backend`
-   - Build Command : `pip install -r requirements.txt`
-   - Start Command : `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - Variable d'environnement `DATABASE_URL` = la chaîne copiée à l'étape 1 (section
-     « Environment » du service Render, PAS en dur dans le code).
-   - Plan : Free.
-4. Déployer, puis vérifier : ouvrir `https://<nom-du-service>.onrender.com/sante` dans un
-   navigateur → doit afficher `{"statut":"ok"}` (la toute première fois, ça peut prendre jusqu'à
-   une minute — c'est le réveil, normal). C'est la nouvelle ADRESSE FIXE du backend.
-5. Comme prévu pour Fly.io : brancher l'app sur cette adresse pour un futur build APK
-   (`expo.extra.apiUrl` / `eas.json`, voir « APK Android installable ») une fois vérifiée.
+Les comptes externes ont été créés par Hafiz (impossible à faire à sa place), le reste enchaîné
+dans la foulée. Tout est en place :
+
+- **GitHub** : https://github.com/jaggerjack49-maker/FitnessRoyale (`origin`, branche `master`).
+  Le dépôt local n'avait AUCUN commit avant le 25/08/2026 — Git n'avait jamais servi sur ce
+  projet ; le premier commit couvre donc tout l'état v0.7 d'un coup. Render se branche sur ce
+  dépôt et REDÉPLOIE AUTOMATIQUEMENT à chaque `git push` sur `master` (utile à savoir : pousser
+  du code backend cassé met le serveur en ligne hors service).
+- **Neon** : projet Postgres gratuit, `DATABASE_URL` posée UNIQUEMENT dans les variables
+  d'environnement du service Render (jamais dans le code ni dans le dépôt — elle contient le mot
+  de passe de la base).
+- **Render** : service `fitnessroyale`, adresse fixe **https://fitnessroyale.onrender.com**.
+  Root Directory `backend`, Build `pip install -r requirements.txt`, Start
+  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, plan Free.
+  PIÈGE RENCONTRÉ : le champ « Root Directory » n'avait pas été pris en compte à la création du
+  service → `Could not open requirements file`. Il se corrige dans Settings → Build & Deploy,
+  puis « Manual Deploy » (changer un réglage ne redéploie pas tout seul).
+
+### L'app parle au serveur en ligne — fait le 25/08/2026
+
+- `expo.extra.apiUrl` (app.json) et `API_URL` (eas.json, profils preview ET production) pointent
+  désormais sur `https://fitnessroyale.onrender.com` au lieu de l'IP du PC. Comme cette source
+  est la PREMIÈRE lue par `obtenirBaseUrl()` (`src/api.js`), l'app utilise le serveur en ligne
+  PARTOUT — Expo Go, version web et APK — sans dépendre du Wi-Fi de la maison ni du PC allumé.
+  Ça rend caduque l'alerte « si l'IP du PC change, refaire un build » de la section « APK Android
+  installable » : l'adresse est maintenant fixe.
+- `usesCleartextTraffic` (plugin `expo-build-properties`, app.json) a été RETIRÉ : il n'existait
+  que pour autoriser le `http://` non chiffré vers le PC, or Render est en `https://`. La
+  dépendance `expo-build-properties` reste installée (inutilisée) au cas où.
+- POUR REDÉVELOPPER CONTRE LE BACKEND LOCAL : mettre `expo.extra.apiUrl` à `null` dans app.json —
+  la détection automatique de l'IP du PC reprend la main (mode LAN uniquement). C'est écrit en
+  commentaire en tête de `src/api.js`.
+- ⚠️ PIÈGE QUI A COÛTÉ DU TEMPS — le CACHE DE TRANSFORMATION DE METRO : après avoir changé
+  `extra.apiUrl` dans app.json, la version web continuait d'aller sur `localhost:8000`. La
+  config était pourtant juste (`npx expo config --type public` affichait la bonne adresse) et
+  le bundle « simple » (`AppEntry.bundle?platform=web&dev=true`) la contenait bien — mais le
+  bundle RÉELLEMENT chargé par le navigateur (avec ses paramètres complets, dont
+  `transform.engine=hermes`) portait encore `"extra":{"apiUrl":{}}`, une valeur périmée servie
+  depuis le cache. Redémarrer le serveur, vider `.expo/` ou le cache du navigateur NE SUFFIT
+  PAS : le manifeste est inliné à la TRANSFORMATION, dont le cache vit ailleurs. Il faut
+  supprimer `node_modules/.cache` ET `%TEMP%/metro-cache` (+ `%TEMP%/metro-file-map-*`), ou
+  lancer `npx expo start --clear`. À refaire à chaque modification de `extra` dans app.json.
+  LEÇON DE MÉTHODE : le symptôme (« l'app ignore extra.apiUrl ») ressemblait à un bug de code,
+  et une première « correction » de `obtenirBaseUrl()` a été écrite puis ANNULÉE — c'est en
+  comparant le bundle servi à la config résolue, puis en lisant `Constants.expoConfig.extra`
+  DANS le navigateur (`{"apiUrl":{}}`), que la vraie cause est apparue. Vérifier ce que le
+  runtime reçoit vraiment avant de corriger le code qui le lit.
+- ⚠️ LA BASE NEON EST VIERGE : les comptes de test créés jusqu'ici (Hafiz, The Jaggerjack…)
+  vivaient dans le fichier SQLite LOCAL (`backend/fitness_royale.db`, ignoré par Git) — ils ne
+  sont PAS sur Neon, qui ne contient que les 5 joueurs de démo insérés automatiquement au
+  premier démarrage. Il faut donc SE RÉINSCRIRE sur le serveur en ligne, et re-passer le compte
+  en admin à la main (voir « Mode test ») — mais côté Postgres cette fois, pas avec la commande
+  `sqlite3` de cette section.
+- À FAIRE : refaire un build EAS pour que l'APK installé sur le téléphone utilise cette adresse
+  (celui en place pointe encore sur l'IP du PC) — voir « APK Android installable ».
 
 ## Version web — fait le 10/08/2026
 
@@ -741,11 +789,16 @@ Objectif de Hafiz : « créer l'application » → une version utilisable dans u
 
 ## APK Android installable (EAS Build) — configuré le 10/08/2026
 
+⚠️ SECTION EN PARTIE PÉRIMÉE depuis le 25/08/2026 : tout ce qui parle de l'IP DU PC
+(192.168.100.45), du pare-feu et de `usesCleartextTraffic` ne s'applique PLUS — le serveur est
+maintenant hébergé en ligne à une adresse fixe et l'app pointe dessus. Voir « L'app parle au
+serveur en ligne » plus haut. Le reste (comment lancer un build EAS) reste valable.
+
 Objectif de Hafiz : une vraie app installable sur téléphone, sans Expo Go. Construite dans le
 cloud par EAS Build (service Expo, gratuit avec file d'attente — compte Expo requis, pas de
-carte bancaire). DÉCISION : l'APK pointe sur l'IP DU PC (192.168.100.45:8000) — il marche donc
-sur le Wi-Fi de la maison avec le PC allumé et le backend lancé. Quand Fly.io sera déployé,
-remplacer l'adresse dans `eas.json` et refaire un build.
+carte bancaire). DÉCISION HISTORIQUE (remplacée) : l'APK pointait sur l'IP DU PC
+(192.168.100.45:8000) — il ne marchait donc que sur le Wi-Fi de la maison, avec le PC allumé et
+le backend lancé.
 
 - `eas.json` : profil "preview" → un APK installable directement (`buildType: "apk"`), avec la
   variable d'environnement `API_URL` (l'adresse du serveur intégrée à la construction).

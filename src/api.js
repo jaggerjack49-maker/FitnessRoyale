@@ -5,11 +5,18 @@
 // App.js attrape ces erreurs et retombe sur les données locales (mockData.js).
 // Rien ne casse si le backend n'est pas démarré : l'app reste utilisable.
 //
-// ADRESSE DU SERVEUR : détectée automatiquement depuis Expo (l'IP de ton PC
-// sur le réseau local), à condition de lancer `npx expo start` SANS --tunnel
-// (le tunnel ne permet pas au téléphone de joindre directement ton PC).
-// Tu peux aussi forcer l'adresse dans app.json → expo.extra.apiUrl
-// (utile par ex. si le port 8000 est redirigé autrement).
+// ADRESSE DU SERVEUR (depuis le 25/08/2026) : le serveur est HÉBERGÉ EN LIGNE
+// (https://fitnessroyale.onrender.com — voir "Hébergement gratuit" dans
+// CLAUDE.md), donc l'adresse est FIXE et posée dans app.json →
+// expo.extra.apiUrl. C'est la première source lue par obtenirBaseUrl()
+// ci-dessous : l'app parle au même serveur partout (Expo Go, web, APK), sans
+// dépendre du Wi-Fi de la maison ni du PC allumé.
+//
+// POUR DÉVELOPPER CONTRE LE BACKEND LOCAL (uvicorn sur le PC) : vider
+// expo.extra.apiUrl dans app.json (le mettre à null). La détection
+// automatique de l'IP du PC reprend alors la main — mais seulement en mode
+// LAN (`npx expo start` SANS --tunnel), le tunnel ne permettant pas au
+// téléphone de joindre directement ton PC.
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
