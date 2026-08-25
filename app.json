@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Fitness Royale",
+    "slug": "fitness-royale",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0F1218"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.fitnessroyale.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiUrl": "http://192.168.100.45:8000",
+      "eas": {
+        "projectId": "534a0816-7157-49da-8bc1-7a9fd016784b"
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Fitness Royale a besoin d'accéder à tes vidéos pour prouver tes performances."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

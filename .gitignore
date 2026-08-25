@@ -1,0 +1,24 @@
+# Dépendances (réinstallables avec `npm install` — jamais à envoyer/versionner)
+node_modules/
+
+# Fichiers générés par Expo
+.expo/
+dist/
+web-build/
+
+# Python (backend)
+__pycache__/
+*.pyc
+
+# Données LOCALES du backend : base de dev (comptes de test) et vidéos uploadées
+# — ne doivent jamais partir dans un build ni sur un dépôt
+backend/fitness_royale.db
+backend/videos/
+
+# Réglages locaux de Claude Code (propres à ce PC)
+.claude/settings.local.json
+
+# Divers
+.DS_Store
+*.log
+backend/serveur.pid

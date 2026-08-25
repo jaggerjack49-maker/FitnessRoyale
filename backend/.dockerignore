@@ -1,0 +1,10 @@
+__pycache__/
+**/__pycache__/
+*.pyc
+tests/
+fitness_royale.db
+videos/
+serveur.log
+serveur_erreur.log
+serveur.pid
+.pytest_cache/
