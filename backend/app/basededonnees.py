@@ -30,6 +30,7 @@ est disponible. Le mode SQLite, lui, reste couvert par toute la suite de tests.
 import json
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -134,30 +135,78 @@ class _ConnexionAdaptee:
         self._conn.close()
 
 
+# RÉSERVE DE CONNEXIONS POSTGRES (« pool ») — ajoutée le 25/08/2026.
+#
+# POURQUOI : ce fichier ouvre une connexion par appel de fonction
+# (`with connexion() as conn:`). Sur SQLite c'est quasi gratuit (un fichier
+# local), mais vers un Postgres DISTANT (Neon) chaque ouverture coûte une
+# négociation réseau + TLS + authentification — mesuré à ~2,5 s en pratique.
+# `lire_tous_les_joueurs()` ouvrant une connexion PAR JOUEUR, `GET /joueurs`
+# mettait 15 s avec seulement 5 joueurs (et aurait empiré à chaque nouveau
+# joueur) — bien au-delà du délai d'attente de l'app, d'où les « aborted »
+# et les inscriptions qui aboutissaient côté serveur mais paraissaient
+# échouer côté téléphone.
+#
+# La réserve garde quelques connexions OUVERTES et les prête à tour de rôle :
+# on ne paie l'ouverture qu'une fois, pas à chaque requête.
+# `max_size` reste petit — l'offre gratuite de Neon limite le nombre de
+# connexions simultanées, et un seul petit serveur web les consomme.
+_reserve_postgres = None
+_verrou_reserve = threading.Lock()
+
+
+def _obtenir_reserve():
+    """Crée la réserve au PREMIER besoin (pas à l'import) — sinon les tests,
+    qui tournent en SQLite, tenteraient de joindre un Postgres inexistant."""
+    global _reserve_postgres
+    if _reserve_postgres is None:
+        with _verrou_reserve:
+            if _reserve_postgres is None:  # re-test : un autre thread a pu la créer
+                from psycopg_pool import ConnectionPool
+
+                reserve = ConnectionPool(
+                    os.environ["DATABASE_URL"],
+                    min_size=1,
+                    max_size=4,
+                    kwargs={"row_factory": dict_row},
+                    open=False,
+                )
+                reserve.open()
+                _reserve_postgres = reserve
+    return _reserve_postgres
+
+
 @contextmanager
 def connexion():
     """Ouvre une connexion à la base (les lignes se comportent comme des
     dictionnaires, quel que soit le moteur).
 
     Utiliser avec `with connexion() as conn:` — valide (commit) ou annule
-    (rollback) automatiquement, ET ferme la connexion en sortant du bloc
-    (sinon le fichier SQLite reste verrouillé, surtout gênant sous Windows)."""
+    (rollback) automatiquement en sortant du bloc.
+
+    SQLite : la connexion est ouverte puis FERMÉE à chaque fois (sinon le
+    fichier reste verrouillé, surtout gênant sous Windows) — inchangé.
+    Postgres : la connexion est EMPRUNTÉE à la réserve ci-dessus puis rendue,
+    jamais fermée (voir le commentaire de `_obtenir_reserve`)."""
     moteur = _moteur_actuel()
     if moteur == "sqlite":
         conn_brute = sqlite3.connect(CHEMIN_DB)
         conn_brute.row_factory = sqlite3.Row
         conn_brute.execute("PRAGMA foreign_keys = ON")
+        conn = _ConnexionAdaptee(conn_brute, moteur)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
     else:
-        conn_brute = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
-    conn = _ConnexionAdaptee(conn_brute, moteur)
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+        # `.connection()` valide (commit) ou annule (rollback) tout seul en
+        # sortant du bloc, puis rend la connexion à la réserve.
+        with _obtenir_reserve().connection() as conn_brute:
+            yield _ConnexionAdaptee(conn_brute, moteur)
 
 
 def _colonne_existe(conn, table: str, colonne: str) -> bool:
@@ -555,9 +604,39 @@ def lire_joueur(joueur_id: int) -> dict | None:
 
 
 def lire_tous_les_joueurs() -> list:
+    """Tous les joueurs avec leurs perfs et titres — même format que lire_joueur().
+
+    EN 3 REQUÊTES AU TOTAL (joueurs, perfs, titres), pas 2 par joueur : la
+    version d'origine appelait `lire_joueur()` en boucle, ce qui rouvrait une
+    connexion et refaisait 2 requêtes POUR CHAQUE joueur. Invisible sur SQLite
+    (fichier local), mais très coûteux vers un Postgres distant où chaque
+    aller-retour se paie en latence réseau — et le coût grandissait avec le
+    nombre de joueurs. Ici il ne bouge plus : 3 requêtes, 5 joueurs ou 500."""
     with connexion() as conn:
-        ids = [ligne["id"] for ligne in conn.execute("SELECT id FROM joueurs")]
-    return [lire_joueur(joueur_id) for joueur_id in ids]
+        joueurs = []
+        par_id = {}
+        for ligne in conn.execute("SELECT * FROM joueurs ORDER BY id"):
+            joueur = dict(ligne)
+            joueur.pop("mot_de_passe_hash", None)
+            joueur.pop("code_recuperation_hash", None)
+            joueur["performances"] = {}
+            joueur["titres"] = []
+            joueurs.append(joueur)
+            par_id[joueur["id"]] = joueur
+        for perf in conn.execute("SELECT * FROM performances"):
+            joueur = par_id.get(perf["joueur_id"])
+            if joueur is not None:
+                joueur["performances"][perf["exercice"]] = {
+                    "valeur": perf["valeur"], "statut": perf["statut"],
+                }
+        # Les titres viennent des défis validés (ex. « Guerrier de la semaine »).
+        for ligne in conn.execute(
+            "SELECT joueur_id, titre FROM defis_valides WHERE titre IS NOT NULL ORDER BY id"
+        ):
+            joueur = par_id.get(ligne["joueur_id"])
+            if joueur is not None:
+                joueur["titres"].append(ligne["titre"])
+        return joueurs
 
 
 def enregistrer_performance(joueur_id: int, exercice: str, valeur: float, statut: str) -> None:

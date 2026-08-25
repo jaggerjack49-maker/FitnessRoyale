@@ -20,14 +20,24 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const DELAI_MAX_MS = 4000; // au-delà, on considère le serveur injoignable
+// Au-delà de ce délai, on considère le serveur injoignable.
+// PORTÉ DE 4s À 12s LE 25/08/2026, après un vrai bug en production : impossible
+// de se connecter ni de créer un compte depuis l'APK (« aborted », ou « ce
+// compte existe déjà » alors que l'inscription venait d'être tentée — elle
+// avait en fait RÉUSSI côté serveur, mais l'app abandonnait avant la réponse).
+// Deux causes, corrigées ensemble : la lenteur du serveur (voir la réserve de
+// connexions dans backend/app/basededonnees.py) ET ce délai trop serré. Même
+// une fois le serveur rapide, l'offre gratuite de Neon met la base en veille
+// après quelques minutes d'inactivité : le premier accès qui la réveille peut
+// dépasser 4s sans que rien ne soit en panne.
+const DELAI_MAX_MS = 12000;
 // RÉVEIL DU SERVEUR (20/08/2026) : sur l'hébergement gratuit choisi (Render,
 // voir "Hébergement du backend" dans CLAUDE.md), le serveur s'endort après
 // 15 min d'inactivité et peut mettre jusqu'à ~1 minute à répondre à la toute
-// PREMIÈRE requête qui le relance. DELAI_MAX_MS (4s) suffit pour tous les
-// appels normaux (serveur déjà éveillé), mais déclarerait à tort ce réveil
-// comme une panne — voir verifierConnexion() ci-dessous, seul endroit qui
-// utilise ce délai plus patient.
+// PREMIÈRE requête qui le relance. DELAI_MAX_MS suffit pour tous les appels
+// normaux (serveur déjà éveillé), mais déclarerait à tort ce réveil comme une
+// panne — voir verifierConnexion() ci-dessous, seul endroit qui utilise ce
+// délai plus patient.
 const DELAI_REVEIL_MS = 55000;
 
 // DÉCOUVERTE (20/07/2026) : calculer l'adresse UNE SEULE FOIS au chargement du
