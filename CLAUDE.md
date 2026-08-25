@@ -1152,7 +1152,15 @@ niveaux variés — remplir 15 exercices à la main pour chacun était impratica
   python -c "import sqlite3; c=sqlite3.connect('backend/fitness_royale.db'); c.execute(\"UPDATE joueurs SET admin=1 WHERE pseudo IN ('Hafiz','The Jaggerjack')\"); c.commit()"
   ```
   (la colonne n'existe qu'APRÈS un premier `db.initialiser()` — lancer le serveur une fois avant).
-  Comptes admin actuels : **Hafiz** et **The Jaggerjack**.
+  Comptes admin actuels EN LOCAL (SQLite) : **Hafiz** et **The Jaggerjack**.
+  ⚠️ SUR LE SERVEUR EN LIGNE (Neon/Postgres depuis le 25/08/2026), la commande ci-dessus ne
+  s'applique PAS : la base n'est plus un fichier SQLite, et elle est VIERGE (aucun de ces deux
+  comptes n'y existe — voir « L'app parle au serveur en ligne »). Il faut d'abord s'inscrire
+  depuis l'app, puis passer le compte en admin côté Postgres, au choix :
+  - depuis l'éditeur SQL de la console Neon (le plus simple, rien à installer) :
+    `UPDATE joueurs SET admin = 1 WHERE pseudo = 'TonPseudo';`
+  - ou en local, avec la même `DATABASE_URL` :
+    `python -c "import os,psycopg; c=psycopg.connect(os.environ['DATABASE_URL']); c.execute(\"UPDATE joueurs SET admin=1 WHERE pseudo='TonPseudo'\"); c.commit()"`
 - `backend/app/modetest.py` + endpoints `/admin/*`, tous protégés par `auth.utilisateur_admin`
   (403 sinon) :
   - `POST /admin/mes-perfs` {palier 0-6, nb_exercices} — me place à un palier, perfs déjà
