@@ -358,19 +358,27 @@ _TABLES_BASE = [
     ]
 
 
+def _executer_creation_table(conn, sql):
+    """Exécute un CREATE TABLE en traduisant `INTEGER PRIMARY KEY
+    AUTOINCREMENT` (syntaxe SQLite) en `SERIAL PRIMARY KEY` (Postgres) si
+    besoin -- seule différence de dialecte entre les deux moteurs sur ces
+    définitions de table, donc une simple substitution de texte suffit.
+    BUG CORRIGÉ (25/08/2026, trouvé en déployant sur Render+Neon) : les
+    tables ajoutées à `initialiser()` APRÈS coup (cycles, planning...)
+    exécutaient leur CREATE TABLE brut, sans passer par cette traduction
+    -- ça plantait sur Postgres avec `syntax error at or near
+    "AUTOINCREMENT"`. Toute nouvelle table doit passer par cette fonction
+    (ou vivre dans `_TABLES_BASE`), jamais par un `conn.execute()` direct."""
+    if _moteur_actuel() == "postgres":
+        sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    conn.execute(sql)
+
+
 def _executer_tables_base(conn):
     """Crée les 16 tables du schéma initial, une par une (portable SQLite/
-    Postgres — `executescript()` n'existe que sur SQLite). Sur Postgres,
-    `INTEGER PRIMARY KEY AUTOINCREMENT` (syntaxe SQLite) devient
-    `SERIAL PRIMARY KEY` -- seule différence de dialecte entre les deux
-    moteurs sur ce bloc, donc une simple substitution de texte suffit."""
-    postgres = _moteur_actuel() == "postgres"
+    Postgres — `executescript()` n'existe que sur SQLite)."""
     for statement in _TABLES_BASE:
-        if postgres:
-            statement = statement.replace(
-                "INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY"
-            )
-        conn.execute(statement)
+        _executer_creation_table(conn, statement)
 
 
 def initialiser():
@@ -418,7 +426,7 @@ def initialiser():
         # jour concerné (jours = ["mardi"]) — le cycle ne fait que les
         # rassembler sous un même nom, pour pouvoir le poser d'un coup dans le
         # calendrier (tous ses jours se remplissent automatiquement).
-        conn.execute("""
+        _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS cycles (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
@@ -426,7 +434,7 @@ def initialiser():
                 cree_le   TEXT NOT NULL
             )
         """)
-        conn.execute("""
+        _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS cycle_programmes (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 cycle_id     INTEGER NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
@@ -438,7 +446,7 @@ def initialiser():
         # faire sur chaque « body part » (ex. Pectoraux : 12). Le comptage des
         # séries réellement faites se calcule côté app à partir des séances
         # loggées — seul l'OBJECTIF est stocké ici.
-        conn.execute("""
+        _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS objectifs_series (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 joueur_id     INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
@@ -450,7 +458,7 @@ def initialiser():
         # Les exercices étant en TEXTE LIBRE, l'app devine leur groupe
         # musculaire par mots-clés. Cette table garde les CORRECTIONS de
         # l'utilisateur (ex. « Mon exo bizarre » -> Dos), qui priment.
-        conn.execute("""
+        _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS groupes_exercices (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
@@ -462,7 +470,7 @@ def initialiser():
         # PLANNING par DATE PRÉCISE (calendrier interactif) : « le 2026-08-21,
         # je fais le programme X ». Complète les jours RÉCURRENTS d'un programme
         # (colonne jours ci-dessus) — les deux se cumulent à l'affichage.
-        conn.execute("""
+        _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS planning (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 joueur_id    INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
