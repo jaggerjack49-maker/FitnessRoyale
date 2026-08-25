@@ -757,8 +757,43 @@ dans la foulée. Tout est en place :
   premier démarrage. Il faut donc SE RÉINSCRIRE sur le serveur en ligne, et re-passer le compte
   en admin à la main (voir « Mode test ») — mais côté Postgres cette fois, pas avec la commande
   `sqlite3` de cette section.
-- À FAIRE : refaire un build EAS pour que l'APK installé sur le téléphone utilise cette adresse
-  (celui en place pointe encore sur l'IP du PC) — voir « APK Android installable ».
+- APK REFAIT le 25/08/2026 (`npx eas-cli build --platform android --profile preview`) : il pointe
+  sur Render, réutilise la clé de signature existante (s'installe par-dessus l'ancien). PIÈGE DE
+  MÉTHODE rencontré en surveillant le build : `eas build:view` n'accepte PAS `--non-interactive`
+  (contrairement à `eas build`) — la boucle de surveillance échouait en silence et laissait croire
+  que le build était bloqué alors qu'il avait réussi. Vérifier le statut avec
+  `npx eas-cli build:view <id> --json`.
+
+### ⚠️ LENTEUR POSTGRES : une connexion par appel, ça ne pardonne pas à distance (25/08/2026)
+
+Premier vrai test depuis l'APK : impossible de se connecter NI de créer un compte — l'app
+affichait « aborted », puis « ce compte existe déjà » au deuxième essai. Symptôme trompeur :
+l'inscription RÉUSSISSAIT côté serveur, mais l'app abandonnait avant de recevoir la réponse.
+
+- MESURÉ (curl, serveur déjà chaud) : `GET /sante` ~1 s, mais `GET /joueurs` **15 s**, de façon
+  constante — donc pas un réveil de serveur, une vraie lenteur de fond.
+- CAUSE RACINE : `connexion()` ouvre une connexion NEUVE à chaque appel. Sur SQLite (fichier
+  local) c'est quasi gratuit, ce qui a rendu le problème invisible pendant toute la migration ;
+  vers Neon, chaque ouverture coûte ~2,5 s (réseau + TLS + authentification). Et
+  `lire_tous_les_joueurs()` appelait `lire_joueur()` en boucle → **une connexion PAR JOUEUR**.
+  5 joueurs = 6 connexions = 15 s, et le coût AUGMENTAIT à chaque inscription (20 joueurs
+  auraient donné ~50 s).
+- CORRIGÉ EN TROIS TEMPS :
+  1. **Réserve de connexions** (`psycopg_pool.ConnectionPool`, `_obtenir_reserve()`) : les
+     connexions Postgres sont empruntées puis rendues, plus jamais rouvertes. `max_size=4` —
+     l'offre gratuite de Neon limite les connexions simultanées. Créée au PREMIER besoin, pas à
+     l'import, sinon les tests (SQLite) tenteraient de joindre un Postgres inexistant.
+     Le chemin SQLite garde l'ouverture/fermeture à chaque appel (sinon le fichier reste
+     verrouillé sous Windows). Dépendance : `psycopg[binary,pool]`.
+  2. `lire_tous_les_joueurs()` : **3 requêtes fixes** (joueurs, perfs, titres, recollées en
+     mémoire) au lieu de 2 par joueur — le coût ne dépend plus du nombre de joueurs.
+  3. Délai d'attente de l'app (`DELAI_MAX_MS`, `src/api.js`) porté de 4 s à **12 s** : même avec
+     un serveur rapide, Neon gratuit met la base en VEILLE après quelques minutes d'inactivité et
+     le premier accès qui la réveille peut dépasser 4 s sans que rien ne soit en panne.
+- LEÇON GÉNÉRALE : un motif d'accès aux données parfaitement sain sur SQLite peut être ruineux
+  sur une base DISTANTE. Ce qui était gratuit (ouvrir une connexion, faire N+1 requêtes) se paie
+  désormais en latence réseau. À surveiller pour toute nouvelle fonction qui boucle sur des
+  joueurs en appelant une autre fonction de `basededonnees.py`.
 
 ## Version web — fait le 10/08/2026
 
