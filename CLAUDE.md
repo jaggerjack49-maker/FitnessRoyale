@@ -1098,6 +1098,47 @@ profil. et je veux une représentation graphique de l'arène ».
   FAUT refaire un build EAS pour voir l'arène sur téléphone (la version web et Expo Go, elles,
   fonctionnent immédiatement).
 
+### De vraies illustrations à la place du SVG — fait le 26/08/2026
+
+Demande de Hafiz (« voici le style que je veux pour les arènes », puis « je veux la même image
+comme sur la maquette ») : une maquette façon Clash Royale, 6 arènes isométriques peintes.
+
+- DÉCISION — abandon du dessin SVG pour `AreneVisuel` : le SVG ne sait produire que des formes
+  géométriques ; la pierre texturée, les ombres peintes et les matières de la maquette ne sont
+  pas atteignables par le code. Une première tentative de SVG isométrique (plateau, tours,
+  bannières dessinés à la main) a été écrite puis REMPLACÉE par les vraies images.
+- Source : `maquette-arène/` (2 images générées par Hafiz, VERSIONNÉES pour pouvoir refaire
+  l'opération). C'est la GRILLE 3×2 (1536×1024) qui a servi — l'autre maquette (verticale,
+  1024×1536) a des illustrations plus petites et écrasées, rognées par leur carte.
+- RECETTE DU DÉCOUPAGE (à refaire si la maquette change) : découper les 6 cases, puis pour
+  chacune — (1) effacer le bandeau de titre et la ligne de trophées PAR DIFFUSION (flou répété
+  confiné à cette zone), (2) rendre le fond bleu nuit TRANSPARENT par remplissage depuis les
+  coins, (3) ne garder que le plus gros bloc d'un seul tenant (ça élimine les restes de texte
+  et les bouts de panneau voisin), (4) recadrer au plus juste, (5) réduire à 200 couleurs.
+  Résultat : 2,2 Mo → **0,36 Mo** pour les 7 images.
+  ⚠️ PIÈGE PRINCIPAL : le bandeau est peint PAR-DESSUS le décor (nuages d'OLYMPE, cristaux de
+  ROYALE, mur de COLOSSE). Le découper en rectangle ARRACHE l'illustration (essayé, très moche) ;
+  il faut le reconstruire par diffusion AVANT de retirer le fond. Vérifier les 6 une par une —
+  COLOSSE avait gardé « 3499 » alors que FORGE était déjà parfaite.
+- LE FOND TRANSPARENT EST ESSENTIEL : la carte pose l'image sur SA propre couleur, donc aucun
+  raccord n'est visible et les rapports largeur/hauteur inégaux des 7 images ne se voient pas
+  (`resizeMode="contain"`).
+- L'arène 0 (DÉBUT) n'existe pas dans la maquette : c'est INITIATION désaturée et assombrie.
+- CE QUI EST PERDU au passage : le décor ne s'enrichit plus PROGRESSIVEMENT par le code (l'ancien
+  SVG ajoutait gradins/projecteurs/braseros selon le niveau) — chaque arène est maintenant une
+  image figée. En pratique c'est mieux : la maquette fait déjà cette montée en décor à la main.
+  Reste une lueur à la couleur de la ligue derrière l'image, pour garder le lien avec le code
+  couleur du reste de l'app. Détail : INITIATION a perdu son drapeau (bloc détaché du sol,
+  éliminé avec le texte) et OLYMPE garde un léger flou là où le bandeau couvrait une colonne.
+- `react-native-svg` n'est PLUS utilisé par `AreneVisuel` (il reste une dépendance du projet).
+
+### Deux corrections d'affichage — faites le 25/08/2026
+
+- `RouteArenes` : le titre porté par l'arène (« Recrue », « Gladiator »…) n'est plus rappelé sur
+  chaque étape — il est déjà sur la carte en haut de l'écran et chargeait la route pour rien.
+- `ProfilScreen` : le lien « Classements › » devient « Voir tout › » — le mot était répété juste
+  à côté du titre du bloc « CLASSEMENT — TOP 3 ».
+
 ## XP : la jauge d'activité (socle de l'Arena Pass) — fait le 12/08/2026
 
 Première brique de la vision « Arena Pass » (voir `docs/VISION_ARENA_PASS.md`, qui contient la
