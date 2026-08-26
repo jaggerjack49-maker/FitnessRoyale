@@ -1,4 +1,4 @@
-// LES ARÈNES — la progression façon Clash Royale, adossée aux ligues Club SP.
+// LES ARÈNES — la progression façon Clash Royale, adossée aux ligues Fitness Royale.
 //
 // Une arène = une ligue (Bronze, Silver…), présentée comme une étape d'un
 // parcours à gravir. AUCUN nouveau système de score : l'arène est déterminée
@@ -11,7 +11,7 @@
 
 import { nomsLigues } from './clubSP';
 
-// UNE ARÈNE = UNE LIGUE Club SP (décision de Hafiz du 12/08/2026 : « arène et
+// UNE ARÈNE = UNE LIGUE Fitness Royale (décision de Hafiz du 12/08/2026 : « arène et
 // palier/ligue c'est pareil »). Les noms d'arènes remplacent donc simplement
 // les noms de ligues à l'affichage — l'arène se gagne UNIQUEMENT avec des
 // perfs vérifiées, jamais avec de l'XP (l'XP est une jauge d'activité à part,
@@ -76,7 +76,7 @@ export const arenes = [
   },
   {
     // Le sommet garde le nom de la MARQUE (Fitness Royale) : c'est le rang
-    // ultime du Club SP, il porte le nom du jeu.
+    // ultime de Fitness Royale, il porte le nom du jeu.
     index: 6,
     ligue: 'Royal',
     nom: 'ROYALE',

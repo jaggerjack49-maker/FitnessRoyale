@@ -7,7 +7,7 @@
 // programme créé à la main — le modèle n'est qu'un point de départ.
 //
 // Les exercices sont en texte libre (comme tout l'onglet Entraînement) :
-// AUCUN lien avec le barème Club SP ni le classement.
+// AUCUN lien avec le barème Fitness Royale ni le classement.
 
 export const programmesStandards = [
   {

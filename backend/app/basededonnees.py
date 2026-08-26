@@ -345,7 +345,7 @@ _TABLES_BASE = [
                 texte     TEXT NOT NULL,
                 cree_le   TEXT NOT NULL
             )""",
-        """            -- Section "Entraînement" — INDÉPENDANTE du barème Club SP (aucun lien
+        """            -- Section "Entraînement" — INDÉPENDANTE du barème Fitness Royale (aucun lien
             -- avec la table performances). Un programme = une liste d'exercices
             -- en texte libre, avec un objectif séries x reps pour chacun.
             CREATE TABLE IF NOT EXISTS programmes (

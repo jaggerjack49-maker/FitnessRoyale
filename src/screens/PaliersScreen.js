@@ -1,5 +1,5 @@
 // Écran Paliers : LES ARÈNES (progression façon Clash Royale) + le barème
-// Club SP exercice par exercice.
+// Fitness Royale exercice par exercice.
 // - En haut : ton arène actuelle, ta progression vers la suivante, et le
 //   parcours complet des arènes (franchies / actuelle / verrouillées).
 // - En bas : pour chaque exercice, ta perf, ton palier et l'échelle complète.
@@ -41,7 +41,7 @@ export default function PaliersScreen({ moi }) {
         MES <Text style={{ color: da.or }}>PALIERS</Text>
       </Text>
       <Text style={styles.sousTitre}>
-        Barème Club SP · {moi.sexe === 'femme' ? 'barème femmes' : 'barème hommes'} · touche un
+        Barème Fitness Royale · {moi.sexe === 'femme' ? 'barème femmes' : 'barème hommes'} · touche un
         exercice pour voir le barème
       </Text>
 

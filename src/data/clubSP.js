@@ -1,4 +1,6 @@
-// Barèmes officiels du Club SP ("Fight for it").
+// Barèmes officiels de Fitness Royale ("Fight for it").
+// (le fichier garde son ancien nom clubSP.js : c'est un chemin d'import,
+//  le renommer toucherait une dizaine de fichiers sans rien apporter.)
 // Chaque exercice a des paliers : atteindre le palier N = ligue N.
 // Hommes : 6 ligues (Bronze → Royal). Femmes : 5 ligues (Bronze → Titan).
 // unite 'kg'  = charge à soulever pour le nombre de reps indiqué.

@@ -78,7 +78,7 @@ export default function CarteArene({ joueur, compacte = false }) {
             </Text>
           </>
         ) : (
-          <Text style={styles.prochaine}>👑 Tu es au sommet du Club SP !</Text>
+          <Text style={styles.prochaine}>👑 Tu es au sommet de Fitness Royale !</Text>
         )}
       </View>
     </View>

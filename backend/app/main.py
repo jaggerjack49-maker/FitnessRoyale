@@ -69,7 +69,7 @@ def seed_demo():
             "Soulevé de terre": (200, "salle"), "Traction prise large": (18, "communaute"),
             "Dips": (38, "communaute"),
         }),
-        ("SarahFit", "femme", 58, "Club SP", 610, {
+        ("SarahFit", "femme", 58, "Iron Temple", 610, {
             "Développé couché": (47.5, "salle"), "Squat": (72, "salle"),
             "Soulevé de terre": (102, "salle"), "Traction prise large": (12, "communaute"),
             "Dips": (21, "communaute"),
@@ -291,7 +291,7 @@ def accueil():
 
 @app.get("/bareme/{sexe}")
 def bareme(sexe: str):
-    """Le barème Club SP complet pour un sexe donné."""
+    """Le barème Fitness Royale complet pour un sexe donné."""
     if sexe not in BAREMES:
         raise HTTPException(404, "Sexe inconnu : utilise 'homme' ou 'femme'.")
     return BAREMES[sexe]
@@ -903,7 +903,7 @@ def envoyer_message(salle: str, message: NouveauMessage,
 
 
 # ----- Entraînement : programmes + journal de séance (workout log) -----
-# INDÉPENDANT du barème Club SP : rien ici ne touche à la table `performances`
+# INDÉPENDANT du barème Fitness Royale : rien ici ne touche à la table `performances`
 # ni au classement. C'est un outil de suivi perso ; l'utilisateur met à jour
 # ses perfs officielles à la main dans l'onglet Perfs.
 

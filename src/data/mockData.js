@@ -7,7 +7,7 @@ export const utilisateur = {
   pseudo: 'Hafiz',
   sexe: 'homme',
   poids: 75, // kg — sert au classement par catégories
-  salle: 'Club SP', // salle de gym (modifiable dans le Profil) — futur clan
+  salle: 'Iron Temple', // salle de gym (modifiable dans le Profil) — futur clan
   points: 380, // points de compétition (duels + défis) — servent au DÉPARTAGE, pas au classement
   titres: [], // titres gagnés via les défis (affichés au profil)
   serieJours: 8,
@@ -50,7 +50,7 @@ export const autresJoueurs = [
     points: 610,
     sexe: 'femme',
     poids: 58,
-    salle: 'Club SP',
+    salle: 'Iron Temple',
     performances: {
       'Développé couché': { valeur: 47.5, statut: 'salle' },
       'Squat': { valeur: 72, statut: 'salle' },

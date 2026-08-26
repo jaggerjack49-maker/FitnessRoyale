@@ -1,4 +1,4 @@
-"""Logique de classement Club SP — version Python (miroir de src/logic/classement.js).
+"""Logique de classement Fitness Royale — version Python (miroir de src/logic/classement.js).
 
 Règles :
 - Seules les performances VÉRIFIÉES (communauté ou salle) comptent.

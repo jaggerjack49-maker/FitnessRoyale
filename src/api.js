@@ -434,7 +434,7 @@ export async function envoyerMessageClan(salle, texte) {
 }
 
 // ----- Entraînement (programmes + journal de séance) -----
-// INDÉPENDANT du barème Club SP — ne touche jamais aux perfs officielles.
+// INDÉPENDANT du barème Fitness Royale — ne touche jamais aux perfs officielles.
 // jours = jours de la semaine prévus (ex. ['lundi', 'jeudi']) ; dureeSemaines +
 // dateDebut ('AAAA-MM-JJ') = planification sur plusieurs semaines (calendrier).
 // Les trois sont optionnels — un programme "simple" reste possible comme avant.

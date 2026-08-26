@@ -244,8 +244,8 @@ export default function ProfilScreen({
         )}
       </View>
 
-      {/* Mes performances Club SP */}
-      <Text style={styles.sectionTitre}>Mes performances (Club SP)</Text>
+      {/* Mes performances Fitness Royale */}
+      <Text style={styles.sectionTitre}>Mes performances (Fitness Royale)</Text>
       {exercices.map(([exo, perf]) => {
         const palier = palierExercice(u.sexe, exo, perf.valeur);
         const nomPalier = palier === 0 ? 'Aucune' : nomsLigues[palier - 1];

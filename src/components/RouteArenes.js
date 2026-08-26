@@ -5,7 +5,7 @@
 // d'abord sur l'objectif ultime, et que la position actuelle se lise comme une
 // ascension restant à faire.
 //
-// RAPPEL : une arène = une ligue Club SP, gagnée uniquement avec des perfs
+// RAPPEL : une arène = une ligue Fitness Royale, gagnée uniquement avec des perfs
 // VÉRIFIÉES. L'XP n'intervient pas ici (voir docs/VISION_ARENA_PASS.md).
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';

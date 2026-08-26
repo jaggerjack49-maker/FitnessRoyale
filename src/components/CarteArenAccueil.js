@@ -85,7 +85,7 @@ export default function CarteArenAccueil({ joueur, arene, salle }) {
           </Text>
         </View>
       ) : (
-        <Text style={[styles.sommet, { color: couleur }]}>👑 Sommet du Club SP atteint</Text>
+        <Text style={[styles.sommet, { color: couleur }]}>👑 Sommet de Fitness Royale atteint</Text>
       )}
     </View>
   );

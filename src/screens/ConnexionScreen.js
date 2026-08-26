@@ -164,7 +164,7 @@ export default function ConnexionScreen({ onConnecte }) {
 
           {mode === 'inscription' && (
             <>
-              <Text style={styles.libelle}>Sexe (pour le barème Club SP)</Text>
+              <Text style={styles.libelle}>Sexe (pour le barème Fitness Royale)</Text>
               <View style={styles.bascule}>
                 {['homme', 'femme'].map((s) => (
                   <TouchableOpacity
@@ -194,7 +194,7 @@ export default function ConnexionScreen({ onConnecte }) {
                 style={styles.champ}
                 value={salle}
                 onChangeText={setSalle}
-                placeholder="Ex. : Club SP"
+                placeholder="Ex. : Titan Gym"
                 placeholderTextColor={colors.texteGris}
               />
             </>

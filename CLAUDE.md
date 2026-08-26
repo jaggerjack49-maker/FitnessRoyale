@@ -1,6 +1,11 @@
 # Fitness Royale
 
-App de fitness compétitive, esprit « Clash Royale dans la vraie vie ». Marque : Club SP — « FIGHT FOR IT ».
+App de fitness compétitive, esprit « Clash Royale dans la vraie vie ». Marque : Fitness Royale — « FIGHT FOR IT ».
+RENOMMAGE DU 26/08/2026 (demande de Hafiz) : la marque « Club SP » a disparu de TOUT l'affichage —
+on dit désormais « barème Fitness Royale », et l'en-tête d'accueil comme l'écran de connexion ne
+portent plus que FITNESS ROYALE + le slogan. Seuls restent des identifiants INTERNES : le fichier
+`src/data/clubSP.js` (chemin d'import, renommer toucherait ~10 fichiers pour rien) et les sections
+datées ci-dessous, qui gardent le vocabulaire de leur époque.
 LIRE `docs/CONTEXTE.md` : c'est le document de référence (vision, barème complet, roadmap 6 mois).
 Hafiz (le créateur) est débutant en programmation : expliquer simplement, commenter le code en français.
 

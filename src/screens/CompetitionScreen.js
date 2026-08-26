@@ -1,4 +1,4 @@
-// Écran Compétition : classements Club SP (Global / Par poids / Salles) et défis.
+// Écran Compétition : classements Fitness Royale (Global / Par poids / Salles) et défis.
 // Les classements n'affichent QUE le rang — le palier moyen est un calcul interne.
 // Les points (duels + défis) servent uniquement à départager les égalités.
 import React, { useState } from 'react';
@@ -106,7 +106,7 @@ export default function CompetitionScreen({
     { cle: 'salles', libelle: '🏠 Salles' },
   ];
   const EXPLICATIONS = {
-    global: 'Tout le monde, classé sur les performances vérifiées (barème Club SP).',
+    global: 'Tout le monde, classé sur les performances vérifiées (barème Fitness Royale).',
     relatif: 'Mêmes règles, mais par catégorie de poids : compare-toi aux gabarits similaires.',
     exercice: "Qui est le plus fort sur CET exercice précis (perfs vérifiées uniquement).",
     salles: 'Chaque salle est un clan, classé sur le niveau de ses membres. Quelle salle est la plus forte ?',
@@ -115,7 +115,7 @@ export default function CompetitionScreen({
   return (
     <View style={styles.conteneur}>
       <Text style={styles.titre}>⚔️ Compétition</Text>
-      <Text style={styles.sousTitre}>Classement Club SP • Semaine 29</Text>
+      <Text style={styles.sousTitre}>Classement Fitness Royale • Semaine 29</Text>
 
       {/* Sélecteur Classement / Défis */}
       <View style={styles.selecteur}>

@@ -1,4 +1,4 @@
-// Logique de classement basée sur les barèmes du Club SP.
+// Logique de classement basée sur les barèmes Fitness Royale.
 // IMPORTANT : seules les performances VÉRIFIÉES (communauté ou salle)
 // comptent pour le score, la ligue et le classement.
 import { baremes, nomsLigues } from '../data/clubSP';

@@ -1,4 +1,4 @@
-"""Barèmes officiels du Club SP — version Python (miroir de src/data/clubSP.js).
+"""Barèmes officiels de Fitness Royale — version Python (miroir de src/data/clubSP.js).
 
 Chaque exercice a des paliers : atteindre le palier N = ligue N.
 Hommes : 6 ligues (Bronze -> Royal). Femmes : 5 ligues (Bronze -> Titan).

@@ -1,7 +1,7 @@
 // Écran Entraînement : programmes créés par l'utilisateur + journal de séance
 // (workout log) + surcharge progressive.
 //
-// IMPORTANT : cette section est INDÉPENDANTE du système de paliers Club SP.
+// IMPORTANT : cette section est INDÉPENDANTE du système de paliers Fitness Royale.
 // Rien ici ne touche aux perfs officielles (onglet Perfs) — c'est un outil de
 // suivi perso pur. Les exercices sont en texte libre, pas besoin de coller
 // au barème.
@@ -1340,7 +1340,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
       <Text style={styles.titre}>💪 Entraînement</Text>
       <Text style={styles.sousTitre}>
-        Tes programmes et ton journal de séance — indépendant des paliers Club SP.
+        Tes programmes et ton journal de séance — indépendant des paliers Fitness Royale.
       </Text>
       {!estConnecte && (
         <Text style={styles.indiceHorsLigne}>
