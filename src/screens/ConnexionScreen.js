@@ -102,7 +102,9 @@ export default function ConnexionScreen({ onConnecte }) {
     >
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.titre}>🏆 Fitness Royale</Text>
-        <Text style={styles.sousTitre}>Club SP — FIGHT FOR IT</Text>
+        {/* « Club SP — » retiré le 26/08/2026 (demande de Hafiz) : on ne garde
+            que le slogan sous le nom de l'app. */}
+        <Text style={styles.sousTitre}>FIGHT FOR IT</Text>
 
         <View style={styles.selecteur}>
           <TouchableOpacity

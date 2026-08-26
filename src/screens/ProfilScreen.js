@@ -120,7 +120,11 @@ export default function ProfilScreen({
       {/* ---- En-tête de marque ---- */}
       <View style={styles.enteteMarque}>
         <View>
-          <Text style={styles.surtitre}>CLUB SP</Text>
+          {/* Le surtitre « CLUB SP » a été retiré le 26/08/2026 (demande de
+              Hafiz) : la marque affichée est FITNESS ROYALE, sans mention
+              au-dessus. On garde le slogan comme surtitre pour ne pas laisser
+              le titre flotter seul en haut de l'écran. */}
+          <Text style={styles.surtitre}>FIGHT FOR IT</Text>
           <Text style={styles.titreMarque}>
             FITNESS <Text style={{ color: da.or }}>ROYALE</Text>
           </Text>
