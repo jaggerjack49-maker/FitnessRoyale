@@ -35,12 +35,18 @@ import Losange from './src/components/Losange';
 const CLE_TOKEN = 'fitnessRoyale.token'; // clé AsyncStorage du token de session
 const DELAI_RAFRAICHISSEMENT_MS = 10000; // re-consulte le serveur toutes les 10s (classement, mon profil)
 
+// L'ORDRE DE CE TABLEAU EST L'ORDRE DES ONGLETS À L'ÉCRAN (revu le 26/08/2026
+// à la demande de Hafiz) : le parcours de compétition d'abord — je saisis mes
+// perfs, je vois où j'en suis dans les paliers, je me compare aux autres —
+// puis l'entraînement et le clan, qui sont des outils du quotidien.
+// L'écran affiché est choisi par la CLÉ (voir `ongletActif` plus bas) :
+// réordonner ici suffit, il n'y a rien d'autre à changer.
 const ONGLETS = [
   { cle: 'profil', libelle: 'Profil', emoji: '👤' },
   { cle: 'perfs', libelle: 'Perfs', emoji: '📊' },
-  { cle: 'entrainement', libelle: 'Entraînement', emoji: '💪' },
   { cle: 'paliers', libelle: 'Paliers', emoji: '🏅' },
   { cle: 'competition', libelle: 'Compétition', emoji: '⚔️' },
+  { cle: 'entrainement', libelle: 'Entraînement', emoji: '💪' },
   { cle: 'clan', libelle: 'Clan', emoji: '💬' },
 ];
 

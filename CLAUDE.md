@@ -11,6 +11,8 @@ Hafiz (le créateur) est débutant en programmation : expliquer simplement, comm
 
 ## État actuel (v0.7 — comptes, duels en ligne, vidéo, chat de clan, avatar évolutif, entraînement)
 
+- ORDRE DES ONGLETS (revu le 26/08/2026) : Profil · Perfs · Paliers · Compétition · Entraînement ·
+  Clan — défini par le tableau `ONGLETS` en tête d'App.js, réordonner ce tableau suffit.
 - Écrans : Profil (rang global + rang catégorie, salle de gym éditable, perfs, séances), Performances (saisie + statuts), Entraînement (programmes + journal de séance, voir section dédiée), Paliers (barème complet par exercice, échelle dépliable, prochain objectif), Compétition (classements — global / par poids / par exercice / salles — + défis + duels)
 - Le classement AFFICHE uniquement le RANG (1er, 2e…) — jamais les moyennes de paliers (calcul interne)
 - Plus de « niveau » ni de « points » : le rang et la ligue suffisent
@@ -419,7 +421,7 @@ Chaque salle de gym = un clan avec son propre chat, réservé à ses membres :
   sinon) — un joueur sans salle, ou d'une autre salle, ne peut ni lire ni écrire.
 - Endpoints : `GET /clans/{salle}/messages` (les 200 derniers messages, chronologiques),
   `POST /clans/{salle}/messages` (connexion + appartenance à la salle requises).
-- ÉCRAN APP : nouvel onglet "💬 Clan" (5e onglet, après Compétition) — `src/screens/ClanScreen.js`.
+- ÉCRAN APP : nouvel onglet "💬 Clan" (le dernier) — `src/screens/ClanScreen.js`.
   Bulles de discussion façon messagerie, rafraîchissement automatique toutes les 4 secondes
   (polling, même approche que les duels en ligne — pas de WebSocket). Si pas connecté ou pas de
   salle renseignée, affiche une explication au lieu du chat.
@@ -446,7 +448,7 @@ violette du Royal :
 
 ## Entraînement (programmes + journal de séance) — fait le 26/07/2026
 
-Nouvel onglet "💪 Entraînement" (3e onglet, après Perfs) — un outil de suivi perso, complètement
+Nouvel onglet "💪 Entraînement" — un outil de suivi perso, complètement
 SÉPARÉ du système de paliers Club SP :
 
 - DÉCISION IMPORTANTE — INDÉPENDANCE TOTALE du barème Club SP : rien dans cette section ne touche
