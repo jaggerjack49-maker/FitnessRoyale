@@ -15,7 +15,7 @@
 // autre joueur, sans preuve jointe (statut "communauté").
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
@@ -203,7 +203,14 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
 
   return (
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-      <Text style={styles.titre}>📊 Mes performances</Text>
+      {/* L'emoji 📊 a été remplacé le 26/08/2026 par le badge dessiné fourni
+          par Hafiz (icones/ → assets/icones/perfs.png). Titre et image sont
+          alignés sur la même ligne pour garder la mise en page des autres
+          écrans. */}
+      <View style={styles.ligneTitre}>
+        <Image source={require('../../assets/icones/perfs.png')} style={styles.iconeTitre} />
+        <Text style={styles.titre}>Mes performances</Text>
+      </View>
       <Text style={styles.sousTitre}>
         {moi.affilieSalle
           ? '🏋️ Affilié salle partenaire : tes perfs sont validées automatiquement.'
@@ -451,6 +458,10 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
 const styles = StyleSheet.create({
   conteneur: { flex: 1, backgroundColor: colors.fond },
   titre: { color: colors.texte, fontSize: 24, fontWeight: '800' },
+  ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Le badge est un peu plus haut que le texte pour rester lisible malgré ses
+  // détails (couronne, étoiles) ; `contain` garde ses proportions.
+  iconeTitre: { width: 40, height: 34, resizeMode: 'contain' },
   sousTitre: { color: colors.texteGris, fontSize: 13, marginTop: 4, marginBottom: espacement.m },
   formulaire: {
     backgroundColor: colors.carte,
