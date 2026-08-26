@@ -172,7 +172,9 @@ export default function ProfilScreen({
           <Text style={styles.titreBloc}>CLASSEMENT — TOP 3</Text>
           {allerA && (
             <TouchableOpacity onPress={() => allerA('competition')}>
-              <Text style={styles.lienTop}>Classements ›</Text>
+              {/* « Voir tout » plutôt que « Classements » : le mot était répété
+                  juste à côté du titre du bloc (demande de Hafiz du 25/08/2026). */}
+              <Text style={styles.lienTop}>Voir tout ›</Text>
             </TouchableOpacity>
           )}
         </View>

@@ -53,10 +53,13 @@ export default function RouteArenes({ arenes, indexActuel, nbExercices }) {
                 <Text style={[styles.nom, { color: atteinte ? couleur : colors.texteGris }]}>
                   {arene.nom}
                 </Text>
+                {/* Le TITRE porté par l'arène (« Recrue », « Gladiator »…) n'est
+                    plus rappelé ici (demande de Hafiz du 25/08/2026) : il est
+                    déjà affiché sur la carte de l'arène en haut de l'écran, et
+                    il chargeait la route pour rien. On ne garde que l'objectif
+                    concret, qui est la seule info actionnable de cette ligne. */}
                 <Text style={styles.detail} numberOfLines={1}>
-                  {arene.index === 0
-                    ? 'Point de départ'
-                    : `${paliersRequis} paliers vérifiés${arene.titre ? ` · titre « ${arene.titre} »` : ''}`}
+                  {arene.index === 0 ? 'Point de départ' : `${paliersRequis} paliers vérifiés`}
                 </Text>
               </View>
 
