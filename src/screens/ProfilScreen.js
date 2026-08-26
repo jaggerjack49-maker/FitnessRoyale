@@ -28,11 +28,13 @@ import PanneauModeTest from '../components/PanneauModeTest';
 import * as api from '../api';
 
 export default function ProfilScreen({
-  moi, joueurs, seances, setSeances, salle, setSalle, estConnecte, seDeconnecter,
+  // `setSeances` n'est plus reçu : cet écran ne fait que LIRE les séances
+  // depuis le retrait de la saisie manuelle (elles s'ajoutent désormais
+  // uniquement depuis l'onglet Entraînement).
+  moi, joueurs, seances, salle, setSalle, estConnecte, seDeconnecter,
   allerA, rafraichir,
 }) {
   const u = moi;
-  const [dureeSaisie, setDureeSaisie] = useState('');
 
   // ----- Sécurité du compte (changer le mot de passe, code de secours) -----
   const [securiteOuverte, setSecuriteOuverte] = useState(false);
@@ -74,17 +76,12 @@ export default function ProfilScreen({
     }
   }
 
-  // Stats de la semaine CALCULÉES depuis les séances saisies.
+  // Stats de la semaine, calculées depuis les séances enregistrées dans
+  // l'onglet Entraînement (il n'y a plus de saisie manuelle ici).
   const nbSeances = seances.length;
   const minutesSemaine = seances.reduce((total, minutes) => total + minutes, 0);
   const caloriesEstimees = minutesSemaine * 8; // ~8 kcal/min de musculation
 
-  function ajouterSeance() {
-    const minutes = parseInt(dureeSaisie, 10);
-    if (isNaN(minutes) || minutes <= 0) return;
-    setSeances([...seances, minutes]);
-    setDureeSaisie('');
-  }
   const ligue = ligueJoueur(u);
   // Mon arène (nom, progression, paliers manquants) — même calcul que l'écran
   // Paliers, via le helper partagé : les deux écrans ne peuvent pas diverger.
@@ -274,20 +271,10 @@ export default function ProfilScreen({
         <CarteStat emoji="⏱️" valeur={`${minutesSemaine} min`} libelle="Entraînement" />
       </View>
 
-      {/* Ajouter une séance : c'est ici que l'utilisateur déclare son entraînement */}
-      <View style={styles.ligneAjoutSeance}>
-        <TextInput
-          style={styles.champSeance}
-          value={dureeSaisie}
-          onChangeText={setDureeSaisie}
-          keyboardType="numeric"
-          placeholder="Durée en minutes…"
-          placeholderTextColor={colors.texteGris}
-        />
-        <TouchableOpacity style={styles.boutonSeance} onPress={ajouterSeance}>
-          <Text style={styles.boutonSeanceTexte}>➕ Séance</Text>
-        </TouchableOpacity>
-      </View>
+      {/* La saisie manuelle « ➕ Séance » a été retirée le 26/08/2026 (demande
+          de Hafiz). Les compteurs ci-dessus continuent de se remplir tout
+          seuls : chaque séance enregistrée dans l'onglet Entraînement appelle
+          `ajouterSeanceLocale()` (App.js), qui alimente le même état. */}
 
       {/* Bilan compétition */}
       <Text style={styles.sectionTitre}>Bilan compétition</Text>
@@ -516,24 +503,9 @@ const styles = StyleSheet.create({
   perfNom: { color: colors.texte, fontWeight: '600' },
   perfValeur: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   perfLigue: { fontWeight: '800' },
-  ligneStats: { flexDirection: 'row', marginBottom: espacement.s },
-  ligneAjoutSeance: { flexDirection: 'row', marginBottom: espacement.l, gap: 8 },
-  champSeance: {
-    flex: 1,
-    backgroundColor: colors.carte,
-    borderRadius: 10,
-    padding: 12,
-    color: colors.texte,
-    borderWidth: 1,
-    borderColor: colors.bordure,
-  },
-  boutonSeance: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  boutonSeanceTexte: { color: colors.texte, fontWeight: '700' },
+  // La marge basse passe ici : c'est maintenant le dernier bloc avant
+  // « Bilan compétition » (la ligne de saisie de séance a été retirée).
+  ligneStats: { flexDirection: 'row', marginBottom: espacement.l },
   boutonDeconnexion: {
     marginTop: espacement.l,
     marginBottom: espacement.xl,

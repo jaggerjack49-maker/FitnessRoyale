@@ -322,7 +322,6 @@ function AppInterne() {
             moi={moi}
             joueurs={joueurs}
             seances={mesSeances}
-            setSeances={setMesSeances}
             salle={maSalle}
             setSalle={setMaSalle}
             estConnecte={!!moiServeur}
