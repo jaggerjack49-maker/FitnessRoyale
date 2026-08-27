@@ -1262,6 +1262,35 @@ l'infrastructure du designer (cadre iPhone de prévisualisation, moteur de rendu
   solution retenue. Ses onglets de classement (Amis / France / Monde) n'existent pas non plus
   côté serveur (on a global / poids / exercice / salles).
 
+## Icône de l'app — faite le 27/08/2026
+
+Constat de Hafiz en installant l'APK : « l'apk n'a pas d'icône ». Cause : `app.json` ne portait
+AUCUN champ `icon` ni `android.adaptiveIcon` — Expo retombait donc sur son image par défaut.
+Ça n'avait rien cassé jusque-là parce que rien ne le signale : un build réussit sans icône.
+
+- DÉCISION (choix de Hafiz parmi 4 propositions) : un LOGO DESSINÉ AU CODE plutôt qu'une
+  illustration. C'est la palette de `designSystem.js` (fond #0c0b0f, or #e8b23a) appliquée au
+  LOSANGE, le motif de marque déjà utilisé dans la barre d'onglets et à côté du nom d'arène
+  (`src/components/Losange.js`), avec « FR » évidé dedans. Net à toutes les tailles, et l'icône
+  suit la DA au lieu de dépendre d'une image externe.
+  ÉCARTÉ : le badge doré de l'écran Perfs (proposé d'abord, refusé), les 5 autres pastilles de
+  `icones/`, et une arène (un décor isométrique se lit mal en 48 px).
+- `scripts/generer_icone.py` fabrique les TROIS fichiers — à relancer si la DA change.
+  ⚠️ ILS NE SONT PAS INTERCHANGEABLES, c'est le piège de cette tâche :
+  - `assets/icon.png` : l'icône classique, **opaque** (iOS retire la transparence et afficherait
+    du noir à la place). Motif à ~62 % de la toile, le système arrondit les coins.
+  - `assets/adaptive-icon.png` : le PREMIER PLAN de l'icône adaptative Android, sur fond
+    **transparent** (la couleur de fond est donnée à part dans `app.json`). Android la masque en
+    cercle, carré arrondi ou goutte selon le téléphone, et ce masque ne garde que le cercle
+    central de **66 %** — d'où un losange volontairement plus petit. C'est normal qu'il paraisse
+    perdu au milieu quand on ouvre le fichier seul.
+  - `assets/favicon.png` : la pastille d'onglet de la version web.
+- Vérifié avec `npx expo config --type public` : les trois chemins sont bien résolus.
+- NON FAIT, à voir si le besoin se présente : l'écran de démarrage n'a toujours qu'une couleur
+  (`splash.backgroundColor`), pas d'image. À noter aussi que cette couleur (#0F1218) date d'avant
+  la DA du designer et ne correspond PAS au fond de l'app (#0c0b0f) — écart visible une fraction
+  de seconde au lancement.
+
 ## Mode test (compte administrateur) — fait le 20/08/2026
 
 Demande de Hafiz : « un compte spécial où je pourrai pratiquement tout faire pour mieux tester

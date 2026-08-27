@@ -4,6 +4,7 @@
     "slug": "fitness-royale",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "backgroundColor": "#0F1218"
@@ -12,10 +13,15 @@
       "supportsTablet": false
     },
     "android": {
-      "package": "com.fitnessroyale.app"
+      "package": "com.fitnessroyale.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0c0b0f"
+      }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "apiUrl": "https://fitnessroyale.onrender.com",
