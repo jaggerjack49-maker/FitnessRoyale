@@ -252,6 +252,46 @@ const stylesEditeur = StyleSheet.create({
   note: { color: colors.or, fontSize: 11, marginBottom: 4, lineHeight: 15 },
 });
 
+// Demande de confirmation avant une suppression, affichée DANS la carte.
+//
+// La croix supprimait jusqu'ici sur-le-champ (27/08/2026, retour de Hafiz :
+// « la croix ne doit pas la supprimer immédiatement ») — un programme d'une
+// semaine entière pouvait disparaître sur une fausse manœuvre.
+// PAS d'`Alert.alert` : il est MUET sur le web, où Hafiz teste (voir la
+// convention du projet — les messages passent par des états React affichés).
+function ConfirmationSuppression({ actif, question, onConfirmer, onAnnuler }) {
+  if (!actif) return null;
+  return (
+    <View style={stylesConfirmation.carte}>
+      <Text style={stylesConfirmation.question}>{question}</Text>
+      <View style={stylesConfirmation.ligne}>
+        <TouchableOpacity style={stylesConfirmation.boutonSupprimer} onPress={onConfirmer}>
+          <Text style={stylesConfirmation.texteSupprimer}>Oui, supprimer</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={stylesConfirmation.boutonAnnuler} onPress={onAnnuler}>
+          <Text style={stylesConfirmation.texteAnnuler}>Annuler</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const stylesConfirmation = StyleSheet.create({
+  carte: {
+    backgroundColor: colors.fond, borderRadius: 10, padding: espacement.s,
+    marginTop: espacement.s, borderWidth: 1, borderColor: colors.rouge,
+  },
+  question: { color: colors.texte, fontSize: 12, fontWeight: '600', marginBottom: espacement.s },
+  ligne: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  boutonSupprimer: {
+    borderWidth: 1, borderColor: colors.rouge, borderRadius: 8,
+    paddingVertical: 7, paddingHorizontal: 12,
+  },
+  texteSupprimer: { color: colors.rouge, fontWeight: '800', fontSize: 12 },
+  boutonAnnuler: { paddingVertical: 7, paddingHorizontal: 8 },
+  texteAnnuler: { color: colors.texteGris, fontSize: 12 },
+});
+
 export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLocale }) {
   const [vue, setVue] = useState('accueil'); // 'accueil' | 'nouveauProgramme' | 'seance'
   const [programmes, setProgrammes] = useState([]);
@@ -269,6 +309,10 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   const [seancesParJour, setSeancesParJour] = useState({});
   const [jourEnEdition, setJourEnEdition] = useState(null); // jour déplié dans le formulaire
   const [cycles, setCycles] = useState([]);
+
+  // Suppression en DEUX temps : la croix arme la question, un second geste
+  // confirme. Contient la clé de l'élément visé ('cycle-3', 'prog-7'…).
+  const [suppressionAConfirmer, setSuppressionAConfirmer] = useState(null);
 
   // ---- Volume : objectif de séries par groupe musculaire (« body part ») ----
   // objectifs = { Pectoraux: 12, ... } ; correctionsGroupes = { 'Mon exo': 'Dos' }
@@ -818,6 +862,25 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     }
   }
 
+  // La croix n'efface plus rien toute seule : elle pose la question.
+  function demanderSuppression(cle) {
+    setProgrammeEnEdition(null);   // pas de question posée sous un éditeur ouvert
+    setSuppressionAConfirmer((actuelle) => (actuelle === cle ? null : cle));
+  }
+
+  // Avertissement affiché dans l'éditeur : une séance est le MÊME objet partout
+  // où elle est prévue, donc la retoucher change tous ses jours et toutes ses
+  // dates posées.
+  function noteReutilisation(programme) {
+    const dates = planning.filter((pl) => pl.programme_id === programme.id).length;
+    const jours = (programme.jours || []).length;
+    if (dates === 0 && jours <= 1) return null;
+    const morceaux = [];
+    if (jours > 1) morceaux.push(`${jours} jours de la semaine`);
+    if (dates > 0) morceaux.push(`${dates} date${dates > 1 ? 's' : ''} du calendrier`);
+    return `⚠️ Cette séance est utilisée sur ${morceaux.join(' et ')} : tes modifications s'y appliqueront partout.`;
+  }
+
   async function supprimerCycle(cycle) {
     const idsSeances = cycle.seances.map((s) => s.id);
     setCycles((c) => c.filter((cy) => cy.id !== cycle.id));
@@ -1324,6 +1387,19 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // Records personnels, tous exercices confondus (section « 🏆 Mes records »).
   const mesRecords = tousLesRecords(entrainements);
 
+  // UN PROGRAMME EST-IL EN SERVICE ? (27/08/2026, demande de Hafiz : « si un
+  // programme est enregistré et utilisé, la semaine type disparaît »)
+  // « Enregistré ET utilisé » = il occupe vraiment des jours — soit un cycle
+  // complet, soit une séance qui se répète chaque semaine, soit des dates
+  // posées au calendrier. Tant que rien de tout ça n'existe, la semaine type
+  // reste le moyen le plus simple d'écrire sa semaine ; dès qu'un programme
+  // prend le relais, elle ferait doublon (et deux éditeurs de la même séance
+  // qui se marchent dessus).
+  const programmeEnService =
+    cycles.length > 0
+    || planning.length > 0
+    || programmes.some((p) => (p.jours || []).length > 0);
+
   // Ce qu'on peut poser dans le calendrier comme CYCLE : mes programmes
   // complets + les modèles standards, ramenés à la même forme.
   const cyclesPlacables = [
@@ -1534,8 +1610,11 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         </View>
       )}
 
-      {/* ---- Semaine type : touche un jour -> choisis le(s) programme(s)
-           qui s'y répètent CHAQUE semaine. ---- */}
+      {/* ---- Semaine type : écrire directement la séance de chaque jour.
+           N'apparaît que TANT QU'AUCUN PROGRAMME N'EST EN SERVICE — après,
+           c'est le programme qui pilote la semaine (voir programmeEnService). ---- */}
+      {!programmeEnService && (
+      <>
       <Text style={styles.sectionTitre}>🗓 Semaine type</Text>
       <Text style={styles.indice}>
         Touche un jour pour écrire sa séance : un nom, puis tes exercices avec
@@ -1578,6 +1657,9 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           </View>
         );
       })}
+
+      </>
+      )}
 
       {/* ---- Calendrier mensuel interactif : touche une DATE pour voir son
            programme, en ajouter un, ou démarrer la séance du jour. ---- */}
@@ -1660,67 +1742,37 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             {blocs.length === 0 && (
               <Text style={[styles.indice, { marginTop: 4 }]}>Rien de prévu ce jour-là.</Text>
             )}
-            {blocs.map(({ cle, programme, planif, etiquette }) => {
-              const enEdition = programmeEnEdition === programme.id;
-              // Cette séance sert-elle ailleurs ? (autres jours récurrents ou
-              // autres dates posées) — si oui, la modifier les change aussi.
-              const autresDates = planning.filter(
-                (pl) => pl.programme_id === programme.id && pl.date !== jourOuvert
-              ).length;
-              const autresJours = (programme.jours || []).length;
-              return (
-                <View key={cle} style={styles.detailJour}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>
-                      {programme.nom} <Text style={styles.indice}>({etiquette})</Text>
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
-                      style={styles.boutonModifier}
-                    >
-                      <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+            {/* Le calendrier ne fait plus QUE montrer et DÉMARRER (27/08/2026,
+                demande de Hafiz). Modifier une séance se fait désormais dans
+                « Mes programmes » — une seule place pour éditer, au lieu de
+                deux éditeurs identiques qui se marchaient dessus. */}
+            {blocs.map(({ cle, programme, planif, etiquette }) => (
+              <View key={cle} style={styles.detailJour}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>
+                    {programme.nom} <Text style={styles.indice}>({etiquette})</Text>
+                  </Text>
+                  {planif && (
+                    <TouchableOpacity onPress={() => retirerDuPlanning(planif)} style={styles.boutonRetirer}>
+                      <Text style={styles.boutonRetirerTexte}>✕</Text>
                     </TouchableOpacity>
-                    {planif && (
-                      <TouchableOpacity onPress={() => retirerDuPlanning(planif)} style={styles.boutonRetirer}>
-                        <Text style={styles.boutonRetirerTexte}>✕</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {enEdition ? (
-                    <EditeurSeance
-                      key={`cal-${programme.id}`}
-                      programme={programme}
-                      placeholderNom="Nom de la séance"
-                      nomParDefaut={programme.nom}
-                      libelleBouton="💾 Enregistrer les modifications"
-                      note={
-                        autresDates > 0 || autresJours > 1
-                          ? `⚠️ Cette séance est utilisée ${autresJours > 1 ? 'plusieurs jours de la semaine' : ''}${autresJours > 1 && autresDates > 0 ? ' et ' : ''}${autresDates > 0 ? `à ${autresDates} autre${autresDates > 1 ? 's' : ''} date${autresDates > 1 ? 's' : ''}` : ''} : tes modifications s'y appliqueront aussi.`
-                          : null
-                      }
-                      onSauvegarder={(nom, exercices) => sauvegarderProgramme(programme, nom, exercices)}
-                    />
-                  ) : (
-                    <>
-                      {programme.exercices.map((exo, i) => (
-                        <Text key={i} style={styles.exerciceDetailJour}>
-                          • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
-                        </Text>
-                      ))}
-                      {cestAujourdhui && (
-                        <TouchableOpacity
-                          style={styles.boutonUtiliserModele}
-                          onPress={() => demarrerSeance(programme)}
-                        >
-                          <Text style={styles.boutonDemarrerTexte}>🏋️ Démarrer cette séance</Text>
-                        </TouchableOpacity>
-                      )}
-                    </>
                   )}
                 </View>
-              );
-            })}
+                {programme.exercices.map((exo, i) => (
+                  <Text key={i} style={styles.exerciceDetailJour}>
+                    • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+                  </Text>
+                ))}
+                {cestAujourdhui && (
+                  <TouchableOpacity
+                    style={styles.boutonUtiliserModele}
+                    onPress={() => demarrerSeance(programme)}
+                  >
+                    <Text style={styles.boutonDemarrerTexte}>🏋️ Démarrer cette séance</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
             {!choixProgrammeOuvert ? (
               <TouchableOpacity
                 style={styles.boutonSecondaire}
@@ -1799,50 +1851,122 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
       )}
 
+      {/* « Mes programmes » est l'endroit où l'on MODIFIE (27/08/2026, demande
+          de Hafiz) : le calendrier, lui, ne fait que montrer et démarrer.
+          D'où « ✏️ Modifier » ici à la place de « Démarrer ». */}
+      {(cycles.length > 0 || programmesSeuls.length > 0) && (
+        <Text style={styles.indice}>
+          C'est ici qu'on retouche une séance. Pour la démarrer, touche son jour
+          dans le calendrier.
+        </Text>
+      )}
+
       {/* Les PROGRAMMES COMPLETS (cycles) : un nom + une séance par jour. */}
       {cycles.map((cycle) => (
         <View key={cycle.id} style={styles.carteModele}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>📋 {cycle.nom}</Text>
-            <TouchableOpacity onPress={() => supprimerCycle(cycle)} style={styles.boutonRetirer}>
+            <TouchableOpacity
+              onPress={() => demanderSuppression('cycle-' + cycle.id)}
+              style={styles.boutonRetirer}
+            >
               <Text style={styles.boutonRetirerTexte}>✕</Text>
             </TouchableOpacity>
           </View>
-          {cycle.seances.map((seance) => (
-            <View key={seance.id} style={styles.ligneSeanceCycle}>
-              <Text style={styles.jourSeanceCycle}>
-                {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
-              </Text>
-              <Text style={styles.contenuCalendrier}>
-                {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
-              </Text>
-              <TouchableOpacity style={styles.boutonDemarrer} onPress={() => demarrerSeance(seance)}>
-                <Text style={styles.boutonDemarrerTexte}>Démarrer</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+          <ConfirmationSuppression
+            actif={suppressionAConfirmer === 'cycle-' + cycle.id}
+            question={`Supprimer « ${cycle.nom} » et ses ${cycle.seances.length} séances ?`}
+            onConfirmer={() => { setSuppressionAConfirmer(null); supprimerCycle(cycle); }}
+            onAnnuler={() => setSuppressionAConfirmer(null)}
+          />
+          {cycle.seances.map((seance) => {
+            const enEdition = programmeEnEdition === seance.id;
+            return (
+              <View key={seance.id}>
+                <View style={styles.ligneSeanceCycle}>
+                  <Text style={styles.jourSeanceCycle}>
+                    {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
+                  </Text>
+                  <Text style={styles.contenuCalendrier}>
+                    {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.boutonModifier}
+                    onPress={() => setProgrammeEnEdition(enEdition ? null : seance.id)}
+                  >
+                    <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+                  </TouchableOpacity>
+                </View>
+                {enEdition && (
+                  <EditeurSeance
+                    key={`edition-${seance.id}`}
+                    programme={seance}
+                    placeholderNom="Nom de la séance"
+                    nomParDefaut={seance.nom}
+                    libelleBouton="💾 Enregistrer les modifications"
+                    note={noteReutilisation(seance)}
+                    onSauvegarder={(nom, exercices) => {
+                      sauvegarderProgramme(seance, nom, exercices);
+                      setProgrammeEnEdition(null);
+                    }}
+                  />
+                )}
+              </View>
+            );
+          })}
         </View>
       ))}
 
       {/* Les séances isolées (créées depuis la semaine type, hors cycle). */}
-      {programmesSeuls.map((programme) => (
-        <View key={programme.id} style={styles.carteProgramme}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.nomProgrammeTexte}>{programme.nom}</Text>
-            <Text style={styles.indice}>
-              {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
-              {(programme.jours || []).length > 0 &&
-                ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
-            </Text>
+      {programmesSeuls.map((programme) => {
+        const enEdition = programmeEnEdition === programme.id;
+        return (
+          <View key={programme.id} style={styles.carteModele}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nomProgrammeTexte}>{programme.nom}</Text>
+                <Text style={styles.indice}>
+                  {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
+                  {(programme.jours || []).length > 0 &&
+                    ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.boutonModifier}
+                onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
+              >
+                <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => demanderSuppression('prog-' + programme.id)}
+                style={styles.boutonRetirer}
+              >
+                <Text style={styles.boutonRetirerTexte}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ConfirmationSuppression
+              actif={suppressionAConfirmer === 'prog-' + programme.id}
+              question={`Supprimer « ${programme.nom} » ?`}
+              onConfirmer={() => { setSuppressionAConfirmer(null); supprimerProgramme(programme); }}
+              onAnnuler={() => setSuppressionAConfirmer(null)}
+            />
+            {enEdition && (
+              <EditeurSeance
+                key={`edition-${programme.id}`}
+                programme={programme}
+                placeholderNom="Nom de la séance"
+                nomParDefaut={programme.nom}
+                libelleBouton="💾 Enregistrer les modifications"
+                note={noteReutilisation(programme)}
+                onSauvegarder={(nom, exercices) => {
+                  sauvegarderProgramme(programme, nom, exercices);
+                  setProgrammeEnEdition(null);
+                }}
+              />
+            )}
           </View>
-          <TouchableOpacity style={styles.boutonDemarrer} onPress={() => demarrerSeance(programme)}>
-            <Text style={styles.boutonDemarrerTexte}>Démarrer</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => supprimerProgramme(programme)} style={styles.boutonRetirer}>
-            <Text style={styles.boutonRetirerTexte}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+        );
+      })}
       <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setVue('nouveauProgramme')}>
         <Text style={styles.boutonSecondaireTexte}>+ Nouveau programme</Text>
       </TouchableOpacity>

@@ -1033,6 +1033,50 @@ sur plusieurs semaines, et rappel d'entraînement à heure fixe avec notificatio
   parcours « mot de passe oublié » complet, modèle PPL → 3 programmes créés, calendrier correct
   (Legs le mercredi…), programme « 4 semaines » avec badge sem. 1/4. Suite backend : 147 tests OK.
 
+## Entraînement v3 : chacun son rôle (calendrier / Mes programmes) — fait le 27/08/2026
+
+Trois demandes de Hafiz en une, toutes dans `EntrainementScreen.js`. Le fil conducteur : la
+même séance était éditable à DEUX endroits et démarrable à DEUX endroits, ce qui brouillait tout.
+
+**1. La croix ne supprime plus sur-le-champ** (« lorsqu'on enregistre un programme, la croix ne
+doit pas la supprimer immédiatement »). Un programme d'une semaine entière pouvait disparaître
+sur une fausse manœuvre. La croix ARME maintenant une question posée dans la carte
+(`ConfirmationSuppression`, nouveau petit composant), un second geste confirme.
+DÉCISION : pas d'`Alert.alert` — il est MUET sur le web, où Hafiz teste (convention déjà posée
+dans le projet : tous les messages passent par des états React affichés à l'écran).
+Ouvrir la question ferme l'éditeur en cours (`setProgrammeEnEdition(null)`), pour ne pas poser
+une question de suppression sous un formulaire ouvert.
+
+**2. La SEMAINE TYPE disparaît dès qu'un programme est en service** (« si un programme est
+enregistré et utilisé, la semaine type disparaît »). `programmeEnService` traduit « enregistré
+ET utilisé » par : il existe un cycle, OU une séance qui se répète chaque semaine
+(`jours` non vide), OU au moins une date posée au calendrier. Tant que rien de tout ça n'existe,
+la semaine type reste le moyen le plus simple d'écrire sa semaine ; dès qu'un programme prend le
+relais, elle ferait doublon.
+⚠️ CONSÉQUENCE À CONNAÎTRE : la semaine type était le SEUL endroit où créer une séance de jour
+à la volée. Une fois masquée, on passe par « + Nouveau programme » ou par « ✏️ Modifier » dans
+« Mes programmes ». Elle réapparaît si on supprime tout.
+
+**3. Un seul rôle par écran** (« le calendrier ne propose que de démarrer la session donc
+l'onglet Mes programmes montre le programme et ne propose que de le modifier ») :
+- CALENDRIER = montrer et DÉMARRER. Le bouton « ✏️ Modifier » et son `EditeurSeance` en sont
+  retirés. Il garde la croix qui retire une planification PONCTUELLE — ce n'est pas une
+  suppression de programme, juste un retrait de date, donc pas de confirmation dessus.
+- MES PROGRAMMES = montrer et MODIFIER. Les boutons « Démarrer » y sont remplacés par
+  « ✏️ Modifier », qui ouvre l'éditeur SOUS la ligne concernée (cycles comme séances isolées).
+  Une ligne d'explication apparaît en tête de section (seulement s'il y a au moins un programme)
+  pour dire où démarrer.
+- `noteReutilisation(programme)` remplace le calcul qui vivait dans le calendrier : c'est
+  l'avertissement « ⚠️ cette séance est utilisée sur N jours et N dates, tes modifications s'y
+  appliqueront partout ». Une séance reste LE MÊME OBJET partout où elle est prévue.
+
+DÉMARRER UNE SÉANCE, désormais : depuis le calendrier en touchant la date du JOUR, ou par
+« 🏋️ Démarrer une séance libre ». (Le bouton du calendrier n'apparaît que pour aujourd'hui —
+comportement inchangé, mais il devient le chemin principal, à surveiller au test.)
+
+VÉRIFIÉ : le bundle Metro compile et l'app démarre sans erreur console. Le parcours à l'écran
+n'a PAS été rejoué (il demande un compte connecté) — à confirmer sur l'APK.
+
 ## Arènes façon Clash Royale (écran Paliers) — fait le 12/08/2026
 
 Demande de Hafiz : « pour la partie paliers j'aimerais qu'on construise un système d'arène comme
