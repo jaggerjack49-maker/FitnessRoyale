@@ -1,95 +1,89 @@
 # -*- coding: utf-8 -*-
-"""Fabrique l'icône de l'app à partir de la direction artistique du projet.
+"""Fabrique l'icône de l'app à partir du logo fourni par Hafiz.
 
 À LANCER DEPUIS LA RACINE : `python scripts/generer_icone.py`
 Écrit `assets/icon.png`, `assets/adaptive-icon.png` et `assets/favicon.png`.
 
-POURQUOI UN SCRIPT plutôt qu'une image dessinée une fois : l'icône n'est que
-la palette de `src/designSystem.js` (fond #0c0b0f, or #e8b23a) appliquée au
-LOSANGE, le motif de marque déjà utilisé dans la barre d'onglets et à côté du
-nom d'arène (`src/components/Losange.js`). Si la DA change, on relance.
+SOURCE : le logo le plus récent de `icones/` (dossier versionné exprès) — une
+tuile sombre à coins arrondis portant la couronne, « FITNESS ROYALE » et le
+buste. Le script le recadre lui-même : rien à préparer à la main.
 
 LES TROIS FICHIERS NE SONT PAS INTERCHANGEABLES :
  - `icon.png` : l'icône classique. OPAQUE (iOS retire la transparence et
-   afficherait du noir à la place). Le motif occupe ~62 % de la toile, parce
-   que le système lui arrondit les coins.
+   afficherait du noir à la place). C'est la tuile entière : le système lui
+   arrondit les coins par-dessus, ce qui ne se voit pas puisqu'ils sont noirs.
  - `adaptive-icon.png` : le PREMIER PLAN de l'icône adaptative Android, sur
    fond TRANSPARENT (la couleur de fond est donnée à part dans app.json).
    Android masque cette image en cercle, en carré arrondi ou en goutte selon
-   le téléphone : tout ce qui compte doit tenir dans le cercle central, qui
-   ne fait que 66 % de la toile. D'où un losange volontairement petit — c'est
-   normal qu'il paraisse perdu au milieu quand on ouvre le fichier.
+   le téléphone, et ne garde qu'un cercle central de ~66 % — d'où un logo
+   volontairement plus petit, calculé pour tenir dedans SANS ÊTRE ROGNÉ (on
+   mesure le rayon réel du dessin, pas sa boîte, sinon on perdrait de la
+   place pour rien : les coins du logo sont vides). C'est normal qu'il
+   paraisse petit quand on ouvre le fichier seul.
+   Les bords de la tuile sont ESTOMPÉS et la couleur de fond est celle de la
+   tuile : le carré sombre disparaît dans le fond, on ne voit que le logo.
  - `favicon.png` : la pastille de l'onglet du navigateur (version web).
 """
 import os
-from PIL import Image, ImageDraw, ImageFont
-
-FOND = (12, 11, 15)          # designSystem.fond  #0c0b0f
-OR_CLAIR = (244, 205, 96)
-OR = (232, 178, 58)          # designSystem.or    #e8b23a
-OR_SOMBRE = (198, 142, 32)
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
 
 S = 1024
-SUR = 4                      # on dessine en 4x puis on réduit : bords nets
-POLICE = r"C:\Windows\Fonts\ariblk.ttf"   # Arial Black ≈ le poids 900 de la DA
+DIAMETRE_SUR = 660      # cercle où le dessin doit tenir (Android en montre ~682)
 
+sources = sorted(
+    (f for f in os.listdir("icones") if f.lower().endswith(".png")),
+    key=lambda f: os.path.getmtime(os.path.join("icones", f)))
+SRC = os.path.join("icones", sources[-1])
+print("source :", SRC)
 
-def losange(taille, demi_diagonale, marge_texte=True):
-    """Un losange or, avec « FR » évidé dedans, sur fond transparent."""
-    n = taille * SUR
-    r = int(demi_diagonale * SUR)
-    img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    c = n // 2
+brut = Image.open(SRC).convert("RGB")
+a = np.array(brut).astype(int)
+lum = a.max(axis=2)
 
-    # Le dégradé vertical qui donne du relief à l'or.
-    degrade = Image.new("RGB", (1, n))
-    for y in range(n):
-        t = y / (n - 1)
-        if t < 0.5:
-            k = t / 0.5
-            col = tuple(int(OR_CLAIR[i] + (OR[i] - OR_CLAIR[i]) * k) for i in range(3))
-        else:
-            k = (t - 0.5) / 0.5
-            col = tuple(int(OR[i] + (OR_SOMBRE[i] - OR[i]) * k) for i in range(3))
-        degrade.putpixel((0, y), col)
-    degrade = degrade.resize((n, n))
+# 1. Recadrer sur la TUILE : tout ce qui n'est pas le noir pur autour.
+ys, xs = np.nonzero(lum > 2)
+tuile = brut.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
+print("tuile :", tuile.size)
 
-    forme = Image.new("L", (n, n), 0)
-    ImageDraw.Draw(forme).polygon(
-        [(c, c - r), (c + r, c), (c, c + r), (c - r, c)], fill=255)
-    img.paste(degrade, (0, 0), forme)
+# 2. Mesurer le DESSIN lui-même (nettement plus clair que la tuile) pour savoir
+#    de combien le réduire : on veut son rayon, pas sa boîte.
+t = np.array(tuile.convert("RGB")).astype(int)
+dessin = t.max(axis=2) > 90
+dy, dx = np.nonzero(dessin)
+cx, cy = (dx.min() + dx.max()) / 2, (dy.min() + dy.max()) / 2
+rayon = float(np.sqrt((dx - cx) ** 2 + (dy - cy) ** 2).max())
+couleur_fond = tuple(int(v) for v in np.median(
+    np.concatenate([t[2:6].reshape(-1, 3), t[-6:-2].reshape(-1, 3)]), axis=0))
+print("rayon du dessin :", round(rayon), "| couleur de la tuile :", couleur_fond)
 
-    # « FR » évidé : on efface le pixel (alpha à 0) au lieu de peindre en noir,
-    # pour que le fond de l'icône transparaisse — même effet sur les deux
-    # variantes, opaque ou transparente.
-    hauteur = int(r * 0.62)
-    police = ImageFont.truetype(POLICE, hauteur)
-    trou = Image.new("L", (n, n), 0)
-    d = ImageDraw.Draw(trou)
-    d.text((c, c), "FR", font=police, fill=255, anchor="mm")
-    img.putalpha(Image.composite(Image.new("L", (n, n), 0), img.getchannel("A"), trou))
+# 3. L'icône classique : la tuile, telle quelle, opaque.
+tuile.resize((S, S), Image.LANCZOS).save("assets/icon.png")
 
-    return img.resize((taille, taille), Image.LANCZOS)
+# 4. L'icône adaptative : la tuile réduite pour que le dessin tienne dans le
+#    cercle sûr, bords estompés, sur fond transparent.
+echelle = (DIAMETRE_SUR / 2) / rayon
+n = max(1, int(round(tuile.size[0] * echelle)))
+petite = tuile.resize((n, n), Image.LANCZOS).convert("RGBA")
 
+flou = max(6, n // 24)
+masque = Image.new("L", (n, n), 0)
+ImageDraw.Draw(masque).rounded_rectangle(
+    (flou, flou, n - 1 - flou, n - 1 - flou), radius=n // 5, fill=255)
+petite.putalpha(masque.filter(ImageFilter.GaussianBlur(flou)))
 
-os.makedirs("assets", exist_ok=True)
-
-# 1. Icône classique : opaque, motif à ~62 % de la toile.
-classique = Image.new("RGB", (S, S), FOND)
-motif = losange(S, S * 0.31)
-classique.paste(motif, (0, 0), motif)
-classique.save("assets/icon.png")
-
-# 2. Icône adaptative Android : fond transparent, motif dans la zone sûre
-#    (le cercle central de 66 % — on reste en dessous pour la marge).
 adaptative = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-motif = losange(S, S * 0.24)
-adaptative.paste(motif, (0, 0), motif)
+# On recentre sur le DESSIN, pas sur la tuile : le logo n'est pas parfaitement
+# centré dedans, et c'est lui qui doit être au milieu du cercle.
+decalage = (int(round((S - n) / 2 - (cx - tuile.size[0] / 2) * echelle)),
+            int(round((S - n) / 2 - (cy - tuile.size[1] / 2) * echelle)))
+adaptative.paste(petite, decalage, petite)
 adaptative.save("assets/adaptive-icon.png")
 
-# 3. Favicon web.
-classique.resize((64, 64), Image.LANCZOS).save("assets/favicon.png")
+# 5. Favicon web.
+tuile.resize((64, 64), Image.LANCZOS).save("assets/favicon.png")
 
+print("couleur de fond à mettre dans app.json : #%02x%02x%02x" % couleur_fond)
 for f in ("icon.png", "adaptive-icon.png", "favicon.png"):
     print("=>", f, Image.open("assets/" + f).size,
           os.path.getsize("assets/" + f) // 1024, "ko")

@@ -1268,22 +1268,28 @@ Constat de Hafiz en installant l'APK : « l'apk n'a pas d'icône ». Cause : `ap
 AUCUN champ `icon` ni `android.adaptiveIcon` — Expo retombait donc sur son image par défaut.
 Ça n'avait rien cassé jusque-là parce que rien ne le signale : un build réussit sans icône.
 
-- DÉCISION (choix de Hafiz parmi 4 propositions) : un LOGO DESSINÉ AU CODE plutôt qu'une
-  illustration. C'est la palette de `designSystem.js` (fond #0c0b0f, or #e8b23a) appliquée au
-  LOSANGE, le motif de marque déjà utilisé dans la barre d'onglets et à côté du nom d'arène
-  (`src/components/Losange.js`), avec « FR » évidé dedans. Net à toutes les tailles, et l'icône
-  suit la DA au lieu de dépendre d'une image externe.
-  ÉCARTÉ : le badge doré de l'écran Perfs (proposé d'abord, refusé), les 5 autres pastilles de
-  `icones/`, et une arène (un décor isométrique se lit mal en 48 px).
-- `scripts/generer_icone.py` fabrique les TROIS fichiers — à relancer si la DA change.
+- LE LOGO EST UNE IMAGE FOURNIE PAR HAFIZ (`icones/ChatGPT Image Aug 27, 2026, 06_36_18 PM.png`,
+  dossier versionné exprès) : couronne + haltère, « FITNESS » en argent, « ROYALE » en or, buste
+  en bas, sur une tuile noire à coins arrondis. HISTORIQUE : un premier jet dessiné au code (le
+  losange or de la barre d'onglets avec « FR » évidé) a été fait puis REMPLACÉ le même jour quand
+  Hafiz a envoyé ce logo. Avant ça, le badge doré de l'écran Perfs avait aussi été proposé et
+  refusé. Le script sait retrouver seul l'image la plus récente du dossier : si le logo change,
+  on dépose et on relance.
+- `scripts/generer_icone.py` fabrique les TROIS fichiers depuis cette image — recadrage de la
+  tuile compris, rien à préparer à la main.
   ⚠️ ILS NE SONT PAS INTERCHANGEABLES, c'est le piège de cette tâche :
   - `assets/icon.png` : l'icône classique, **opaque** (iOS retire la transparence et afficherait
-    du noir à la place). Motif à ~62 % de la toile, le système arrondit les coins.
+    du noir à la place). C'est la tuile entière ; le système lui arrondit les coins par-dessus,
+    invisible puisqu'ils sont déjà noirs.
   - `assets/adaptive-icon.png` : le PREMIER PLAN de l'icône adaptative Android, sur fond
     **transparent** (la couleur de fond est donnée à part dans `app.json`). Android la masque en
-    cercle, carré arrondi ou goutte selon le téléphone, et ce masque ne garde que le cercle
-    central de **66 %** — d'où un losange volontairement plus petit. C'est normal qu'il paraisse
-    perdu au milieu quand on ouvre le fichier seul.
+    cercle, carré arrondi ou goutte selon le téléphone, et ne garde qu'un cercle central de
+    ~66 % — le logo est donc réduit pour tenir dedans. Le calcul mesure le RAYON RÉEL du dessin,
+    pas sa boîte : les coins du logo étant vides, se baser sur la boîte l'aurait rapetissé pour
+    rien. C'est normal qu'il paraisse petit quand on ouvre le fichier seul.
+  - Les bords de la tuile sont ESTOMPÉS et `adaptiveIcon.backgroundColor` vaut exactement la
+    couleur de la tuile (**#060708**, mesurée par le script, pas le #0c0b0f de la DA) : sans ça
+    on verrait un carré sombre se détacher du fond.
   - `assets/favicon.png` : la pastille d'onglet de la version web.
 - Vérifié avec `npx expo config --type public` : les trois chemins sont bien résolus.
 - NON FAIT, à voir si le besoin se présente : l'écran de démarrage n'a toujours qu'une couleur

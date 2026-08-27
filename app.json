@@ -16,7 +16,7 @@
       "package": "com.fitnessroyale.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0c0b0f"
+        "backgroundColor": "#060708"
       }
     },
     "web": {
