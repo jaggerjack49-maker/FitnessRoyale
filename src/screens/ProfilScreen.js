@@ -37,6 +37,7 @@ export default function ProfilScreen({
   const u = moi;
 
   // ----- Sécurité du compte (changer le mot de passe, code de secours) -----
+  const [perfsOuvertes, setPerfsOuvertes] = useState(false);
   const [securiteOuverte, setSecuriteOuverte] = useState(false);
   const [ancienMdp, setAncienMdp] = useState('');
   const [nouveauMdp, setNouveauMdp] = useState('');
@@ -241,9 +242,27 @@ export default function ProfilScreen({
         )}
       </View>
 
-      {/* Mes performances Fitness Royale */}
-      <Text style={styles.sectionTitre}>Mes performances (Fitness Royale)</Text>
-      {exercices.map(([exo, perf]) => {
+      {/* Mes performances Fitness Royale — REPLIÉE PAR DÉFAUT (27/08/2026,
+          retour de Hafiz : « mes performances prend trop de place »). La liste
+          fait 15 lignes, elle repoussait tout le reste du profil très bas.
+          Même principe que « Sécurité du compte » plus bas et que les objectifs
+          de séries de l'onglet Entraînement : un résumé chiffré reste visible
+          sans rien déplier, le détail s'ouvre à la demande. */}
+      <TouchableOpacity
+        style={styles.enteteRepliable}
+        onPress={() => setPerfsOuvertes(!perfsOuvertes)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitreRepliable}>Mes performances (Fitness Royale)</Text>
+          <Text style={styles.resumeRepliable}>
+            {nbVerifiees} vérifiée{nbVerifiees > 1 ? 's' : ''} sur {exercices.length} saisie
+            {exercices.length > 1 ? 's' : ''}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{perfsOuvertes ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {perfsOuvertes && exercices.map(([exo, perf]) => {
         const palier = palierExercice(u.sexe, exo, perf.valeur);
         const nomPalier = palier === 0 ? 'Aucune' : nomsLigues[palier - 1];
         const bareme = baremes[u.sexe][exo];
@@ -490,6 +509,20 @@ const styles = StyleSheet.create({
   pointsTexte: { color: colors.texteGris, fontSize: 12, marginLeft: espacement.s },
   indice: { color: colors.texteGris, fontSize: 12, marginTop: espacement.s },
   sectionTitre: { color: colors.texte, fontSize: 18, fontWeight: '700', marginBottom: espacement.s },
+  enteteRepliable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.carte,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.bordure,
+    paddingVertical: espacement.s,
+    paddingHorizontal: espacement.m,
+    marginBottom: espacement.s,
+  },
+  sectionTitreRepliable: { color: colors.texte, fontSize: 16, fontWeight: '700' },
+  resumeRepliable: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
+  chevron: { color: colors.texteGris, fontSize: 14, marginLeft: espacement.s },
   lignePerf: {
     flexDirection: 'row',
     alignItems: 'center',

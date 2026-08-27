@@ -1105,46 +1105,86 @@ profil. et je veux une représentation graphique de l'arène ».
   FAUT refaire un build EAS pour voir l'arène sur téléphone (la version web et Expo Go, elles,
   fonctionnent immédiatement).
 
-### De vraies illustrations à la place du SVG — fait le 26/08/2026
+### De vraies illustrations à la place du SVG — fait le 26/08/2026, refait le 27/08/2026
 
-Demande de Hafiz (« voici le style que je veux pour les arènes », puis « je veux la même image
-comme sur la maquette ») : une maquette façon Clash Royale, 6 arènes isométriques peintes.
+Demande de Hafiz (« voici le style que je veux pour les arènes ») : une maquette façon Clash
+Royale, 6 arènes isométriques peintes.
 
 - DÉCISION — abandon du dessin SVG pour `AreneVisuel` : le SVG ne sait produire que des formes
   géométriques ; la pierre texturée, les ombres peintes et les matières de la maquette ne sont
   pas atteignables par le code. Une première tentative de SVG isométrique (plateau, tours,
   bannières dessinés à la main) a été écrite puis REMPLACÉE par les vraies images.
-- Source : `maquette-arène/` (2 images générées par Hafiz, VERSIONNÉES pour pouvoir refaire
-  l'opération). C'est la GRILLE 3×2 (1536×1024) qui a servi — l'autre maquette (verticale,
-  1024×1536) a des illustrations plus petites et écrasées, rognées par leur carte.
-- RECETTE DU DÉCOUPAGE (à refaire si la maquette change) : découper les 6 cases, puis pour
-  chacune — (1) effacer le bandeau de titre et la ligne de trophées PAR DIFFUSION (flou répété
-  confiné à cette zone), (2) rendre le fond bleu nuit TRANSPARENT par remplissage depuis les
-  coins, (3) ne garder que le plus gros bloc d'un seul tenant (ça élimine les restes de texte
-  et les bouts de panneau voisin), (4) recadrer au plus juste, (5) réduire à 200 couleurs.
-  Résultat : 2,2 Mo → **0,36 Mo** pour les 7 images.
-  ⚠️ PIÈGE PRINCIPAL : le bandeau est peint PAR-DESSUS le décor (nuages d'OLYMPE, cristaux de
-  ROYALE, mur de COLOSSE). Le découper en rectangle ARRACHE l'illustration (essayé, très moche) ;
-  il faut le reconstruire par diffusion AVANT de retirer le fond. Vérifier les 6 une par une —
-  COLOSSE avait gardé « 3499 » alors que FORGE était déjà parfaite.
-- LE FOND TRANSPARENT EST ESSENTIEL : la carte pose l'image sur SA propre couleur, donc aucun
-  raccord n'est visible et les rapports largeur/hauteur inégaux des 7 images ne se voient pas
-  (`resizeMode="contain"`).
+- LE DÉCOUPAGE EST UN SCRIPT : `scripts/decouper_arenes.py` (Pillow + numpy), à relancer depuis
+  la racine du projet si la maquette change. Il prend automatiquement la maquette la PLUS
+  RÉCENTE de `maquette-arène/` (dossier VERSIONNÉ exprès), retire le fond, isole les 6 arènes et
+  écrit les 7 PNG de `assets/arenes/`. Plus rien à refaire à la main.
 - L'arène 0 (DÉBUT) n'existe pas dans la maquette : c'est INITIATION désaturée et assombrie.
-- CE QUI EST PERDU au passage : le décor ne s'enrichit plus PROGRESSIVEMENT par le code (l'ancien
-  SVG ajoutait gradins/projecteurs/braseros selon le niveau) — chaque arène est maintenant une
-  image figée. En pratique c'est mieux : la maquette fait déjà cette montée en décor à la main.
-  Reste une lueur à la couleur de la ligue derrière l'image, pour garder le lien avec le code
-  couleur du reste de l'app. Détail : INITIATION a perdu son drapeau (bloc détaché du sol,
-  éliminé avec le texte) et OLYMPE garde un léger flou là où le bandeau couvrait une colonne.
-- `react-native-svg` n'est PLUS utilisé par `AreneVisuel` (il reste une dépendance du projet).
+- LE FOND TRANSPARENT EST ESSENTIEL : la carte pose l'image sur SA propre couleur, donc aucun
+  raccord n'est visible.
+- CE QUI EST PERDU par rapport au SVG : le décor ne s'enrichit plus PROGRESSIVEMENT par le code
+  (l'ancien SVG ajoutait gradins/projecteurs/braseros selon le niveau) — chaque arène est
+  maintenant une image figée. En pratique c'est mieux : la maquette fait déjà cette montée en
+  décor à la main. Reste une lueur à la couleur de la ligue derrière l'image, pour garder le lien
+  avec le code couleur du reste de l'app.
+- `react-native-svg` sert à cette lueur (dégradé radial), et à rien d'autre dans ce composant.
 
+#### La 2e maquette (propre) a tout simplifié — 27/08/2026
+
+Retour de Hafiz après avoir testé l'APK : « seule l'arène OLYMPE rend vraiment bien », et
+« je remarque comme un cercle au centre de l'image ». Trois causes, trois correctifs.
+
+**1. Le cercle** — la lueur derrière l'image était une `View` ronde à 16 % d'opacité : un APLAT,
+donc un contour net, bien visible par-dessus le fond transparent de l'illustration. Remplacée par
+un vrai DÉGRADÉ RADIAL (`RadialGradient` de `react-native-svg`) qui s'éteint progressivement.
+
+**2. Les arènes ne s'affichaient pas à la même taille** — leurs rapports largeur/hauteur allaient
+de 1,17 (OLYMPE) à 1,40 (INITIATION) alors que le cadre est fixe. Avec `resizeMode="contain"`,
+seule celle dont le format collait au cadre le remplissait ; les autres paraissaient rapetissées.
+Corrigé en posant toutes les arènes sur une TOILE IDENTIQUE (512 × 470), calées en bas (le socle
+est l'ancre visuelle). Le cadre de `AreneVisuel` porte exactement ce format.
+
+**3. La 1re maquette était inexploitable proprement, Hafiz en a régénéré une SANS TEXTE.**
+C'était la vraie cause de fond. Sur la maquette du 26/08, un bandeau de titre (« ARÈNE 3 /
+COLOSSE »), une ligne de trophées et une devise étaient peints PAR-DESSUS chaque illustration.
+Il fallait donc les effacer, et TOUTES les méthodes essayées abîmaient quelque chose :
+- effacer un rectangle → arrachait le décor (nuages, cristaux, mur) ;
+- reboucher par diffusion → bavures grises ;
+- ne garder que le plus gros bloc d'un seul tenant → supprimait drapeaux, arbres, cristaux ;
+- reconstruire par symétrie en recopiant le côté droit → drapeaux et statues DUPLIQUÉS, pire que
+  tout. **Ne pas réessayer cette piste.**
+Seule OLYMPE s'en sortait bien, parce que son bandeau ne couvrait que des nuages — faciles à
+reconstituer. D'où le constat de Hafiz.
+La maquette du 27/08 (`ChatGPT Image Aug 27, 2026, 06_08_26 AM.png`) n'a AUCUN texte ni cadre :
+tout ce travail de retouche a disparu, et avec lui ses dégâts. Les 7 arènes sont désormais
+COMPLÈTES et intactes. LEÇON : quand une image source est polluée, il vaut mieux la régénérer
+proprement que s'acharner à la réparer par code.
+
+**Ce que fait le script maintenant** (bien plus simple qu'avant) :
+- Il ne découpe PLUS en cases de 512×512 : sur cette maquette les arènes débordent de leur case.
+  Il enlève le fond sur l'image ENTIÈRE, puis isole les 6 blocs d'un seul tenant — chaque bloc
+  EST une arène, quelle que soit sa position. Il vérifie qu'il en trouve exactement 6 et les
+  remet dans l'ordre de lecture d'après leur centre.
+- Le fond est retiré par propagation depuis les bords, BORNÉE à la famille « bleu sombre » :
+  sans ce garde-fou la propagation part dans la pierre des murs, tout aussi sombre, et troue les
+  arènes. Ça emporte au passage le halo lumineux autour de chaque arène.
+- Palette réduite à 200 couleurs. Poids total : 1,5 Mo pour les 7 images (contre 0,36 Mo avant,
+  mais pour une toile plus grande et un décor entièrement conservé).
 ### Deux corrections d'affichage — faites le 25/08/2026
 
 - `RouteArenes` : le titre porté par l'arène (« Recrue », « Gladiator »…) n'est plus rappelé sur
   chaque étape — il est déjà sur la carte en haut de l'écran et chargeait la route pour rien.
 - `ProfilScreen` : le lien « Classements › » devient « Voir tout › » — le mot était répété juste
   à côté du titre du bloc « CLASSEMENT — TOP 3 ».
+
+### Profil : « Mes performances » est repliable — fait le 27/08/2026
+
+Retour de Hafiz : « mes performances prend trop de place ». La liste fait jusqu'à 15 lignes et
+repoussait tout le bas du profil (stats de la semaine, bilan compétition, sécurité, mode test)
+très loin. Elle est désormais REPLIÉE PAR DÉFAUT derrière un en-tête cliquable (▼/▲), comme
+« 🔒 Sécurité du compte » juste en dessous et comme les objectifs de séries de l'onglet
+Entraînement. Un RÉSUMÉ CHIFFRÉ reste visible sans rien déplier (« 4 vérifiées sur 11 saisies ») —
+même principe que les puces de volume : on doit voir où on en est d'un coup d'œil.
+L'état `perfsOuvertes` est local à `ProfilScreen` (il n'a pas à survivre à un changement d'onglet).
 
 ## XP : la jauge d'activité (socle de l'Arena Pass) — fait le 12/08/2026
 
