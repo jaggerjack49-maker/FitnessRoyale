@@ -259,14 +259,21 @@ const stylesEditeur = StyleSheet.create({
 // semaine entière pouvait disparaître sur une fausse manœuvre.
 // PAS d'`Alert.alert` : il est MUET sur le web, où Hafiz teste (voir la
 // convention du projet — les messages passent par des états React affichés).
-function ConfirmationSuppression({ actif, question, onConfirmer, onAnnuler }) {
+function ConfirmationSuppression({
+  actif, question, onConfirmer, onAnnuler,
+  libelleConfirmer = 'Oui, supprimer', couleur,
+}) {
   if (!actif) return null;
+  const teinte = couleur || colors.rouge;
   return (
-    <View style={stylesConfirmation.carte}>
+    <View style={[stylesConfirmation.carte, { borderColor: teinte }]}>
       <Text style={stylesConfirmation.question}>{question}</Text>
       <View style={stylesConfirmation.ligne}>
-        <TouchableOpacity style={stylesConfirmation.boutonSupprimer} onPress={onConfirmer}>
-          <Text style={stylesConfirmation.texteSupprimer}>Oui, supprimer</Text>
+        <TouchableOpacity
+          style={[stylesConfirmation.boutonSupprimer, { borderColor: teinte }]}
+          onPress={onConfirmer}
+        >
+          <Text style={[stylesConfirmation.texteSupprimer, { color: teinte }]}>{libelleConfirmer}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={stylesConfirmation.boutonAnnuler} onPress={onAnnuler}>
           <Text style={stylesConfirmation.texteAnnuler}>Annuler</Text>
@@ -309,6 +316,10 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   const [seancesParJour, setSeancesParJour] = useState({});
   const [jourEnEdition, setJourEnEdition] = useState(null); // jour déplié dans le formulaire
   const [cycles, setCycles] = useState([]);
+
+  // Quelle séance est DÉROULÉE dans « Mes programmes » (on voit ses exercices
+  // sans ouvrir l'éditeur).
+  const [seanceDeroulee, setSeanceDeroulee] = useState(null);
 
   // Suppression en DEUX temps : la croix arme la question, un second geste
   // confirme. Contient la clé de l'élément visé ('cycle-3', 'prog-7'…).
@@ -862,6 +873,42 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     }
   }
 
+  // SORTIR D'UN PROGRAMME (27/08/2026, demande de Hafiz) — sans le supprimer.
+  // On lui retire ses jours récurrents ET ses dates posées au calendrier : il
+  // ne pilote plus la semaine, donc `programmeEnService` retombe à faux et la
+  // semaine type réapparaît. Le programme reste dans « Mes programmes »,
+  // prêt à être reposé au calendrier plus tard.
+  async function sortirDuProgramme(seances) {
+    const ids = seances.map((s) => s.id);
+    const datesARetirer = planning.filter((pl) => ids.includes(pl.programme_id));
+
+    setProgrammes((liste) =>
+      liste.map((p) => (ids.includes(p.id) ? { ...p, jours: [] } : p)));
+    setCycles((liste) => liste.map((c) => ({
+      ...c,
+      seances: c.seances.map((s) => (ids.includes(s.id) ? { ...s, jours: [] } : s)),
+    })));
+    setPlanning((liste) => liste.filter((pl) => !ids.includes(pl.programme_id)));
+    setSeanceDeroulee(null);
+    setProgrammeEnEdition(null);
+
+    if (!estConnecte) return;
+    try {
+      for (const seance of seances) {
+        if (!String(seance.id).startsWith('local-')) {
+          await api.changerJoursProgramme(seance.id, []);
+        }
+      }
+      for (const planif of datesARetirer) {
+        if (!String(planif.id).startsWith('local-')) {
+          await api.deplanifierJour(planif.id);
+        }
+      }
+    } catch (err) {
+      setErreur(err.message || "Sortie gardée en local, l'envoi au serveur a échoué.");
+    }
+  }
+
   // La croix n'efface plus rien toute seule : elle pose la question.
   function demanderSuppression(cle) {
     setProgrammeEnEdition(null);   // pas de question posée sous un éditeur ouvert
@@ -1364,8 +1411,10 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             <Text style={styles.boutonPrincipalTexte}>✅ Terminer la séance</Text>
           )}
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setVue('accueil')}>
-          <Text style={styles.lienAnnuler}>Abandonner</Text>
+        {/* Sortir SANS enregistrer. C'était un lien gris discret (« Abandonner »)
+            que Hafiz n'a pas trouvé — c'est maintenant un vrai bouton. */}
+        <TouchableOpacity style={styles.boutonSortir} onPress={() => setVue('accueil')}>
+          <Text style={styles.boutonSortirTexte}>🚪 Sortir du programme (sans enregistrer)</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -1399,6 +1448,15 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     cycles.length > 0
     || planning.length > 0
     || programmes.some((p) => (p.jours || []).length > 0);
+
+  // Ce programme occupe-t-il vraiment la semaine ? (sinon « Sortir » n'a rien
+  // à libérer, on ne montre pas le bouton)
+  function cycleEnService(cycle) {
+    return cycle.seances.some(
+      (seance) => (seance.jours || []).length > 0
+        || planning.some((pl) => pl.programme_id === seance.id)
+    );
+  }
 
   // Ce qu'on peut poser dans le calendrier comme CYCLE : mes programmes
   // complets + les modèles standards, ramenés à la même forme.
@@ -1881,15 +1939,23 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           />
           {cycle.seances.map((seance) => {
             const enEdition = programmeEnEdition === seance.id;
+            const deroulee = seanceDeroulee === seance.id;
             return (
               <View key={seance.id}>
                 <View style={styles.ligneSeanceCycle}>
-                  <Text style={styles.jourSeanceCycle}>
-                    {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
-                  </Text>
-                  <Text style={styles.contenuCalendrier}>
-                    {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
-                  </Text>
+                  {/* Toucher la ligne DÉROULE la séance : on voit ses exercices
+                      sans ouvrir l'éditeur (27/08/2026, demande de Hafiz). */}
+                  <TouchableOpacity
+                    style={styles.zoneDeroule}
+                    onPress={() => setSeanceDeroulee(deroulee ? null : seance.id)}
+                  >
+                    <Text style={styles.jourSeanceCycle}>
+                      {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
+                    </Text>
+                    <Text style={styles.contenuCalendrier}>
+                      {deroulee ? '▲' : '▼'} {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
+                    </Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.boutonModifier}
                     onPress={() => setProgrammeEnEdition(enEdition ? null : seance.id)}
@@ -1897,6 +1963,17 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                     <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
                   </TouchableOpacity>
                 </View>
+                {deroulee && !enEdition && (
+                  <View style={styles.detailJour}>
+                    {seance.exercices.length === 0 ? (
+                      <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
+                    ) : seance.exercices.map((exo, i) => (
+                      <Text key={i} style={styles.exerciceDetailJour}>
+                        • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+                      </Text>
+                    ))}
+                  </View>
+                )}
                 {enEdition && (
                   <EditeurSeance
                     key={`edition-${seance.id}`}
@@ -1914,23 +1991,47 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
               </View>
             );
           })}
+          {cycleEnService(cycle) && (
+            <>
+              <TouchableOpacity
+                style={styles.boutonSortir}
+                onPress={() => demanderSuppression('sortie-cycle-' + cycle.id)}
+              >
+                <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+              </TouchableOpacity>
+              <ConfirmationSuppression
+                actif={suppressionAConfirmer === 'sortie-cycle-' + cycle.id}
+                question={`Sortir de « ${cycle.nom} » ? Il libère la semaine et ses dates du calendrier, mais reste ici : tu pourras le reposer quand tu veux.`}
+                libelleConfirmer="Oui, sortir"
+                couleur={colors.accent}
+                onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme(cycle.seances); }}
+                onAnnuler={() => setSuppressionAConfirmer(null)}
+              />
+            </>
+          )}
         </View>
       ))}
 
       {/* Les séances isolées (créées depuis la semaine type, hors cycle). */}
       {programmesSeuls.map((programme) => {
         const enEdition = programmeEnEdition === programme.id;
+        const deroulee = seanceDeroulee === programme.id;
         return (
           <View key={programme.id} style={styles.carteModele}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.nomProgrammeTexte}>{programme.nom}</Text>
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}
+              >
+                <Text style={styles.nomProgrammeTexte}>
+                  {deroulee ? '▲' : '▼'} {programme.nom}
+                </Text>
                 <Text style={styles.indice}>
                   {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
                   {(programme.jours || []).length > 0 &&
                     ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
                 </Text>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.boutonModifier}
                 onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
@@ -1950,6 +2051,17 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
               onConfirmer={() => { setSuppressionAConfirmer(null); supprimerProgramme(programme); }}
               onAnnuler={() => setSuppressionAConfirmer(null)}
             />
+            {deroulee && !enEdition && (
+              <View style={styles.detailJour}>
+                {programme.exercices.length === 0 ? (
+                  <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
+                ) : programme.exercices.map((exo, i) => (
+                  <Text key={i} style={styles.exerciceDetailJour}>
+                    • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+                  </Text>
+                ))}
+              </View>
+            )}
             {enEdition && (
               <EditeurSeance
                 key={`edition-${programme.id}`}
@@ -1963,6 +2075,24 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                   setProgrammeEnEdition(null);
                 }}
               />
+            )}
+            {cycleEnService({ seances: [programme] }) && (
+              <>
+                <TouchableOpacity
+                  style={styles.boutonSortir}
+                  onPress={() => demanderSuppression('sortie-prog-' + programme.id)}
+                >
+                  <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+                </TouchableOpacity>
+                <ConfirmationSuppression
+                  actif={suppressionAConfirmer === 'sortie-prog-' + programme.id}
+                  question={`Sortir de « ${programme.nom} » ? Il libère ses jours et ses dates, mais reste ici : tu pourras le reposer quand tu veux.`}
+                  libelleConfirmer="Oui, sortir"
+                  couleur={colors.accent}
+                  onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme([programme]); }}
+                  onAnnuler={() => setSuppressionAConfirmer(null)}
+                />
+              </>
             )}
           </View>
         );
@@ -2196,6 +2326,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5, paddingHorizontal: 9,
   },
   boutonModifierTexte: { color: colors.accent, fontWeight: '700', fontSize: 11 },
+  zoneDeroule: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  boutonSortir: {
+    borderWidth: 1, borderColor: colors.texteGris, borderRadius: 8,
+    paddingVertical: 9, alignItems: 'center', marginTop: espacement.s,
+  },
+  boutonSortirTexte: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
   ligneVolume: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: espacement.s },
   ligneObjectif: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

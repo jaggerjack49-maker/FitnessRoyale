@@ -1074,6 +1074,24 @@ DÉMARRER UNE SÉANCE, désormais : depuis le calendrier en touchant la date du 
 « 🏋️ Démarrer une séance libre ». (Le bouton du calendrier n'apparaît que pour aujourd'hui —
 comportement inchangé, mais il devient le chemin principal, à surveiller au test.)
 
+**4. Dérouler un programme, et en sortir** (même jour, après test de Hafiz : « il faut une
+option pour dérouler le programme d'entraînement et une option pour sortir du programme »).
+- DÉROULER : dans « Mes programmes », toucher une séance affiche ses exercices avec leurs
+  séries × reps, en lecture seule (`seanceDeroulee`). Il fallait jusque-là ouvrir l'éditeur pour
+  simplement REGARDER ce qu'on avait prévu — conséquence directe du point 3, qui avait retiré
+  l'affichage détaillé du calendrier sans le remettre ailleurs.
+- SORTIR : `sortirDuProgramme(seances)` retire les jours récurrents ET les dates posées d'un
+  programme, SANS le supprimer. `programmeEnService` retombe donc à faux et la semaine type
+  revient ; le programme reste dans « Mes programmes », prêt à être reposé au calendrier.
+  C'était le manque créé par le point 2 : on ne pouvait plus quitter un programme qu'en le
+  SUPPRIMANT. Le bouton n'apparaît que si le programme occupe vraiment la semaine
+  (`cycleEnService`), sinon il n'aurait rien à libérer.
+  Confirmation en deux temps comme la suppression, mais en OR et non en rouge : ça ne détruit
+  rien (`ConfirmationSuppression` accepte `libelleConfirmer` et `couleur`).
+- SORTIR D'UNE SÉANCE EN COURS : le lien gris « Abandonner », en bas de l'écran de séance,
+  existait déjà mais Hafiz ne l'avait pas trouvé. Devenu un vrai bouton bordé,
+  « 🚪 Sortir du programme (sans enregistrer) ».
+
 VÉRIFIÉ : le bundle Metro compile et l'app démarre sans erreur console. Le parcours à l'écran
 n'a PAS été rejoué (il demande un compte connecté) — à confirmer sur l'APK.
 
