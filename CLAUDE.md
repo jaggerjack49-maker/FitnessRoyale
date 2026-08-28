@@ -1095,6 +1095,50 @@ option pour dérouler le programme d'entraînement et une option pour sortir du 
 VÉRIFIÉ : le bundle Metro compile et l'app démarre sans erreur console. Le parcours à l'écran
 n'a PAS été rejoué (il demande un compte connecté) — à confirmer sur l'APK.
 
+## Entraînement v4 : deux bugs de fond + le compteur de séries — fait le 28/08/2026
+
+Retour de Hafiz après avoir testé l'APK de la v3. Deux des cinq points étaient de VRAIS BUGS,
+tous les deux introduits par la v3 elle-même — et tous les deux SILENCIEUX, ce qui les rendait
+difficiles à décrire autrement que par « ça ne marche pas ».
+
+**1. BUG — « lorsqu'on quitte un programme, la semaine type doit revenir » (elle ne revenait
+jamais).** `programmeEnService` testait `cycles.length > 0`. Or « Sortir du programme » ne
+SUPPRIME pas le cycle : il lui retire seulement ses jours et ses dates. La condition restait
+donc vraie pour toujours. Corrigé en demandant qu'un cycle occupe RÉELLEMENT la semaine
+(`cycles.some(cycleEnService)`, la fonction existait déjà pour décider d'afficher le bouton
+« Sortir »). LEÇON : `cycleEnService` disait déjà la bonne chose au bon endroit — le bug venait
+d'avoir écrit une SECONDE définition, plus grossière, de la même idée quelques lignes plus loin.
+
+**2. BUG — « quand on place un programme dans le calendrier, ça ne marche pas ».**
+`placerModeleAuPlanning` génère les dates par `for (const jour of seance.jours)`. Si les séances
+n'ont PLUS de jours, la boucle ne tourne pas une seule fois : zéro date posée, et rien à l'écran
+ne le signalait. Or c'est exactement l'état d'un cycle dont on vient de « sortir » (bug n°1 =
+la cause, celui-ci = la conséquence), et aussi celui des cycles que cette fonction crée
+elle-même (elle les crée avec `jours: []`, la répétition venant des dates posées). Corrigé :
+ces séances sont réparties sur des jours CONSÉCUTIFS à partir de la date choisie, dans leur
+ordre — poser un programme fait toujours quelque chose. Et si la liste de dates finit quand
+même vide, un message le dit au lieu de ne rien faire.
+
+**3. Démarrer depuis n'importe quel jour du calendrier.** Le bouton « 🏋️ Démarrer cette séance »
+était conditionné à `cestAujourdhui` : toucher une autre date n'offrait rien du tout — ce que la
+v3 avait rendu très visible en faisant du calendrier LE chemin pour démarrer. Il s'affiche
+maintenant sur toute date qui a une séance (libellé « Démarrer cette séance maintenant » quand
+ce n'est pas aujourd'hui : la séance est enregistrée au jour où on la fait, pas à la date
+touchée).
+
+**4. Afficher le détail du PROGRAMME ENTIER.** La v3 permettait de dérouler une séance à la
+fois ; voir sa semaine complète demandait autant de gestes qu'il y a de jours. Un interrupteur
+« ▼ Voir le détail / ▲ Masquer le détail » sur la carte du programme déroule toutes ses séances
+d'un coup (`cyclesDeroules`). Le déroulé séance par séance reste disponible — une séance est
+ouverte si SON détail est ouvert OU celui du programme.
+
+**5. Le compteur de séries de la semaine.** La section « 🎯 Séries par groupe musculaire »
+comptait déjà juste (`compterSeriesParGroupe`), mais il fallait la déplier pour voir quoi que ce
+soit, et le résumé replié était plafonné à 6 groupes. Désormais : un TOTAL toujours visible sous
+le titre (« 28 séries cette semaine · 3 séances »), et plus aucun groupe travaillé n'est masqué.
+Le calcul, lui, n'a pas changé — il reste fait CÔTÉ APP depuis les séances réellement loggées
+de la semaine en cours (lundi→dimanche), sans aller-retour serveur.
+
 ## Arènes façon Clash Royale (écran Paliers) — fait le 12/08/2026
 
 Demande de Hafiz : « pour la partie paliers j'aimerais qu'on construise un système d'arène comme

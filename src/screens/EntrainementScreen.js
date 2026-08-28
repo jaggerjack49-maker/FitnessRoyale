@@ -320,6 +320,16 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // Quelle séance est DÉROULÉE dans « Mes programmes » (on voit ses exercices
   // sans ouvrir l'éditeur).
   const [seanceDeroulee, setSeanceDeroulee] = useState(null);
+  // Les programmes complets dont on affiche le détail en entier (28/08/2026,
+  // demande de Hafiz : « une option pour afficher le détail du programme ou
+  // non »). Dérouler séance par séance restait possible, mais il fallait le
+  // faire une par une pour voir sa semaine.
+  const [cyclesDeroules, setCyclesDeroules] = useState([]);
+
+  function basculerDetailCycle(id) {
+    setCyclesDeroules((liste) =>
+      liste.includes(id) ? liste.filter((x) => x !== id) : [...liste, id]);
+  }
 
   // Suppression en DEUX temps : la croix arme la question, un second geste
   // confirme. Contient la clé de l'élément visé ('cycle-3', 'prog-7'…).
@@ -699,16 +709,31 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     setProgrammes(listeProgrammes);
 
     // 2. Générer toutes les dates : la date cliquée = « lundi » du cycle.
+    //
+    // BUG CORRIGÉ (28/08/2026) : si les séances n'ont PLUS de jours — l'état
+    // exact d'un cycle dont on vient de « sortir », et celui des cycles créés
+    // par cette fonction — la boucle ne tournait pas une seule fois : aucune
+    // date n'était posée et rien ne le signalait. On répartit maintenant ces
+    // séances sur des jours CONSÉCUTIFS à partir de la date choisie, dans
+    // leur ordre : poser un programme fait toujours quelque chose.
+    const sansJours = modele.seances.every((seance) => (seance.jours || []).length === 0);
     const debut = new Date(`${dateISO}T12:00:00`);
     const elements = [];
     for (let semaine = 0; semaine < nbSemaines; semaine++) {
-      for (const seance of modele.seances) {
-        for (const jour of seance.jours) {
+      modele.seances.forEach((seance, rang) => {
+        const decalages = sansJours
+          ? [rang]
+          : (seance.jours || []).map((jour) => joursSemaine.indexOf(jour));
+        for (const decalage of decalages) {
           const dateJs = new Date(debut);
-          dateJs.setDate(dateJs.getDate() + joursSemaine.indexOf(jour) + semaine * 7);
+          dateJs.setDate(dateJs.getDate() + decalage + semaine * 7);
           elements.push({ date: enISO(dateJs), programme: programmesParNom[seance.nom] });
         }
-      }
+      });
+    }
+    if (elements.length === 0) {
+      setErreur("Ce programme n'a aucune séance à placer.");
+      return;
     }
 
     // 3. Mise à jour locale immédiate (sans doublons), puis envoi GROUPÉ.
@@ -718,6 +743,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     setPlanning((l) => [...l, ...nouveaux]);
     setChoixProgrammeOuvert(false);
     setModeleAPlacer(null);
+    setJourOuvert(dateISO);   // on reste sur le jour posé, pour voir le résultat
 
     if (!estConnecte) return;
     const envoyables = nouveaux.filter((pl) => !String(pl.programme_id).startsWith('local-'));
@@ -1432,6 +1458,16 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   const groupesSuivis = groupesMusculaires.filter(
     (g) => objectifsSeries[g] || seriesFaites[g]
   );
+  // Le compteur de la semaine (28/08/2026, demande de Hafiz) : combien de
+  // séries au total, sur combien de séances, comptées depuis les séances
+  // RÉELLEMENT faites. Affiché sans rien déplier — c'est le chiffre qu'on
+  // vient chercher en premier.
+  const totalSeriesSemaine = groupesMusculaires.reduce(
+    (total, g) => total + (seriesFaites[g] || 0), 0
+  );
+  const seancesDeLaSemaine = entrainements.filter(
+    (e) => e.date >= debutSemaineISO && e.date <= finSemaineISO
+  ).length;
 
   // Records personnels, tous exercices confondus (section « 🏆 Mes records »).
   const mesRecords = tousLesRecords(entrainements);
@@ -1444,8 +1480,13 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // reste le moyen le plus simple d'écrire sa semaine ; dès qu'un programme
   // prend le relais, elle ferait doublon (et deux éditeurs de la même séance
   // qui se marchent dessus).
+  // BUG CORRIGE (28/08/2026) : on testait `cycles.length > 0`, or « Sortir du
+  // programme » ne SUPPRIME pas le cycle -- il lui retire seulement ses jours
+  // et ses dates. La condition restait donc vraie pour toujours et la semaine
+  // type ne revenait jamais. On demande maintenant qu'un cycle occupe
+  // reellement la semaine (`cycleEnService`).
   const programmeEnService =
-    cycles.length > 0
+    cycles.some(cycleEnService)
     || planning.length > 0
     || programmes.some((p) => (p.jours || []).length > 0);
 
@@ -1488,10 +1529,16 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           🎯 Séries par groupe musculaire {volumeOuvert ? '▲' : '▼'}
         </Text>
       </TouchableOpacity>
+      <Text style={styles.totalSeries}>
+        {totalSeriesSemaine} série{totalSeriesSemaine > 1 ? 's' : ''} cette semaine
+        {seancesDeLaSemaine > 0
+          ? ` · ${seancesDeLaSemaine} séance${seancesDeLaSemaine > 1 ? 's' : ''}`
+          : ' · aucune séance encore'}
+      </Text>
       {/* Résumé visible SANS déplier : on doit voir où on en est d'un coup d'œil. */}
       {!volumeOuvert && groupesSuivis.length > 0 && (
         <View style={styles.resumeVolume}>
-          {groupesSuivis.slice(0, 6).map((groupe) => {
+          {groupesSuivis.map((groupe) => {
             const fait = seriesFaites[groupe] || 0;
             const cible = objectifsSeries[groupe] || 0;
             const atteint = cible > 0 && fait >= cible;
@@ -1821,14 +1868,20 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                     • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
                   </Text>
                 ))}
-                {cestAujourdhui && (
-                  <TouchableOpacity
-                    style={styles.boutonUtiliserModele}
-                    onPress={() => demarrerSeance(programme)}
-                  >
-                    <Text style={styles.boutonDemarrerTexte}>🏋️ Démarrer cette séance</Text>
-                  </TouchableOpacity>
-                )}
+                {/* Le bouton n'apparaissait QUE sur la date du jour, donc
+                    toucher n'importe quel autre jour ne proposait rien
+                    (28/08/2026, retour de Hafiz : « si on clique sur un jour
+                    c'est l'option démarrer la séance qui doit s'afficher »).
+                    On peut désormais démarrer depuis n'importe quelle date —
+                    la séance est simplement enregistrée au jour où on la fait. */}
+                <TouchableOpacity
+                  style={styles.boutonUtiliserModele}
+                  onPress={() => demarrerSeance(programme)}
+                >
+                  <Text style={styles.boutonDemarrerTexte}>
+                    🏋️ Démarrer cette séance{cestAujourdhui ? '' : ' maintenant'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             ))}
             {!choixProgrammeOuvert ? (
@@ -1920,10 +1973,20 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       )}
 
       {/* Les PROGRAMMES COMPLETS (cycles) : un nom + une séance par jour. */}
-      {cycles.map((cycle) => (
+      {cycles.map((cycle) => {
+        const detailOuvert = cyclesDeroules.includes(cycle.id);
+        return (
         <View key={cycle.id} style={styles.carteModele}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>📋 {cycle.nom}</Text>
+            <TouchableOpacity
+              style={styles.boutonModifier}
+              onPress={() => basculerDetailCycle(cycle.id)}
+            >
+              <Text style={styles.boutonModifierTexte}>
+                {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => demanderSuppression('cycle-' + cycle.id)}
               style={styles.boutonRetirer}
@@ -1939,7 +2002,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           />
           {cycle.seances.map((seance) => {
             const enEdition = programmeEnEdition === seance.id;
-            const deroulee = seanceDeroulee === seance.id;
+            const deroulee = detailOuvert || seanceDeroulee === seance.id;
             return (
               <View key={seance.id}>
                 <View style={styles.ligneSeanceCycle}>
@@ -2010,7 +2073,8 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             </>
           )}
         </View>
-      ))}
+        );
+      })}
 
       {/* Les séances isolées (créées depuis la semaine type, hors cycle). */}
       {programmesSeuls.map((programme) => {
@@ -2245,6 +2309,10 @@ const styles = StyleSheet.create({
   indiceHorsLigne: {
     color: colors.texteGris, fontSize: 12, backgroundColor: colors.carteClaire,
     padding: espacement.s, borderRadius: 10, marginBottom: espacement.m,
+  },
+  totalSeries: {
+    color: colors.or, fontSize: 13, fontWeight: '800',
+    marginTop: -4, marginBottom: espacement.s,
   },
   sectionTitre: {
     color: colors.texte, fontSize: 18, fontWeight: '700',
