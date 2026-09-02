@@ -16,9 +16,10 @@ Hafiz (le créateur) est débutant en programmation : expliquer simplement, comm
 - Écrans : Profil (rang global + rang catégorie, salle de gym éditable, perfs, séances), Performances (saisie + statuts), Entraînement (programmes + journal de séance, voir section dédiée), Paliers (barème complet par exercice, échelle dépliable, prochain objectif), Compétition (classements — global / par poids / par exercice / salles — + défis + duels)
 - Le classement AFFICHE uniquement le RANG (1er, 2e…) — jamais les moyennes de paliers (calcul interne)
 - Plus de « niveau » ni de « points » : le rang et la ligue suffisent
-- Salle de gym : champ libre dans le Profil (utilisateur.salle) — sert au classement par salle (clans).
-  Reste un champ LOCAL (pas encore renvoyé au serveur) : éditer sa salle dans l'app ne change pas
-  encore la salle du joueur côté backend — à faire plus tard si besoin.
+- Salle de gym : champ libre dans l'onglet CLAN (déplacé du Profil le 01/09/2026 — la salle EST
+  le clan). Sert au chat de clan, au classement des membres et au classement par salle.
+  Depuis le 01/09/2026 elle est VRAIMENT enregistrée côté serveur (`PUT /joueurs/{id}/salle`) :
+  ce n'est plus un champ local.
 - POINTS de compétition (duels + défis) : DÉPARTAGE des égalités uniquement, jamais le critère principal
 - Défis récurrents : journalier (+20 pts) et hebdomadaire (+100 pts + titre) — CÔTÉ FRONT toujours
   simulés (bouton "Valider" = simulation locale, comme avant). CÔTÉ BACKEND, désormais réels :
@@ -1486,6 +1487,140 @@ une autre échelle — le palier d'UN mouvement, pas l'arène globale.
 Vérifié : bouton 💎 OLYMPE → accueil « OLYMPE », Paliers « 💎 OLYMPE · Titre Olympien »,
 classement « OLYMPE • 88 kg ». Plus aucune mention de « Titan » nulle part.
 
+## Lot du 01/09/2026 : onze demandes de Hafiz en une
+
+Toutes issues d'un même retour après test de l'APK. Regroupées ici parce
+qu'elles se répondent : plusieurs déplacent une fonction d'un écran à un autre.
+
+### Le fil conducteur : chaque écran son rôle
+
+- **La salle de gym déménage au Clan.** Le champ vivait au Profil ; la salle EST
+  le clan, il est donc dans l'onglet Clan (« ma salle doit être réservé à la
+  partie clan »). ⚠️ CONSÉQUENCE QU'IL A FALLU TRAITER : la salle n'existait
+  que CÔTÉ APP (limite connue, notée de longue date dans « À faire »). Tant
+  qu'elle était au Profil ça ne se voyait pas ; posée à côté du chat — qui,
+  lui, vérifie l'appartenance CÔTÉ SERVEUR — la changer aurait fait répondre
+  403 au chat. D'où le nouvel endpoint `PUT /joueurs/{id}/salle`
+  (+ `db.changer_salle`, `api.changerSalle`). La ligne correspondante de
+  « À faire » est donc levée.
+- **Le Clan devient un vrai écran de clan** : la carte « ma salle », un
+  classement des MEMBRES de la salle (`classer` filtré sur la salle — mêmes
+  règles que le classement global, aucun calcul nouveau), et le chat, sous un
+  sélecteur Membres / Chat.
+- **La touche VS du Profil ouvre directement les duels.** Elle amenait sur
+  l'onglet Compétition, donc sur le CLASSEMENT. `allerA(cle, { duel: true })`
+  incrémente un compteur `demandeDuel` que `CompetitionScreen` surveille pour
+  basculer sur l'onglet Défis. DÉCISION : un compteur plutôt qu'un booléen —
+  un booléen resterait vrai et rouvrirait les duels à chaque rendu.
+
+### Deux écrans allégés
+
+- **Profil → « 🏅 Mes titres »** (repliable) : voir la section dédiée plus bas.
+- **Perfs → « Enregistrées » est repliable**, avec le résumé « 4 vérifiées sur
+  11 saisies » visible sans déplier — même motif qu'au Profil.
+- **Perfs → la validation SANS PREUVE est supprimée.** C'était le chemin le
+  plus facile à abuser des trois (un vote de confiance sans aucune preuve,
+  compromis assumé à l'époque). Restent la VIDÉO et le CODE PARTENAIRE, qui
+  demandent tous deux une preuve. ⚠️ Les endpoints backend
+  (`/performances/a-valider-sans-video`, `/voter-sans-video`) SONT GARDÉS :
+  plus rien ne les appelle, mais les retirer casserait
+  `test_api_validation.py` sans rien gagner.
+
+### Trois corrections dans Compétition
+
+- **Classement par poids : du plus lourd au plus léger.** Une seule ligne,
+  `ordreCategories` dans `classement.js` — `classerParCategories` en découle.
+- **« Semaine 29 »**, figée en dur dans le sous-titre depuis les tout débuts,
+  est retirée.
+- **« Développé couché affiché deux fois ».** Il n'y a PAS de doublon dans le
+  barème (vérifié : 15 clés distinctes). Le sélecteur d'exercice affichait le
+  choix courant dans son en-tête ET dans la liste ouverte juste en dessous.
+  Corrigé : l'en-tête dit « Choisis un exercice… » quand la liste est ouverte,
+  et le choix courant est marqué d'un point plein. (À savoir si le retour
+  revient : deux exercices commencent par les mêmes mots — « Développé couché »
+  et « Développé couché prise serrée » — ce sont bien deux exercices
+  différents du barème, pas un bug.)
+
+### Performances attendues pour la prochaine séance
+
+`LigneExercicePrevu` (EntrainementScreen) affiche sous chaque exercice prévu la
+charge à viser — la MÊME `suggererProchaineSerie` qu'on voyait déjà pendant la
+séance, mais montrée AVANT d'y aller : on sait quoi charger en arrivant à la
+salle. Aucun calcul ni endpoint nouveau, tout se déduit de l'historique déjà
+chargé (marche hors-ligne). Utilisée aux TROIS endroits qui listent des
+exercices (détail du calendrier, séance déroulée, cycle déroulé) — un seul
+composant, pas trois copies. Rien ne s'affiche pour un exercice jamais loggé :
+mieux vaut rien qu'un chiffre inventé.
+
+### Les titres (`src/logic/titres.js`, section repliable au Profil)
+
+- DÉCISION FONDATRICE, la même que pour l'XP : **aucun nouveau score, aucune
+  table.** Un titre n'est que la LECTURE du classement par exercice
+  (`classerParExercice`, déjà utilisé par Compétition). Il se recalcule donc
+  tout seul dès qu'une perf est vérifiée, et il ne PEUT PAS se désynchroniser
+  du classement affiché ailleurs.
+- Trois marches par exercice (🥇🥈🥉) → jusqu'à 45 titres possibles. Un
+  exercice sur lequel personne n'a de perf vérifiée n'en décerne aucun : pas
+  de « N°1 » d'un classement vide.
+- **Libellés SANS GENRE** (« N°1 · Développé couché », pas Roi/Reine) : le
+  titre décrit un rang, pas la personne qui le porte.
+- `titresAPortee()` liste en plus les exercices où le podium est le plus
+  proche, avec le palier à viser — actionnable, contrairement à un « pas
+  encore obtenu ».
+
+### Programmes officiels : l'admin publie, les autres copient
+
+Demande : « je pourrai créer des programmes et les autres utilisateurs pourront
+juste les coller ».
+
+- Table `programmes_officiels`. **DÉCISION : le contenu est stocké en JSON dans
+  UNE colonne**, au lieu de deux tables liées comme les cycles d'un joueur. Un
+  programme officiel n'est pas un objet vivant — personne ne le modifie séance
+  par séance, on le publie et on le copie. Et c'est exactement la forme des
+  modèles standards côté app (`src/data/programmesStandards.js`), donc l'app
+  les affiche et les copie AVEC LE MÊME CODE, sans conversion : « copier » est
+  simplement `appliquerModele`, qui existait déjà.
+- Endpoints : `GET /programmes-officiels` (ouvert à tous — c'est du catalogue,
+  rien de personnel), `POST` et `DELETE /admin/programmes-officiels`
+  (`auth.utilisateur_admin`, 403 sinon).
+- **PAS DE FORMULAIRE SÉPARÉ pour l'admin** : il construit un programme
+  normalement, puis le publie d'un bouton « 🛠 Publier pour tous » (bordure
+  rouge, comme le reste du mode test) sur la carte du cycle. Un programme est
+  ordinaire jusqu'à ce qu'il soit publié.
+- Retirer un programme du catalogue **ne touche pas aux copies déjà faites** :
+  ce sont les programmes des joueurs depuis le jour où ils les ont copiés.
+  Verrouillé par un test dédié.
+- Tests : `backend/tests/test_api_programmes_officiels.py` — 7 tests.
+  Suite complète : **201 tests, tous OK.**
+
+## Trois retours d'APK — faits le 02/09/2026
+
+Captures à l'appui (`docs/Screenshot_2026-09-01-*.jpg`), donc trois constats
+nets plutôt que des impressions.
+
+**1. « On voit toujours le détail du programme ».** L'interrupteur « ▼ Voir le
+détail » de la v4 ne repliait que les EXERCICES : la carte d'un cycle listait
+quand même ses cinq séances, avec leurs boutons « ✏️ Modifier ». Replié veut
+maintenant dire replié : le nom du programme et un résumé (« 5 séances ·
+Lun Mar Mer »), rien d'autre. LEÇON : « voir le détail » avait été compris
+comme « voir les exercices » alors que pour Hafiz le détail commençait à la
+liste des séances.
+
+**2. Le clavier cachait les champs de saisie pendant la séance.** On tapait ses
+reps sans voir ce qu'on écrivait. La vue de séance est désormais enveloppée
+dans un `KeyboardAvoidingView` ET porte une grande marge basse
+(`paddingBottom: 340`) : sur iOS le contenu remonte, sur Android — où la
+fenêtre est simplement redimensionnée — la marge donne de quoi FAIRE DÉFILER
+le champ au-dessus du clavier. `keyboardShouldPersistTaps="handled"` en plus,
+pour que « + Série » réponde du premier coup au lieu de servir à fermer le
+clavier.
+
+**3. La saisie d'une série est conservée pour la suivante.** `ajouterSerie`
+vidait les champs après chaque série. Or les séries d'un même exercice se font
+presque toujours à la même charge et au même nombre de reps (la capture montre
+quatre fois « 15 kg × 16 reps » d'affilée) : il fallait tout retaper à chaque
+fois. Les valeurs restent, on ne corrige un champ que quand ça change vraiment.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -1516,7 +1651,6 @@ classement « OLYMPE • 88 kg ». Plus aucune mention de « Titan » nulle part
   toutes les 3 secondes, ça marche mais c'est moins réactif qu'un vrai push
 - Brancher les SÉANCES au serveur (`POST /joueurs/{id}/seances`) quand on en ajoute une dans Profil,
   puis brancher les DÉFIS (`GET/POST /joueurs/{id}/defis`) pour remplacer la simulation locale
-- Synchroniser le changement de salle (Profil) vers le serveur (actuellement local uniquement)
 - Suivre `serieJours` et `stats` (victoires/défaites) pour de vrais comptes côté serveur
   (actuellement seulement dans mockData.js, valeurs par défaut à 0 pour un vrai compte — noter
   que les VRAIES victoires/défaites de duels en ligne ne sont pas encore comptées dans ces stats)

@@ -423,6 +423,31 @@ export async function voterSansVideo(joueurId, exercice, valide) {
   return post(`/joueurs/${joueurId}/performances/${encodeURIComponent(exercice)}/voter-sans-video`, { valide });
 }
 
+// Change MA salle de gym (= mon clan). Depuis le 01/09/2026 la salle est
+// vraiment enregistrée côté serveur : le chat de clan et le classement des
+// membres s'appuient dessus, une valeur qui ne vivrait que dans l'app ferait
+// répondre 403 au chat.
+export async function changerSalle(joueurId, salle) {
+  return appel(`/joueurs/${joueurId}/salle`, {
+    method: 'PUT', body: JSON.stringify({ salle: salle || '' }),
+  });
+}
+
+// ----- Programmes officiels (publiés par l'admin, copiables par tous) -----
+// Le catalogue est ouvert à tous ; publier et retirer sont réservés à l'admin
+// (le serveur renvoie 403 sinon).
+export async function programmesOfficiels() {
+  return get('/programmes-officiels');
+}
+
+export async function publierProgrammeOfficiel(nom, description, seances) {
+  return post('/admin/programmes-officiels', { nom, description, seances });
+}
+
+export async function retirerProgrammeOfficiel(programmeId) {
+  return appelSuppression(`/admin/programmes-officiels/${programmeId}`);
+}
+
 // ----- Chat de clan (par salle) -----
 // Réservé aux membres de la salle (le serveur vérifie que courant.salle == salle).
 export async function messagesClan(salle) {

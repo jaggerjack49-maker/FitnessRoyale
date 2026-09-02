@@ -63,6 +63,17 @@ export default function App() {
 
 function AppInterne() {
   const [ongletActif, setOngletActif] = useState('profil');
+  // Quand on arrive sur Compétition depuis la touche VS du Profil, on ne veut
+  // pas atterrir sur le classement mais DIRECTEMENT sur le choix du duel
+  // (demande de Hafiz du 01/09/2026). Ce compteur sert de « top départ » :
+  // CompetitionScreen le surveille et ouvre les duels quand il change.
+  const [demandeDuel, setDemandeDuel] = useState(0);
+
+  // Aller sur un onglet ; `options.duel` demande en plus d'ouvrir les duels.
+  function allerA(cle, options) {
+    setOngletActif(cle);
+    if (options && options.duel) setDemandeDuel((n) => n + 1);
+  }
   const [mesPerfs, setMesPerfs] = useState(utilisateur.performances);
   const [mesSeances, setMesSeances] = useState(utilisateur.seances);
   const [maSalle, setMaSalle] = useState(utilisateur.salle);
@@ -329,10 +340,9 @@ function AppInterne() {
             joueurs={joueurs}
             seances={mesSeances}
             salle={maSalle}
-            setSalle={setMaSalle}
             estConnecte={!!moiServeur}
             seDeconnecter={seDeconnecter}
-            allerA={setOngletActif}
+            allerA={allerA}
             rafraichir={rechargerDepuisServeur}
           />
         )}
@@ -365,9 +375,18 @@ function AppInterne() {
             validerDefi={validerDefi}
             estConnecte={!!moiServeur}
             rafraichirMonProfil={rafraichirMonProfil}
+            demandeDuel={demandeDuel}
           />
         )}
-        {ongletActif === 'clan' && <ClanScreen moi={moi} estConnecte={!!moiServeur} />}
+        {ongletActif === 'clan' && (
+          <ClanScreen
+            moi={moi}
+            joueurs={joueurs}
+            salle={maSalle}
+            setSalle={setMaSalle}
+            estConnecte={!!moiServeur}
+          />
+        )}
       </View>
 
       {/* Barre d'onglets en bas — style de la maquette : un LOSANGE au lieu

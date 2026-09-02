@@ -519,6 +519,27 @@ def initialiser():
         # PLANNING par DATE PRÉCISE (calendrier interactif) : « le 2026-08-21,
         # je fais le programme X ». Complète les jours RÉCURRENTS d'un programme
         # (colonne jours ci-dessus) — les deux se cumulent à l'affichage.
+        # Les PROGRAMMES OFFICIELS : ceux que l'admin publie pour tout le
+        # monde (demande de Hafiz du 01/09/2026). Un joueur ne peut que les
+        # LIRE puis s'en faire une copie personnelle — jamais les modifier.
+        #
+        # DÉCISION : le contenu (les séances, leurs jours, leurs exercices)
+        # est stocké en JSON dans UNE colonne, au lieu de deux tables liées
+        # comme les cycles d'un joueur. Un programme officiel n'est pas un
+        # objet vivant : personne ne le modifie séance par séance, on le
+        # publie et on le copie. C'est exactement la même forme que les
+        # modèles standards côté app (src/data/programmesStandards.js), donc
+        # l'app les affiche avec le même code, sans conversion.
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS programmes_officiels (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom         TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                contenu     TEXT NOT NULL,   -- JSON [{nom, jours, exercices}]
+                auteur_id   INTEGER REFERENCES joueurs(id) ON DELETE SET NULL,
+                cree_le     TEXT NOT NULL
+            )
+        """)
         _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS planning (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -528,6 +549,34 @@ def initialiser():
                 UNIQUE (joueur_id, date, programme_id)
             )
         """)
+
+
+# ----- Programmes officiels (publiés par l'admin) -----
+
+def creer_programme_officiel(nom: str, description: str, contenu_json: str,
+                             auteur_id: int, cree_le: str) -> int:
+    with connexion() as conn:
+        curseur = conn.execute(
+            "INSERT INTO programmes_officiels (nom, description, contenu, auteur_id, cree_le) "
+            "VALUES (?, ?, ?, ?, ?) RETURNING id",
+            (nom, description, contenu_json, auteur_id, cree_le),
+        )
+        return curseur.lastrowid
+
+
+def lister_programmes_officiels() -> list:
+    """Les programmes publiés, du plus récent au plus ancien."""
+    with connexion() as conn:
+        lignes = conn.execute(
+            "SELECT id, nom, description, contenu, cree_le FROM programmes_officiels "
+            "ORDER BY id DESC"
+        ).fetchall()
+    return [dict(ligne) for ligne in lignes]
+
+
+def supprimer_programme_officiel(programme_id: int) -> None:
+    with connexion() as conn:
+        conn.execute("DELETE FROM programmes_officiels WHERE id = ?", (programme_id,))
 
 
 def creer_joueur(pseudo: str, sexe: str, poids: float, salle: str | None,
@@ -994,6 +1043,19 @@ def programmes_du_joueur(joueur_id: int) -> list:
 def supprimer_programme(programme_id: int) -> None:
     with connexion() as conn:
         conn.execute("DELETE FROM programmes WHERE id = ?", (programme_id,))
+
+
+def changer_salle(joueur_id: int, salle: str | None) -> None:
+    """Change la salle de gym d'un joueur.
+
+    Jusqu'au 01/09/2026 la salle n'existait que CÔTÉ APP (voir CLAUDE.md) :
+    la modifier ne changeait rien sur le serveur. Ça ne se voyait pas tant que
+    le champ vivait au Profil, mais il a déménagé dans l'onglet Clan — or le
+    chat de clan vérifie la salle CÔTÉ SERVEUR. Sans cette fonction, changer
+    de salle dans l'app faisait répondre 403 au chat.
+    """
+    with connexion() as conn:
+        conn.execute("UPDATE joueurs SET salle = ? WHERE id = ?", (salle, joueur_id))
 
 
 def renommer_programme(programme_id: int, nom: str) -> None:

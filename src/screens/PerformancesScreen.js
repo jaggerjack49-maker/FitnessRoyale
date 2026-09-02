@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
 import { colors, espacement } from '../theme';
 import { baremes, nomsLigues, couleursLigues } from '../data/clubSP';
-import { STATUTS } from '../data/statuts';
+import { STATUTS, estVerifiee } from '../data/statuts';
 import { palierExercice } from '../logic/classement';
 import * as api from '../api';
 
@@ -50,24 +50,21 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
   const [validationEnCours, setValidationEnCours] = useState(false);
   const [messageValidation, setMessageValidation] = useState(null);
 
-  // Perfs des AUTRES joueurs en attente d'un vote de confiance (sans vidéo).
-  const [perfsSansVideo, setPerfsSansVideo] = useState([]);
-  const [chargementSansVideo, setChargementSansVideo] = useState(false);
+  const [enregistreesOuvertes, setEnregistreesOuvertes] = useState(false);
 
   const listeExercices = Object.keys(baremes[moi.sexe]);
+  // Résumé affiché sans déplier : « 4 vérifiées sur 11 saisies ».
+  const nbPerfs = Object.keys(mesPerfs).length;
+  const nbVerifiees = Object.values(mesPerfs).filter(estVerifiee).length;
   const bareme = exerciceChoisi ? baremes[moi.sexe][exerciceChoisi] : null;
 
   useEffect(() => {
     if (!estConnecte) return;
     chargerVideosAValider();
-    chargerPerfsSansVideo();
     // Pas de WebSocket (voir CLAUDE.md) : on re-consulte le serveur
     // régulièrement pour voir apparaître les nouvelles vidéos/perfs des autres
     // (silencieux = pas de spinner, pour ne pas faire clignoter la liste).
-    const id = setInterval(() => {
-      chargerVideosAValider(true);
-      chargerPerfsSansVideo(true);
-    }, DELAI_RAFRAICHISSEMENT_MS);
+    const id = setInterval(() => chargerVideosAValider(true), DELAI_RAFRAICHISSEMENT_MS);
     return () => clearInterval(id);
   }, [estConnecte]);
 
@@ -80,18 +77,6 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
       // Pas grave : la liste reste vide, on pourra réessayer plus tard.
     } finally {
       setChargementVideos(false);
-    }
-  }
-
-  async function chargerPerfsSansVideo(silencieux) {
-    if (!silencieux) setChargementSansVideo(true);
-    try {
-      const liste = await api.performancesAValiderSansVideo();
-      setPerfsSansVideo(liste);
-    } catch {
-      // Pas grave : la liste reste vide, on pourra réessayer plus tard.
-    } finally {
-      setChargementSansVideo(false);
     }
   }
 
@@ -189,18 +174,6 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
     }
   }
 
-  // Vote de confiance sur une perf déclarée d'un autre joueur (sans vidéo).
-  async function voterPerfSansVideo(joueurId, exercice, valide) {
-    try {
-      await api.voterSansVideo(joueurId, exercice, valide);
-      setPerfsSansVideo((liste) =>
-        liste.filter((p) => !(p.joueur_id === joueurId && p.exercice === exercice))
-      );
-    } catch (e) {
-      setErreurVideo(e.message || 'Vote impossible.');
-    }
-  }
-
   return (
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
       {/* L'emoji 📊 a été remplacé le 26/08/2026 par le badge dessiné fourni
@@ -273,8 +246,26 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
       </View>
 
       {/* ---- Liste des performances ---- */}
-      <Text style={styles.sectionTitre}>Enregistrées</Text>
-      {Object.entries(mesPerfs).map(([exo, perf]) => {
+      {/* REPLIÉE PAR DÉFAUT (01/09/2026, « réduis l'onglet enregistrées ») :
+          la liste fait jusqu'à 15 lignes, chacune avec ses boutons de
+          validation — elle repoussait tout le reste de l'écran très bas.
+          Même en-tête cliquable que « Mes performances » au Profil, avec un
+          résumé chiffré visible sans déplier. */}
+      <TouchableOpacity
+        style={styles.enteteRepliable}
+        onPress={() => setEnregistreesOuvertes(!enregistreesOuvertes)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitreRepliable}>Enregistrées</Text>
+          <Text style={styles.resumeRepliable}>
+            {nbVerifiees} vérifiée{nbVerifiees > 1 ? 's' : ''} sur {nbPerfs} saisie
+            {nbPerfs > 1 ? 's' : ''}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{enregistreesOuvertes ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {enregistreesOuvertes && Object.entries(mesPerfs).map(([exo, perf]) => {
         const st = STATUTS[perf.statut];
         const b = baremes[moi.sexe][exo];
         const palier = palierExercice(moi.sexe, exo, perf.valeur);
@@ -382,42 +373,14 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
         </View>
       )}
 
-      {/* ---- Perfs des autres joueurs à valider SANS vidéo (vote de confiance) ---- */}
-      {estConnecte && (
-        <>
-          <Text style={styles.sectionTitre}>🤝 Perfs à valider (sans preuve)</Text>
-          <Text style={styles.indice}>
-            Vote de confiance, sans vidéo jointe — ne valide que si tu es sûr que c'est réel.
-          </Text>
-          {chargementSansVideo && <ActivityIndicator color={colors.accent} style={{ marginTop: espacement.s }} />}
-          {!chargementSansVideo && perfsSansVideo.length === 0 && (
-            <Text style={styles.indice}>Aucune perf en attente pour l'instant.</Text>
-          )}
-          {perfsSansVideo.map((p) => {
-            const uniteP = baremes[p.sexe]?.[p.exercice]?.unite;
-            return (
-              <View key={`${p.joueur_id}-${p.exercice}`} style={styles.carteVideo}>
-                <Text style={styles.perfNom}>{p.pseudo} · {p.exercice}</Text>
-                <Text style={styles.perfValeur}>{p.valeur} {uniteP === 'kg' ? 'kg' : 'reps'}</Text>
-                <View style={styles.ligneVoteBoutons}>
-                  <TouchableOpacity
-                    style={styles.boutonRefuser}
-                    onPress={() => voterPerfSansVideo(p.joueur_id, p.exercice, false)}
-                  >
-                    <Text style={styles.boutonRefuserTexte}>❌ Refuser</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.boutonValiderVideo}
-                    onPress={() => voterPerfSansVideo(p.joueur_id, p.exercice, true)}
-                  >
-                    <Text style={styles.boutonValiderVideoTexte}>✅ Valider</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-        </>
-      )}
+      {/* La section « 🤝 Perfs à valider (sans preuve) » a été RETIRÉE le
+          01/09/2026 (demande de Hafiz). C'était le chemin de validation le plus
+          facile à abuser — un vote de confiance sans aucune preuve. Restent les
+          deux chemins qui en demandent une : la VIDÉO (ci-dessous) et le CODE
+          PARTENAIRE (un joueur présent au moment de la perf).
+          Le backend, lui, garde ses endpoints `/performances/a-valider-sans-video`
+          et `/voter-sans-video` : rien ne les appelle plus, mais les retirer
+          casserait `test_api_validation.py` sans rien gagner. */}
 
       {/* ---- Vidéos des autres joueurs à valider ---- */}
       {estConnecte && (
@@ -511,6 +474,20 @@ const styles = StyleSheet.create({
   lignePalier: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   palierTexte: { fontWeight: '700', marginLeft: 8 },
   sectionTitre: { color: colors.texte, fontSize: 18, fontWeight: '700', marginBottom: espacement.s },
+  enteteRepliable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.carte,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.bordure,
+    paddingVertical: espacement.s,
+    paddingHorizontal: espacement.m,
+    marginBottom: espacement.s,
+  },
+  sectionTitreRepliable: { color: colors.texte, fontSize: 16, fontWeight: '700' },
+  resumeRepliable: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
+  chevron: { color: colors.texteGris, fontSize: 14, marginLeft: espacement.s },
   lignePerf: {
     flexDirection: 'row',
     alignItems: 'center',

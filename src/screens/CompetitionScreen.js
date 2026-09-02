@@ -1,7 +1,7 @@
 // Écran Compétition : classements Fitness Royale (Global / Par poids / Salles) et défis.
 // Les classements n'affichent QUE le rang — le palier moyen est un calcul interne.
 // Les points (duels + défis) servent uniquement à départager les égalités.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import {
@@ -84,7 +84,7 @@ function CarteDefiRecurrent({ defi, fait, onValider }) {
 
 export default function CompetitionScreen({
   joueurs, moi, duels, jouerDepartage, terminerDuelDirect, defisRecurrents, defisFaits, validerDefi,
-  estConnecte, rafraichirMonProfil,
+  estConnecte, rafraichirMonProfil, demandeDuel,
 }) {
   const [onglet, setOnglet] = useState('classement'); // 'classement' ou 'defis'
   const [mode, setMode] = useState('global'); // 'global' | 'relatif' | 'exercice' | 'salles'
@@ -92,6 +92,15 @@ export default function CompetitionScreen({
   const [selecteurExoOuvert, setSelecteurExoOuvert] = useState(false);
   const [duelDirectActif, setDuelDirectActif] = useState(false);
   const [duelEnLigneActif, setDuelEnLigneActif] = useState(false);
+
+  // La touche VS du Profil amène ICI et doit proposer un duel tout de suite,
+  // pas le classement (demande de Hafiz du 01/09/2026). `demandeDuel` est un
+  // compteur incrémenté par App.js à chaque appui : on bascule sur l'onglet
+  // Défis, où vivent les deux façons de jouer (en direct / en ligne).
+  // On ignore la valeur initiale (0), sinon l'écran s'ouvrirait toujours là.
+  useEffect(() => {
+    if (demandeDuel) setOnglet('defis');
+  }, [demandeDuel]);
 
   const lignesGlobal = classer(joueurs, 'global');
   const groupes = classerParCategories(joueurs);
@@ -115,7 +124,7 @@ export default function CompetitionScreen({
   return (
     <View style={styles.conteneur}>
       <Text style={styles.titre}>⚔️ Compétition</Text>
-      <Text style={styles.sousTitre}>Classement Fitness Royale • Semaine 29</Text>
+      <Text style={styles.sousTitre}>Classement Fitness Royale</Text>
 
       {/* Sélecteur Classement / Défis */}
       <View style={styles.selecteur}>
@@ -155,22 +164,34 @@ export default function CompetitionScreen({
           <Text style={styles.explication}>{EXPLICATIONS[mode]}</Text>
           {mode === 'exercice' && (
             <>
+              {/* Liste OUVERTE : l'en-tête n'affiche plus le nom de l'exercice
+                  choisi, sinon il apparaissait deux fois à l'écran — une fois
+                  ici, une fois dans la liste juste en dessous (retour de Hafiz
+                  du 01/09/2026 : « développé couché est affiché deux fois »).
+                  Le choix courant est repéré par un point plein dans la liste. */}
               <TouchableOpacity style={styles.selecteurExo} onPress={() => setSelecteurExoOuvert(!selecteurExoOuvert)}>
-                <Text style={{ color: colors.texte }}>{exerciceChoisi}</Text>
+                <Text style={{ color: selecteurExoOuvert ? colors.texteGris : colors.texte }}>
+                  {selecteurExoOuvert ? 'Choisis un exercice…' : exerciceChoisi}
+                </Text>
                 <Text style={{ color: colors.texteGris }}>{selecteurExoOuvert ? '▲' : '▼'}</Text>
               </TouchableOpacity>
               {selecteurExoOuvert && (
                 <View style={styles.listeExoDeroulante}>
                   <ScrollView style={{ maxHeight: 220 }}>
-                    {listeExercicesClassement.map((exo) => (
-                      <TouchableOpacity
-                        key={exo}
-                        style={styles.choixExo}
-                        onPress={() => { setExerciceChoisi(exo); setSelecteurExoOuvert(false); }}
-                      >
-                        <Text style={{ color: colors.texte }}>{exo}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {listeExercicesClassement.map((exo) => {
+                      const actif = exo === exerciceChoisi;
+                      return (
+                        <TouchableOpacity
+                          key={exo}
+                          style={styles.choixExo}
+                          onPress={() => { setExerciceChoisi(exo); setSelecteurExoOuvert(false); }}
+                        >
+                          <Text style={{ color: actif ? colors.or : colors.texte, fontWeight: actif ? '700' : '400' }}>
+                            {actif ? '● ' : '○ '}{exo}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </View>
               )}

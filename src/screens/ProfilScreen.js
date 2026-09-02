@@ -24,6 +24,7 @@ import Losange from '../components/Losange';
 import CarteArenAccueil from '../components/CarteArenAccueil';
 import { areneDuJoueur } from '../components/CarteArene';
 import { areneDeLaLigue } from '../data/arenes';
+import { mesTitresDExercice, titresAPortee } from '../logic/titres';
 import PanneauModeTest from '../components/PanneauModeTest';
 import * as api from '../api';
 
@@ -31,13 +32,14 @@ export default function ProfilScreen({
   // `setSeances` n'est plus reçu : cet écran ne fait que LIRE les séances
   // depuis le retrait de la saisie manuelle (elles s'ajoutent désormais
   // uniquement depuis l'onglet Entraînement).
-  moi, joueurs, seances, salle, setSalle, estConnecte, seDeconnecter,
+  moi, joueurs, seances, salle, estConnecte, seDeconnecter,
   allerA, rafraichir,
 }) {
   const u = moi;
 
   // ----- Sécurité du compte (changer le mot de passe, code de secours) -----
   const [perfsOuvertes, setPerfsOuvertes] = useState(false);
+  const [titresOuverts, setTitresOuverts] = useState(false);
   const [securiteOuverte, setSecuriteOuverte] = useState(false);
   const [ancienMdp, setAncienMdp] = useState('');
   const [nouveauMdp, setNouveauMdp] = useState('');
@@ -103,6 +105,9 @@ export default function ProfilScreen({
   const indexLigue = nomsLigues.indexOf(ligue);
   const ligueSuivante = nomsLigues[indexLigue + 1] || null;
   const exercices = Object.entries(u.performances);
+  // Les titres se LISENT dans le classement par exercice — rien n'est stocké.
+  const titresGagnes = mesTitresDExercice(classementGlobal);
+  const titresProches = titresAPortee(classementGlobal, 5);
   const verifies = exercices.filter(([, perf]) => estVerifiee(perf));
   const nbVerifiees = verifies.length;
   const nbAuNiveauSuivant = verifies.filter(
@@ -155,7 +160,7 @@ export default function ProfilScreen({
       {/* ---- L'appel à l'action : entrer dans l'arène ---- */}
       <TouchableOpacity
         style={styles.carteDuel}
-        onPress={() => allerA?.('competition')}
+        onPress={() => allerA?.('competition', { duel: true })}
         disabled={!allerA}
       >
         <View style={styles.pastilleVS}>
@@ -199,18 +204,9 @@ export default function ProfilScreen({
         })}
       </View>
 
-      {/* Ma salle de gym (futur clan) */}
-      <View style={styles.carteSalle}>
-        <Text style={styles.carteTitre}>🏠 Ma salle de gym</Text>
-        <TextInput
-          style={styles.champSalle}
-          value={salle}
-          onChangeText={setSalle}
-          placeholder="Nom de ta salle…"
-          placeholderTextColor={colors.texteGris}
-        />
-        <Text style={styles.indice}>Ta salle deviendra ton clan dans les classements par salle.</Text>
-      </View>
+      {/* La carte « 🏠 Ma salle de gym » a DÉMÉNAGÉ dans l'onglet Clan le
+          01/09/2026 (demande de Hafiz : la salle appartient à la partie clan).
+          Le Profil garde juste la salle en lecture, dans la carte d'arène. */}
 
       {/* Mon rang dans ma catégorie de poids.
           (L'ancienne carte « Progression vers la ligue » a été retirée : la
@@ -281,6 +277,69 @@ export default function ProfilScreen({
           </View>
         );
       })}
+
+      {/* ---- Mes titres ----
+          Gagnés en montant sur le podium d'un exercice (classement par
+          exercice de l'onglet Compétition). Recalculés à la lecture : aucun
+          stockage, donc jamais désynchronisés du classement. */}
+      <TouchableOpacity
+        style={styles.enteteRepliable}
+        onPress={() => setTitresOuverts(!titresOuverts)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitreRepliable}>🏅 Mes titres</Text>
+          <Text style={styles.resumeRepliable}>
+            {titresGagnes.length === 0
+              ? 'Aucun titre — monte sur un podium par exercice'
+              : `${titresGagnes.length} titre${titresGagnes.length > 1 ? 's' : ''} · ${
+                  titresGagnes.filter((t) => t.rang === 1).length} en or`}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{titresOuverts ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {titresOuverts && (
+        <View style={styles.carteTitres}>
+          <Text style={styles.explicationTitres}>
+            Un titre se gagne en entrant dans les 3 premiers d'un exercice
+            (perfs vérifiées uniquement). Il change de main dès que quelqu'un
+            fait mieux — rien n'est acquis.
+          </Text>
+
+          {titresGagnes.length === 0 ? (
+            <Text style={styles.indice}>
+              Tu n'as encore aucun titre. Fais vérifier une perf sur un exercice
+              où le podium est à ta portée.
+            </Text>
+          ) : (
+            titresGagnes.map((t) => (
+              <View key={`${t.exercice}-${t.rang}`} style={styles.ligneTitre}>
+                <Text style={styles.emblemeTitre}>{t.embleme}</Text>
+                <Text style={styles.libelleTitre}>{t.libelle}</Text>
+              </View>
+            ))
+          )}
+
+          {titresProches.length > 0 && (
+            <>
+              <Text style={styles.sousTitreTitres}>À ta portée</Text>
+              {titresProches.map((c) => (
+                <View key={c.exercice} style={styles.ligneTitre}>
+                  <Text style={styles.emblemeTitre}>🎯</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.libelleTitre}>{c.exercice}</Text>
+                    <Text style={styles.indiceTitre}>
+                      {c.rangActuel
+                        ? `Tu es ${c.rangActuel}e · le podium est au palier ${c.palierAViser}`
+                        : `Pas encore classé · le podium est au palier ${c.palierAViser}`}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+        </View>
+      )}
 
       {/* Stats de la semaine */}
       <Text style={styles.sectionTitre}>Cette semaine</Text>
@@ -463,20 +522,6 @@ const styles = StyleSheet.create({
     borderColor: colors.bordure,
   },
   badgeSerieTexte: { color: colors.or, fontWeight: '700' },
-  carteSalle: {
-    backgroundColor: colors.carte,
-    borderRadius: 16,
-    padding: espacement.m,
-    borderWidth: 1,
-    borderColor: colors.bordure,
-    marginBottom: espacement.m,
-  },
-  champSalle: {
-    backgroundColor: colors.carteClaire,
-    borderRadius: 10,
-    padding: 12,
-    color: colors.texte,
-  },
   carteCompetition: {
     backgroundColor: colors.carte,
     borderRadius: 16,
@@ -523,6 +568,19 @@ const styles = StyleSheet.create({
   sectionTitreRepliable: { color: colors.texte, fontSize: 16, fontWeight: '700' },
   resumeRepliable: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   chevron: { color: colors.texteGris, fontSize: 14, marginLeft: espacement.s },
+  carteTitres: {
+    backgroundColor: colors.carte, borderRadius: 14, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.m,
+  },
+  explicationTitres: { color: colors.texteGris, fontSize: 12, lineHeight: 17, marginBottom: espacement.s },
+  sousTitreTitres: {
+    color: colors.texte, fontWeight: '700', fontSize: 13,
+    marginTop: espacement.m, marginBottom: 4,
+  },
+  ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  emblemeTitre: { fontSize: 16, width: 22, textAlign: 'center' },
+  libelleTitre: { color: colors.texte, fontSize: 13, fontWeight: '600', flex: 1 },
+  indiceTitre: { color: colors.texteGris, fontSize: 11, marginTop: 1 },
   lignePerf: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -11,7 +11,7 @@
 // au serveur en tâche de fond (comme le reste de l'app).
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, espacement } from '../theme';
@@ -97,6 +97,50 @@ function indicateurProgression(seriesAujourdhui, seriesPrecedentes) {
   if (maxAujourdhui > maxPrecedent) return { symbole: '↑', couleur: colors.vert };
   if (maxAujourdhui < maxPrecedent) return { symbole: '↓', couleur: colors.rouge };
   return { symbole: '=', couleur: colors.texteGris };
+}
+
+// Les jours occupés par un cycle, en abrégé (« Lun Mar Jeu ») — le résumé
+// affiché quand le détail du programme est replié.
+function joursDuCycle(cycle) {
+  const jours = [];
+  cycle.seances.forEach((seance) => {
+    (seance.jours || []).forEach((jour) => {
+      if (!jours.includes(jour)) jours.push(jour);
+    });
+  });
+  return joursSemaine
+    .filter((jour) => jours.includes(jour))
+    .map((jour) => abreviationsJours[jour])
+    .join(' ');
+}
+
+// UNE LIGNE D'EXERCICE PRÉVU, avec la PERFORMANCE ATTENDUE à la prochaine
+// séance (demande de Hafiz du 01/09/2026 : « afficher les performances
+// attendues pour la prochaine séance »).
+//
+// C'est exactement la même suggestion de surcharge progressive qu'on voit
+// DÉJÀ pendant la séance (`suggererProchaineSerie`), mais montrée AVANT d'y
+// aller : on sait quoi charger en arrivant à la salle, au lieu de le
+// découvrir une fois la barre en main.
+// Rien de nouveau côté calcul, donc rien à demander au serveur : tout se
+// déduit de l'historique déjà chargé (marche hors-ligne).
+// Pas de suggestion = exercice jamais loggé : on n'affiche rien plutôt
+// qu'un chiffre inventé.
+function LigneExercicePrevu({ exo, entrainements }) {
+  const suggestion = suggererProchaineSerie(entrainements, exo.exercice, exo.reps_cibles);
+  return (
+    <View style={{ marginTop: 3 }}>
+      <Text style={styles.exerciceDetailJour}>
+        • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+      </Text>
+      {suggestion && (
+        <Text style={styles.attenduDetailJour}>
+          {'    '}🎯 Attendu : {suggestion.poids > 0 ? `${suggestion.poids} kg × ` : ''}
+          {suggestion.reps} reps
+        </Text>
+      )}
+    </View>
+  );
 }
 
 // Éditeur d'une SÉANCE : un nom + autant d'exercices qu'on veut, chacun avec
@@ -420,6 +464,13 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   const [champsSaisie, setChampsSaisie] = useState({}); // { exercice: { reps, poids } }
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
 
+  // ---- Programmes OFFICIELS (publiés par l'admin, voir CLAUDE.md) ----
+  // Un joueur ordinaire ne fait que les LIRE et les copier ; l'admin peut en
+  // plus publier un de ses propres programmes et le retirer du catalogue.
+  const [programmesOfficiels, setProgrammesOfficiels] = useState([]);
+  const [publicationEnCours, setPublicationEnCours] = useState(null);
+  const [messageOfficiel, setMessageOfficiel] = useState(null);
+
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
 
@@ -431,14 +482,16 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   async function chargerTout() {
     setChargement(true);
     try {
-      const [p, e, pl, c, obj, grp] = await Promise.all([
+      const [p, e, pl, c, obj, grp, off] = await Promise.all([
         api.programmesDuJoueur(moi.id),
         api.entrainementsDuJoueur(moi.id),
         api.planningDuJoueur(moi.id),
         api.cyclesDuJoueur(moi.id),
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
+        api.programmesOfficiels(),
       ]);
+      setProgrammesOfficiels(off);
       setProgrammes(p);
       setEntrainements(e);
       setPlanning(pl);
@@ -1051,6 +1104,45 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     }
   }
 
+  // ----- Programmes officiels -----
+
+  // L'admin publie UN DE SES PROPRES CYCLES pour tous les joueurs.
+  // DÉCISION : pas de formulaire séparé pour ça. L'admin construit un
+  // programme normalement (il connaît déjà cet écran), puis le publie d'un
+  // bouton — c'est un programme ordinaire jusqu'à ce qu'il soit publié.
+  async function publierCycle(cycle) {
+    setMessageOfficiel(null);
+    setPublicationEnCours(cycle.id);
+    try {
+      const seances = cycle.seances.map((s) => ({
+        nom: s.nom,
+        jours: s.jours || [],
+        exercices: s.exercices.map((e) => ({
+          exercice: e.exercice,
+          series_cibles: e.series_cibles,
+          reps_cibles: e.reps_cibles,
+        })),
+      }));
+      await api.publierProgrammeOfficiel(cycle.nom, `Programme officiel — ${cycle.nom}`, seances);
+      setProgrammesOfficiels(await api.programmesOfficiels());
+      setMessageOfficiel({ texte: `« ${cycle.nom} » est publié pour tous les joueurs.`, erreur: false });
+    } catch (err) {
+      setMessageOfficiel({ texte: err.message || 'Publication impossible.', erreur: true });
+    } finally {
+      setPublicationEnCours(null);
+    }
+  }
+
+  async function retirerOfficiel(officiel) {
+    setMessageOfficiel(null);
+    try {
+      await api.retirerProgrammeOfficiel(officiel.id);
+      setProgrammesOfficiels((liste) => liste.filter((o) => o.id !== officiel.id));
+    } catch (err) {
+      setMessageOfficiel({ texte: err.message || 'Retrait impossible.', erreur: true });
+    }
+  }
+
   // ----- Logger une séance -----
   function demarrerSeance(programme) {
     setProgrammeActif(programme);
@@ -1089,7 +1181,13 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         [exercice]: [...existantes, { numero_serie: existantes.length + 1, reps, poids }],
       };
     });
-    setChampsSaisie((c) => ({ ...c, [exercice]: { reps: '', poids: '' } }));
+    // ON GARDE LA SAISIE au lieu de vider les champs (demande de Hafiz du
+    // 02/09/2026) : les séries d'un même exercice se font presque toujours à
+    // la même charge et au même nombre de reps. Il n'y a donc plus qu'à
+    // toucher « + Série », et à corriger un champ seulement quand ça change.
+    setChampsSaisie((c) => ({
+      ...c, [exercice]: { reps: String(reps), poids: String(poids) },
+    }));
   }
 
   async function terminerSeance() {
@@ -1320,7 +1418,24 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   if (vue === 'seance') {
     const jour = aujourdhui();
     return (
-      <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
+      // LE CLAVIER CACHAIT LES CHAMPS DU BAS (retour de Hafiz du 02/09/2026,
+      // capture à l'appui) : on saisit ses reps sans voir ce qu'on tape.
+      // Deux garde-fous complémentaires :
+      //  - KeyboardAvoidingView remonte le contenu sur iOS ;
+      //  - une grande marge en bas laisse de quoi FAIRE DÉFILER le champ
+      //    au-dessus du clavier sur Android, où la fenêtre est simplement
+      //    redimensionnée.
+      // `keyboardShouldPersistTaps` permet d'appuyer sur « + Série » du
+      // premier coup, sans un premier tap qui ne sert qu'à fermer le clavier.
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+      <ScrollView
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m, paddingBottom: 340 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.titre}>
           💪 {programmeActif ? programmeActif.nom : 'Séance libre'}
         </Text>
@@ -1443,6 +1558,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           <Text style={styles.boutonSortirTexte}>🚪 Sortir du programme (sans enregistrer)</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -1499,8 +1615,20 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     );
   }
 
+  // Les programmes OFFICIELS, ramenés à la forme d'un modèle standard — c'est
+  // exactement la même structure, donc ils s'affichent et se copient avec le
+  // même code, sans conversion (voir la table `programmes_officiels`).
+  const modelesOfficiels = programmesOfficiels.map((o) => ({
+    id: `officiel-${o.id}`,
+    officielId: o.id,
+    nom: o.nom,
+    emoji: '⭐',
+    description: o.description || 'Programme officiel Fitness Royale.',
+    seances: o.seances || [],
+  }));
+
   // Ce qu'on peut poser dans le calendrier comme CYCLE : mes programmes
-  // complets + les modèles standards, ramenés à la même forme.
+  // complets + les modèles standards + les officiels, ramenés à la même forme.
   const cyclesPlacables = [
     ...cycles.map((c) => ({
       id: `mien-${c.id}`, nom: c.nom, emoji: '📋',
@@ -1509,6 +1637,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       })),
     })),
     ...programmesStandards,
+    ...modelesOfficiels,
   ];
 
   return (
@@ -1864,9 +1993,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                   )}
                 </View>
                 {programme.exercices.map((exo, i) => (
-                  <Text key={i} style={styles.exerciceDetailJour}>
-                    • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
-                  </Text>
+                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
                 ))}
                 {/* Le bouton n'apparaissait QUE sur la date du jour, donc
                     toucher n'importe quel autre jour ne proposait rien
@@ -1987,6 +2114,23 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
               </Text>
             </TouchableOpacity>
+            {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
+                C'est ainsi qu'on alimente le catalogue — pas de formulaire
+                séparé, l'admin construit un programme normalement puis le
+                publie. */}
+            {moi.admin && (
+              <TouchableOpacity
+                style={styles.boutonPublier}
+                onPress={() => publierCycle(cycle)}
+                disabled={publicationEnCours !== null}
+              >
+                {publicationEnCours === cycle.id ? (
+                  <ActivityIndicator color={colors.rouge} size="small" />
+                ) : (
+                  <Text style={styles.boutonPublierTexte}>🛠 Publier pour tous</Text>
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => demanderSuppression('cycle-' + cycle.id)}
               style={styles.boutonRetirer}
@@ -2000,9 +2144,19 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             onConfirmer={() => { setSuppressionAConfirmer(null); supprimerCycle(cycle); }}
             onAnnuler={() => setSuppressionAConfirmer(null)}
           />
-          {cycle.seances.map((seance) => {
+          {/* DÉTAIL REPLIÉ = juste le nom du programme et un résumé.
+              La v4 ne repliait que les EXERCICES : les séances, elles,
+              restaient listées, donc « on voit toujours le détail »
+              (retour de Hafiz du 02/09/2026 sur l'APK). */}
+          {!detailOuvert && (
+            <Text style={styles.indice}>
+              {cycle.seances.length} séance{cycle.seances.length > 1 ? 's' : ''}
+              {joursDuCycle(cycle) ? ` · ${joursDuCycle(cycle)}` : ''}
+            </Text>
+          )}
+          {detailOuvert && cycle.seances.map((seance) => {
             const enEdition = programmeEnEdition === seance.id;
-            const deroulee = detailOuvert || seanceDeroulee === seance.id;
+            const deroulee = seanceDeroulee === seance.id;
             return (
               <View key={seance.id}>
                 <View style={styles.ligneSeanceCycle}>
@@ -2031,9 +2185,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                     {seance.exercices.length === 0 ? (
                       <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                     ) : seance.exercices.map((exo, i) => (
-                      <Text key={i} style={styles.exerciceDetailJour}>
-                        • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
-                      </Text>
+                      <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
                     ))}
                   </View>
                 )}
@@ -2120,9 +2272,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 {programme.exercices.length === 0 ? (
                   <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                 ) : programme.exercices.map((exo, i) => (
-                  <Text key={i} style={styles.exerciceDetailJour}>
-                    • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
-                  </Text>
+                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
                 ))}
               </View>
             )}
@@ -2171,6 +2321,43 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           📦 Programmes standards {modelesOuverts ? '▲' : '▼'}
         </Text>
       </TouchableOpacity>
+      {modelesOuverts && messageOfficiel && (
+        <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
+          {messageOfficiel.texte}
+        </Text>
+      )}
+      {/* Les programmes OFFICIELS d'abord : c'est le catalogue maison. */}
+      {modelesOuverts && modelesOfficiels.map((modele) => (
+        <View key={modele.id} style={[styles.carteModele, styles.carteOfficielle]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>
+              {modele.emoji} {modele.nom}
+            </Text>
+            {moi.admin && (
+              <TouchableOpacity onPress={() => retirerOfficiel({ id: modele.officielId })} style={styles.boutonRetirer}>
+                <Text style={styles.boutonRetirerTexte}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={[styles.indice, { marginTop: 4 }]}>{modele.description}</Text>
+          <Text style={[styles.indice, { marginTop: 4 }]}>
+            {modele.seances.map((s) =>
+              `${s.nom} : ${(s.jours || []).map((j) => abreviationsJours[j]).join(', ') || 'sans jour fixe'}`
+            ).join(' · ')}
+          </Text>
+          <TouchableOpacity
+            style={styles.boutonUtiliserModele}
+            onPress={() => appliquerModele(modele)}
+            disabled={modeleEnCours !== null}
+          >
+            {modeleEnCours === modele.id ? (
+              <ActivityIndicator color={colors.texte} size="small" />
+            ) : (
+              <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ))}
       {modelesOuverts && programmesStandards.map((modele) => (
         <View key={modele.id} style={styles.carteModele}>
           <Text style={styles.nomProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
@@ -2467,6 +2654,13 @@ const styles = StyleSheet.create({
     marginBottom: 4, marginLeft: espacement.m, borderWidth: 1, borderColor: colors.bordure,
   },
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
+  attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
+  carteOfficielle: { borderColor: colors.or },
+  boutonPublier: {
+    borderWidth: 1, borderColor: colors.rouge, borderRadius: 8,
+    paddingVertical: 5, paddingHorizontal: 8, marginRight: 6,
+  },
+  boutonPublierTexte: { color: colors.rouge, fontWeight: '700', fontSize: 11 },
   carteModele: {
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
     marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure,

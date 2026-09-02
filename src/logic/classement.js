@@ -79,7 +79,9 @@ export function classer(joueurs, mode) {
 }
 
 // ----- Catégories de poids (classement relatif) -----
-export const ordreCategories = ['-60 kg', '-70 kg', '-80 kg', '-90 kg', '+90 kg'];
+// Du PLUS LOURD au plus léger (demande de Hafiz du 01/09/2026) : les
+// catégories lourdes ouvrent le classement, comme en sport de force.
+export const ordreCategories = ['+90 kg', '-90 kg', '-80 kg', '-70 kg', '-60 kg'];
 
 export function categoriePoids(poids) {
   if (poids < 60) return '-60 kg';

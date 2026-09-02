@@ -8,6 +8,7 @@ Documentation interactive automatique : http://localhost:8000/docs
 (FastAPI génère une page où tu peux tester chaque endpoint à la main !)
 """
 
+import json
 from datetime import date, datetime
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
@@ -219,6 +220,23 @@ class ExercicesProgramme(BaseModel):
 
 class NomProgramme(BaseModel):
     nom: str = Field(min_length=1, max_length=100)
+
+
+class SeanceOfficielle(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    jours: list[str] = []
+    exercices: list[ExerciceProgramme] = []
+
+
+class ProgrammeOfficiel(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    seances: list[SeanceOfficielle] = Field(min_length=1)
+
+
+class SalleJoueur(BaseModel):
+    # Chaîne vide autorisée = « je quitte ma salle » (stockée NULL).
+    salle: str = Field(default="", max_length=100)
 
 
 class SeanceCycle(BaseModel):
@@ -974,6 +992,74 @@ def changer_jours_programme(programme_id: int, donnees: JoursProgramme,
         raise HTTPException(400, f"Jour(s) inconnu(s) : {', '.join(jours_invalides)}.")
     db.changer_jours_programme(programme_id, donnees.jours)
     return db.lire_programme(programme_id)
+
+
+@app.get("/programmes-officiels")
+def lister_programmes_officiels():
+    """Les programmes publiés par l'admin, que TOUT LE MONDE peut copier.
+
+    Volontairement ouvert (pas de connexion requise) : c'est du catalogue,
+    il n'y a rien de personnel dedans.
+    """
+    resultat = []
+    for ligne in db.lister_programmes_officiels():
+        try:
+            seances = json.loads(ligne["contenu"])
+        except (TypeError, ValueError):
+            seances = []
+        resultat.append({
+            "id": ligne["id"],
+            "nom": ligne["nom"],
+            "description": ligne["description"],
+            "seances": seances,
+            "cree_le": ligne["cree_le"],
+        })
+    return resultat
+
+
+@app.post("/admin/programmes-officiels", status_code=201)
+def publier_programme_officiel(donnees: ProgrammeOfficiel,
+                               courant: dict = Depends(auth.utilisateur_admin)):
+    """Publie un programme pour tous les joueurs. RÉSERVÉ À L'ADMIN (403 sinon)."""
+    for seance in donnees.seances:
+        for jour in seance.jours:
+            if jour not in JOURS_SEMAINE:
+                raise HTTPException(400, f"Jour inconnu : {jour}")
+    contenu = json.dumps(
+        [seance.model_dump() for seance in donnees.seances], ensure_ascii=False
+    )
+    programme_id = db.creer_programme_officiel(
+        donnees.nom, donnees.description, contenu, courant["id"],
+        datetime.now().isoformat(timespec="milliseconds"),
+    )
+    return {"id": programme_id}
+
+
+@app.delete("/admin/programmes-officiels/{programme_id}", status_code=204)
+def retirer_programme_officiel(programme_id: int,
+                               courant: dict = Depends(auth.utilisateur_admin)):
+    """Retire un programme du catalogue. RÉSERVÉ À L'ADMIN.
+
+    Les copies déjà faites par les joueurs ne bougent pas : ce sont leurs
+    programmes à eux depuis le jour où ils les ont copiés.
+    """
+    db.supprimer_programme_officiel(programme_id)
+    return None
+
+
+@app.put("/joueurs/{joueur_id}/salle")
+def changer_salle(joueur_id: int, donnees: SalleJoueur,
+                  courant: dict = Depends(auth.utilisateur_courant)):
+    """Change MA salle de gym (= mon clan).
+
+    Nécessaire depuis que le champ vit dans l'onglet Clan : le chat de clan
+    et le classement des membres se basent sur la salle enregistrée ICI, pas
+    sur une valeur qui ne vivrait que dans l'app.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
+    salle = donnees.salle.strip()
+    db.changer_salle(joueur_id, salle or None)
+    return db.lire_joueur(joueur_id)
 
 
 @app.put("/programmes/{programme_id}/nom")
