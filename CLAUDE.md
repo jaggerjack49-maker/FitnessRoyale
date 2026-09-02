@@ -1568,10 +1568,37 @@ mieux vaut rien qu'un chiffre inventé.
   proche, avec le palier à viser — actionnable, contrairement à un « pas
   encore obtenu ».
 
-### Programmes officiels : l'admin publie, les autres copient
+### Programmes partagés : l'admin partage, on récupère AVEC UN CODE
 
 Demande : « je pourrai créer des programmes et les autres utilisateurs pourront
 juste les coller ».
+
+⚠️ CORRIGÉ DÈS LE LENDEMAIN (02/09/2026) : la première version en faisait un
+CATALOGUE PUBLIC, visible de tous dans « Programmes standards ». Hafiz : « je
+ne veux pas que tout le monde voie le programme. Il faut une option, un code
+par exemple ». Le partage passe donc par un CODE, comme les duels en ligne et
+la validation d'une perf par un partenaire — même générateur
+(`regles_duels.generer_code`), déjà éprouvé deux fois dans l'app.
+- **Il n'existe AUCUN endpoint qui liste les programmes partagés.** Sans le
+  code, un joueur ne peut même pas savoir qu'un programme existe. C'est une
+  NON-fonctionnalité, donc facile à réintroduire par accident : un test dédié
+  (`test_aucun_moyen_de_lister_les_programmes_des_autres`) la verrouille.
+  Seul l'admin peut lister — et uniquement SES propres partages, avec leurs
+  codes, pour pouvoir les redonner.
+- **DIFFÉRENCE avec les deux autres codes de l'app : celui-ci n'est PAS à usage
+  unique.** Il est fait pour être donné à plusieurs personnes et sert tant que
+  l'admin ne le retire pas. Retirer le partage invalide le code, mais ne touche
+  pas aux copies déjà faites.
+- Côté app : une carte « 🔑 Programme partagé » (pour tout le monde) où l'on
+  entre le code ; le programme s'affiche AVANT d'être copié — on ne récupère
+  pas un programme sans savoir ce qu'il contient. Côté admin, le bouton devient
+  « 🔑 Partager par code » et une section « 🛠 Mes programmes partagés » affiche
+  les codes en grand.
+- Migration : la colonne `code` est ajoutée à `programmes_officiels` (table née
+  la veille). Elle doit être placée APRÈS la création de la table dans
+  `initialiser()`, sinon on tenterait d'ALTER une table inexistante sur une
+  base neuve. Un programme publié avant cette migration n'a pas de code et
+  n'est donc plus accessible à personne — comportement voulu.
 
 - Table `programmes_officiels`. **DÉCISION : le contenu est stocké en JSON dans
   UNE colonne**, au lieu de deux tables liées comme les cycles d'un joueur. Un
@@ -1590,8 +1617,8 @@ juste les coller ».
 - Retirer un programme du catalogue **ne touche pas aux copies déjà faites** :
   ce sont les programmes des joueurs depuis le jour où ils les ont copiés.
   Verrouillé par un test dédié.
-- Tests : `backend/tests/test_api_programmes_officiels.py` — 7 tests.
-  Suite complète : **201 tests, tous OK.**
+- Tests : `backend/tests/test_api_programmes_officiels.py` — 15 tests.
+  Suite complète : **209 tests, tous OK.**
 
 ## Trois retours d'APK — faits le 02/09/2026
 

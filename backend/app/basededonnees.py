@@ -519,9 +519,17 @@ def initialiser():
         # PLANNING par DATE PRÉCISE (calendrier interactif) : « le 2026-08-21,
         # je fais le programme X ». Complète les jours RÉCURRENTS d'un programme
         # (colonne jours ci-dessus) — les deux se cumulent à l'affichage.
-        # Les PROGRAMMES OFFICIELS : ceux que l'admin publie pour tout le
-        # monde (demande de Hafiz du 01/09/2026). Un joueur ne peut que les
-        # LIRE puis s'en faire une copie personnelle — jamais les modifier.
+        # Les PROGRAMMES PARTAGÉS : ceux que l'admin met à disposition.
+        # Ils ne sont PAS publics (correction du 02/09/2026, demande de
+        # Hafiz : « je ne veux pas que tout le monde voie le programme »).
+        # On ne les découvre qu'avec un CODE à partager — même principe que
+        # les codes de duel et de validation de perf, et le code est même
+        # produit par la même fonction (`regles_duels.generer_code`).
+        # DIFFÉRENCE IMPORTANTE avec ces deux-là : ce code n'est PAS à usage
+        # unique. Il est fait pour être donné à plusieurs personnes, et sert
+        # tant que l'admin ne le retire pas.
+        # Un joueur ne peut que LIRE le programme puis s'en faire une copie
+        # personnelle — jamais modifier l'original.
         #
         # DÉCISION : le contenu (les séances, leurs jours, leurs exercices)
         # est stocké en JSON dans UNE colonne, au lieu de deux tables liées
@@ -533,6 +541,7 @@ def initialiser():
         _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS programmes_officiels (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                code        TEXT UNIQUE,
                 nom         TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
                 contenu     TEXT NOT NULL,   -- JSON [{nom, jours, exercices}]
@@ -540,6 +549,16 @@ def initialiser():
                 cree_le     TEXT NOT NULL
             )
         """)
+        # Migration : le CODE de partage, pour les bases où la table
+        # programmes_officiels existait déjà sans lui (elle est née la veille,
+        # quand le catalogue était encore public). Un programme publié avant
+        # n'a donc pas de code et n'est plus accessible à personne — c'est
+        # exactement le comportement voulu : rien ne doit rester visible sans
+        # code. À placer APRÈS la création de la table, sinon on tenterait
+        # d'ALTER une table qui n'existe pas encore sur une base neuve.
+        if not _colonne_existe(conn, "programmes_officiels", "code"):
+            conn.execute("ALTER TABLE programmes_officiels ADD COLUMN code TEXT")
+
         _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS planning (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -553,25 +572,44 @@ def initialiser():
 
 # ----- Programmes officiels (publiés par l'admin) -----
 
-def creer_programme_officiel(nom: str, description: str, contenu_json: str,
-                             auteur_id: int, cree_le: str) -> int:
+def creer_programme_officiel(code: str, nom: str, description: str,
+                             contenu_json: str, auteur_id: int, cree_le: str) -> int:
     with connexion() as conn:
         curseur = conn.execute(
-            "INSERT INTO programmes_officiels (nom, description, contenu, auteur_id, cree_le) "
-            "VALUES (?, ?, ?, ?, ?) RETURNING id",
-            (nom, description, contenu_json, auteur_id, cree_le),
+            "INSERT INTO programmes_officiels (code, nom, description, contenu, auteur_id, cree_le) "
+            "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+            (code, nom, description, contenu_json, auteur_id, cree_le),
         )
         return curseur.lastrowid
 
 
-def lister_programmes_officiels() -> list:
-    """Les programmes publiés, du plus récent au plus ancien."""
+def programme_officiel_par_code(code: str) -> dict | None:
+    """Le SEUL moyen pour un joueur d'atteindre un programme partagé."""
+    with connexion() as conn:
+        ligne = conn.execute(
+            "SELECT id, code, nom, description, contenu, cree_le "
+            "FROM programmes_officiels WHERE code = ?", (code,)
+        ).fetchone()
+    return dict(ligne) if ligne else None
+
+
+def programmes_officiels_de(auteur_id: int) -> list:
+    """Ceux que MOI j'ai partagés — avec leurs codes, pour pouvoir les
+    redonner. Réservé à leur auteur : personne d'autre n'a à voir cette liste."""
     with connexion() as conn:
         lignes = conn.execute(
-            "SELECT id, nom, description, contenu, cree_le FROM programmes_officiels "
-            "ORDER BY id DESC"
+            "SELECT id, code, nom, description, contenu, cree_le "
+            "FROM programmes_officiels WHERE auteur_id = ? ORDER BY id DESC",
+            (auteur_id,)
         ).fetchall()
     return [dict(ligne) for ligne in lignes]
+
+
+def code_officiel_existe(code: str) -> bool:
+    with connexion() as conn:
+        return conn.execute(
+            "SELECT 1 FROM programmes_officiels WHERE code = ?", (code,)
+        ).fetchone() is not None
 
 
 def supprimer_programme_officiel(programme_id: int) -> None:

@@ -433,13 +433,20 @@ export async function changerSalle(joueurId, salle) {
   });
 }
 
-// ----- Programmes officiels (publiés par l'admin, copiables par tous) -----
-// Le catalogue est ouvert à tous ; publier et retirer sont réservés à l'admin
-// (le serveur renvoie 403 sinon).
-export async function programmesOfficiels() {
-  return get('/programmes-officiels');
+// ----- Programmes partagés (l'admin partage, on récupère avec un CODE) -----
+// Il n'existe AUCUN endpoint qui liste tous les programmes partagés : sans le
+// code, un joueur ne peut même pas savoir qu'un programme existe
+// (correction du 02/09/2026, demande de Hafiz).
+export async function programmeParCode(code) {
+  return get(`/programmes-partages/${encodeURIComponent(code.trim().toUpperCase())}`);
 }
 
+// Ce que MOI j'ai partagé, avec les codes — réservé à l'admin.
+export async function mesProgrammesPartages() {
+  return get('/admin/programmes-officiels');
+}
+
+// Partage un programme et renvoie { id, code } — réservé à l'admin.
 export async function publierProgrammeOfficiel(nom, description, seances) {
   return post('/admin/programmes-officiels', { nom, description, seances });
 }

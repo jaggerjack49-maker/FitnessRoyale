@@ -467,9 +467,14 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // ---- Programmes OFFICIELS (publiés par l'admin, voir CLAUDE.md) ----
   // Un joueur ordinaire ne fait que les LIRE et les copier ; l'admin peut en
   // plus publier un de ses propres programmes et le retirer du catalogue.
-  const [programmesOfficiels, setProgrammesOfficiels] = useState([]);
+  const [programmesOfficiels, setProgrammesOfficiels] = useState([]); // ADMIN : ce que j'ai partagé
   const [publicationEnCours, setPublicationEnCours] = useState(null);
   const [messageOfficiel, setMessageOfficiel] = useState(null);
+  // Récupérer un programme AVEC UN CODE (tout le monde).
+  const [codeSaisi, setCodeSaisi] = useState('');
+  const [rechercheCode, setRechercheCode] = useState(false);
+  const [programmeTrouve, setProgrammeTrouve] = useState(null);
+  const [erreurCode, setErreurCode] = useState(null);
 
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
@@ -482,22 +487,29 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   async function chargerTout() {
     setChargement(true);
     try {
-      const [p, e, pl, c, obj, grp, off] = await Promise.all([
+      const [p, e, pl, c, obj, grp] = await Promise.all([
         api.programmesDuJoueur(moi.id),
         api.entrainementsDuJoueur(moi.id),
         api.planningDuJoueur(moi.id),
         api.cyclesDuJoueur(moi.id),
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
-        api.programmesOfficiels(),
       ]);
-      setProgrammesOfficiels(off);
       setProgrammes(p);
       setEntrainements(e);
       setPlanning(pl);
       setCycles(c);
       setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
       setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+      // Seul l'admin a une liste à voir : celle de SES propres partages, avec
+      // leurs codes. Personne d'autre ne peut lister quoi que ce soit.
+      if (moi.admin) {
+        try {
+          setProgrammesOfficiels(await api.mesProgrammesPartages());
+        } catch {
+          // Pas bloquant : le reste de l'écran fonctionne sans.
+        }
+      }
     } catch (err) {
       setErreur(err.message || 'Impossible de charger tes données.');
     } finally {
@@ -1123,9 +1135,14 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           reps_cibles: e.reps_cibles,
         })),
       }));
-      await api.publierProgrammeOfficiel(cycle.nom, `Programme officiel — ${cycle.nom}`, seances);
-      setProgrammesOfficiels(await api.programmesOfficiels());
-      setMessageOfficiel({ texte: `« ${cycle.nom} » est publié pour tous les joueurs.`, erreur: false });
+      const cree = await api.publierProgrammeOfficiel(
+        cycle.nom, `Programme partagé — ${cycle.nom}`, seances
+      );
+      setProgrammesOfficiels(await api.mesProgrammesPartages());
+      setMessageOfficiel({
+        texte: `« ${cycle.nom} » est partagé. Code à donner : ${cree.code}`,
+        erreur: false,
+      });
     } catch (err) {
       setMessageOfficiel({ texte: err.message || 'Publication impossible.', erreur: true });
     } finally {
@@ -1140,6 +1157,24 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       setProgrammesOfficiels((liste) => liste.filter((o) => o.id !== officiel.id));
     } catch (err) {
       setMessageOfficiel({ texte: err.message || 'Retrait impossible.', erreur: true });
+    }
+  }
+
+  // Récupérer un programme à partir d'un code reçu. On l'AFFICHE d'abord :
+  // on ne copie rien tant que la personne n'a pas vu ce qu'elle récupère.
+  async function chercherParCode() {
+    const code = codeSaisi.trim();
+    if (!code) return;
+    setErreurCode(null);
+    setProgrammeTrouve(null);
+    setRechercheCode(true);
+    try {
+      const trouve = await api.programmeParCode(code);
+      setProgrammeTrouve(trouve);
+    } catch (err) {
+      setErreurCode(err.message || "Aucun programme ne correspond à ce code.");
+    } finally {
+      setRechercheCode(false);
     }
   }
 
@@ -1615,20 +1650,22 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     );
   }
 
-  // Les programmes OFFICIELS, ramenés à la forme d'un modèle standard — c'est
-  // exactement la même structure, donc ils s'affichent et se copient avec le
-  // même code, sans conversion (voir la table `programmes_officiels`).
-  const modelesOfficiels = programmesOfficiels.map((o) => ({
-    id: `officiel-${o.id}`,
-    officielId: o.id,
-    nom: o.nom,
-    emoji: '⭐',
-    description: o.description || 'Programme officiel Fitness Royale.',
-    seances: o.seances || [],
-  }));
+  // Un programme PARTAGÉ, ramené à la forme d'un modèle standard : c'est
+  // exactement la même structure, donc il s'affiche et se copie avec le même
+  // code, sans conversion (`appliquerModele`).
+  function enModele(o) {
+    return {
+      id: `partage-${o.id}`,
+      officielId: o.id,
+      nom: o.nom,
+      emoji: '⭐',
+      description: o.description || 'Programme partagé.',
+      seances: o.seances || [],
+    };
+  }
 
   // Ce qu'on peut poser dans le calendrier comme CYCLE : mes programmes
-  // complets + les modèles standards + les officiels, ramenés à la même forme.
+  // complets + les modèles standards, ramenés à la même forme.
   const cyclesPlacables = [
     ...cycles.map((c) => ({
       id: `mien-${c.id}`, nom: c.nom, emoji: '📋',
@@ -1637,7 +1674,6 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       })),
     })),
     ...programmesStandards,
-    ...modelesOfficiels,
   ];
 
   return (
@@ -2127,7 +2163,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 {publicationEnCours === cycle.id ? (
                   <ActivityIndicator color={colors.rouge} size="small" />
                 ) : (
-                  <Text style={styles.boutonPublierTexte}>🛠 Publier pour tous</Text>
+                  <Text style={styles.boutonPublierTexte}>🔑 Partager par code</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -2315,49 +2351,103 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         <Text style={styles.boutonSecondaireTexte}>+ Nouveau programme</Text>
       </TouchableOpacity>
 
+      {/* ---- Récupérer un programme AVEC UN CODE ----
+           Les programmes partagés ne sont PAS publics (02/09/2026, demande de
+           Hafiz) : sans le code, on ne peut même pas savoir qu'ils existent.
+           Même geste que rejoindre un duel ou valider la perf d'un partenaire. */}
+      <Text style={styles.sectionTitre}>🔑 Programme partagé</Text>
+      <View style={styles.carteModele}>
+        <Text style={styles.indice}>
+          Quelqu'un t'a donné un code ? Entre-le pour voir son programme et en
+          garder ta propre copie.
+        </Text>
+        <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
+          <TextInput
+            style={[styles.champ, { flex: 1 }]}
+            value={codeSaisi}
+            onChangeText={(t) => setCodeSaisi(t.toUpperCase())}
+            placeholder="Ex. : K7XPQR"
+            placeholderTextColor={colors.texteGris}
+            autoCapitalize="characters"
+          />
+          <TouchableOpacity
+            style={styles.boutonAjouterSerie}
+            onPress={chercherParCode}
+            disabled={rechercheCode || !codeSaisi.trim()}
+          >
+            {rechercheCode ? <ActivityIndicator color={colors.texte} size="small" /> : (
+              <Text style={styles.boutonAjouterSerieTexte}>Voir</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+        {erreurCode && <Text style={styles.messageErreur}>⚠️ {erreurCode}</Text>}
+
+        {/* On montre le contenu AVANT de copier : personne ne récupère un
+            programme sans savoir ce qu'il contient. */}
+        {programmeTrouve && (
+          <View style={[styles.detailJour, { borderColor: colors.or, borderWidth: 1 }]}>
+            <Text style={styles.nomProgrammeTexte}>⭐ {programmeTrouve.nom}</Text>
+            <Text style={[styles.indice, { marginTop: 4 }]}>{programmeTrouve.description}</Text>
+            {(programmeTrouve.seances || []).map((seance, i) => (
+              <Text key={i} style={styles.exerciceDetailJour}>
+                • {seance.nom} — {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ') || 'sans jour fixe'}
+                {' · '}{(seance.exercices || []).length} exo
+                {(seance.exercices || []).length > 1 ? 's' : ''}
+              </Text>
+            ))}
+            <TouchableOpacity
+              style={styles.boutonUtiliserModele}
+              onPress={() => {
+                appliquerModele(enModele(programmeTrouve));
+                setProgrammeTrouve(null);
+                setCodeSaisi('');
+              }}
+              disabled={modeleEnCours !== null}
+            >
+              <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* ---- ADMIN : les programmes que J'AI partagés, avec leurs codes ---- */}
+      {moi.admin && (
+        <>
+          <Text style={styles.sectionTitre}>🛠 Mes programmes partagés</Text>
+          {messageOfficiel && (
+            <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
+              {messageOfficiel.texte}
+            </Text>
+          )}
+          {programmesOfficiels.length === 0 ? (
+            <Text style={styles.indice}>
+              Aucun pour l'instant. Utilise « 🔑 Partager par code » sur un de tes
+              programmes ci-dessus.
+            </Text>
+          ) : programmesOfficiels.map((o) => (
+            <View key={o.id} style={[styles.carteModele, styles.carteOfficielle]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>⭐ {o.nom}</Text>
+                <TouchableOpacity onPress={() => retirerOfficiel(o)} style={styles.boutonRetirer}>
+                  <Text style={styles.boutonRetirerTexte}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.codePartage}>{o.code}</Text>
+              <Text style={styles.indice}>
+                Donne ce code aux personnes à qui tu veux offrir le programme.
+                Il fonctionne autant de fois que tu veux, jusqu'à ce que tu le retires.
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+
       {/* ---- Modèles standards : Push Pull Legs, Full Body… ---- */}
       <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setModelesOuverts(!modelesOuverts)}>
         <Text style={styles.boutonSecondaireTexte}>
           📦 Programmes standards {modelesOuverts ? '▲' : '▼'}
         </Text>
       </TouchableOpacity>
-      {modelesOuverts && messageOfficiel && (
-        <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
-          {messageOfficiel.texte}
-        </Text>
-      )}
-      {/* Les programmes OFFICIELS d'abord : c'est le catalogue maison. */}
-      {modelesOuverts && modelesOfficiels.map((modele) => (
-        <View key={modele.id} style={[styles.carteModele, styles.carteOfficielle]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>
-              {modele.emoji} {modele.nom}
-            </Text>
-            {moi.admin && (
-              <TouchableOpacity onPress={() => retirerOfficiel({ id: modele.officielId })} style={styles.boutonRetirer}>
-                <Text style={styles.boutonRetirerTexte}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={[styles.indice, { marginTop: 4 }]}>{modele.description}</Text>
-          <Text style={[styles.indice, { marginTop: 4 }]}>
-            {modele.seances.map((s) =>
-              `${s.nom} : ${(s.jours || []).map((j) => abreviationsJours[j]).join(', ') || 'sans jour fixe'}`
-            ).join(' · ')}
-          </Text>
-          <TouchableOpacity
-            style={styles.boutonUtiliserModele}
-            onPress={() => appliquerModele(modele)}
-            disabled={modeleEnCours !== null}
-          >
-            {modeleEnCours === modele.id ? (
-              <ActivityIndicator color={colors.texte} size="small" />
-            ) : (
-              <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      ))}
       {modelesOuverts && programmesStandards.map((modele) => (
         <View key={modele.id} style={styles.carteModele}>
           <Text style={styles.nomProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
@@ -2656,6 +2746,10 @@ const styles = StyleSheet.create({
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
   attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
   carteOfficielle: { borderColor: colors.or },
+  codePartage: {
+    color: colors.or, fontSize: 26, fontWeight: '800', letterSpacing: 4,
+    textAlign: 'center', marginVertical: espacement.s,
+  },
   boutonPublier: {
     borderWidth: 1, borderColor: colors.rouge, borderRadius: 8,
     paddingVertical: 5, paddingHorizontal: 8, marginRight: 6,

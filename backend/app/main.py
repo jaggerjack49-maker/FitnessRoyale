@@ -994,33 +994,54 @@ def changer_jours_programme(programme_id: int, donnees: JoursProgramme,
     return db.lire_programme(programme_id)
 
 
-@app.get("/programmes-officiels")
-def lister_programmes_officiels():
-    """Les programmes publiés par l'admin, que TOUT LE MONDE peut copier.
+def _programme_officiel_lisible(ligne: dict) -> dict:
+    """Met une ligne de la base à la forme attendue par l'app (mêmes champs
+    qu'un modèle standard de src/data/programmesStandards.js)."""
+    try:
+        seances = json.loads(ligne["contenu"])
+    except (TypeError, ValueError):
+        seances = []
+    return {
+        "id": ligne["id"],
+        "code": ligne["code"],
+        "nom": ligne["nom"],
+        "description": ligne["description"],
+        "seances": seances,
+        "cree_le": ligne["cree_le"],
+    }
 
-    Volontairement ouvert (pas de connexion requise) : c'est du catalogue,
-    il n'y a rien de personnel dedans.
+
+@app.get("/programmes-partages/{code}")
+def programme_partage_par_code(code: str,
+                               courant: dict = Depends(auth.utilisateur_courant)):
+    """Récupère un programme partagé À PARTIR DE SON CODE.
+
+    C'est le SEUL moyen d'en atteindre un : il n'existe pas d'endpoint qui
+    liste tous les programmes partagés (correction du 02/09/2026 — ils ne
+    doivent pas être visibles de tout le monde). Sans le code, un joueur ne
+    peut même pas savoir qu'un programme existe.
+
+    Le code n'est PAS à usage unique : il est fait pour être donné à
+    plusieurs personnes, et sert tant que l'admin ne le retire pas.
     """
-    resultat = []
-    for ligne in db.lister_programmes_officiels():
-        try:
-            seances = json.loads(ligne["contenu"])
-        except (TypeError, ValueError):
-            seances = []
-        resultat.append({
-            "id": ligne["id"],
-            "nom": ligne["nom"],
-            "description": ligne["description"],
-            "seances": seances,
-            "cree_le": ligne["cree_le"],
-        })
-    return resultat
+    ligne = db.programme_officiel_par_code(code.strip().upper())
+    if ligne is None:
+        raise HTTPException(404, "Aucun programme ne correspond à ce code.")
+    return _programme_officiel_lisible(ligne)
+
+
+@app.get("/admin/programmes-officiels")
+def mes_programmes_partages(courant: dict = Depends(auth.utilisateur_admin)):
+    """Les programmes que J'AI partagés, avec leurs codes — pour pouvoir les
+    redonner ou les retirer. RÉSERVÉ À L'ADMIN, et filtré sur ses propres
+    programmes."""
+    return [_programme_officiel_lisible(l) for l in db.programmes_officiels_de(courant["id"])]
 
 
 @app.post("/admin/programmes-officiels", status_code=201)
 def publier_programme_officiel(donnees: ProgrammeOfficiel,
                                courant: dict = Depends(auth.utilisateur_admin)):
-    """Publie un programme pour tous les joueurs. RÉSERVÉ À L'ADMIN (403 sinon)."""
+    """Partage un programme et renvoie le CODE à donner. RÉSERVÉ À L'ADMIN."""
     for seance in donnees.seances:
         for jour in seance.jours:
             if jour not in JOURS_SEMAINE:
@@ -1028,11 +1049,18 @@ def publier_programme_officiel(donnees: ProgrammeOfficiel,
     contenu = json.dumps(
         [seance.model_dump() for seance in donnees.seances], ensure_ascii=False
     )
+    # Même générateur que les codes de duel et de validation de perf.
+    # On retente si le tirage tombe sur un code déjà pris (la colonne est UNIQUE).
+    code = regles_duels.generer_code(6)
+    for _ in range(10):
+        if not db.code_officiel_existe(code):
+            break
+        code = regles_duels.generer_code(6)
     programme_id = db.creer_programme_officiel(
-        donnees.nom, donnees.description, contenu, courant["id"],
+        code, donnees.nom, donnees.description, contenu, courant["id"],
         datetime.now().isoformat(timespec="milliseconds"),
     )
-    return {"id": programme_id}
+    return {"id": programme_id, "code": code}
 
 
 @app.delete("/admin/programmes-officiels/{programme_id}", status_code=204)
