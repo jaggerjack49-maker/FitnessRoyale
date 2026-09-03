@@ -12,36 +12,97 @@ export const groupesMusculaires = [
   'Abdos', 'Avant-bras', 'Cardio',
 ];
 
+// Met un nom d'exercice sous une forme comparable : minuscules, SANS ACCENTS,
+// et toute la ponctuation remplacée par des espaces. « Leg-curl », « leg curl »
+// et « LEG CURL » deviennent donc la même chose.
+function normaliser(texte) {
+  return (texte || '')
+    .toLowerCase()
+    .normalize('NFD')
+    // ̀-ͯ = les accents détachés par NFD, écrits en échappement
+    // plutôt qu'en caractères réels : invisibles dans un éditeur, ils se
+    // perdent au premier copier-coller malchanceux.
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')       // ponctuation, tirets… -> espace
+    .trim();
+}
+
+// Un mot-clé ne correspond que s'il apparaît en MOT ENTIER (ou en suite de
+// mots entiers), avec un pluriel toléré sur chacun.
+//
+// ⚠️ C'EST LE CŒUR DU CORRECTIF DU 03/09/2026. Avant, on cherchait le mot-clé
+// n'importe où dans le texte (`texte.includes(mot)`), ce qui produisait des
+// classements absurdes et silencieux :
+//   - « uni-LAT-éral raises » était rangé dans le DOS, à cause du mot-clé
+//     « lat » (prévu pour « lat pulldown ») — d'où des séries d'épaules qui
+//     n'apparaissaient jamais dans Épaules ;
+//   - « ab-DOS » était rangé dans le Dos, pour la même raison.
+// Un fragment de mot ne suffit plus : il faut le mot en entier.
+function contientExpression(texteNormalise, motCle) {
+  const mots = normaliser(motCle).split(' ').filter(Boolean);
+  if (mots.length === 0) return false;
+  // Après normalisation il ne reste que [a-z0-9 ] : rien à échapper.
+  const motif = mots.map((mot) => `${mot}s?`).join(' ');
+  return new RegExp(`(^| )${motif}( |$)`).test(texteNormalise);
+}
+
 // ORDRE IMPORTANT : la première règle qui correspond gagne. Les expressions
 // les plus SPÉCIFIQUES doivent donc venir avant les plus générales — sinon
-// « leg curl » (ischios) serait attrapé par « curl » (biceps), et « soulevé de
-// terre jambes tendues » (ischios) par « soulevé de terre » (dos).
+// « leg curl » (ischios) serait attrapé par « curl » (biceps), « calf raise »
+// (mollets) par « raise » (épaules), et « soulevé de terre jambes tendues »
+// (ischios) par « soulevé de terre » (dos).
+//
+// Le vocabulaire est FRANÇAIS ET ANGLAIS : Hafiz nomme ses exercices en
+// anglais (« unilateral raises », « overhead triceps extension », « leg
+// curl »), et une liste uniquement française les laissait non classés.
 const reglesDetection = [
-  // --- Cas particuliers d'abord (pièges connus) ---
-  { groupe: 'Ischio-jambiers', motsCles: ['leg curl', 'legcurl', 'ischio', 'jambes tendues', 'roumain', 'good morning'] },
-  { groupe: 'Quadriceps', motsCles: ['leg extension', 'extension jambes', 'hack squat', 'presse', 'fente', 'squat', 'pistol'] },
-  { groupe: 'Mollets', motsCles: ['mollet', 'calf'] },
-  { groupe: 'Fessiers', motsCles: ['hip thrust', 'fessier', 'glute', 'soulevé de terre sumo'] },
+  // --- Pièges connus, à trancher AVANT les règles générales ---
+  { groupe: 'Ischio-jambiers', motsCles: [
+    'leg curl', 'legcurl', 'hamstring', 'ischio', 'jambes tendues',
+    'roumain', 'romanian', 'rdl', 'good morning'] },
+  { groupe: 'Mollets', motsCles: ['mollet', 'calf', 'calve', 'calf raise'] },
+  { groupe: 'Abdos', motsCles: [
+    'leg raise', 'knee raise', 'releve de jambes', 'hanging leg raise'] },
+  { groupe: 'Quadriceps', motsCles: [
+    'leg extension', 'extension jambes', 'leg press', 'hack squat', 'presse',
+    'fente', 'lunge', 'squat', 'pistol', 'quadriceps', 'quad'] },
+  { groupe: 'Fessiers', motsCles: [
+    'hip thrust', 'fessier', 'glute', 'soulevé de terre sumo', 'sumo deadlift'] },
 
   // --- Haut du corps ---
-  { groupe: 'Triceps', motsCles: ['triceps', 'barre au front', 'kickback', 'skull'] },
-  { groupe: 'Biceps', motsCles: ['biceps', 'curl', 'marteau'] },
-  { groupe: 'Épaules', motsCles: ['militaire', 'élévation', 'elevation', 'face pull', 'oiseau', 'épaule', 'epaule', 'arnold', 'shoulder'] },
-  { groupe: 'Pectoraux', motsCles: ['développé couché', 'developpe couche', 'développé incliné', 'developpe incline', 'décliné', 'ecarté', 'écarté', 'pec deck', 'pectoraux', 'pompes', 'dips', 'butterfly'] },
-  { groupe: 'Dos', motsCles: ['traction', 'rowing', 'tirage', 'pull-over', 'pull over', 'soulevé de terre', 'souleve de terre', 'deadlift', 'dos', 'lat', 'shrug', 'trapèze'] },
-  { groupe: 'Avant-bras', motsCles: ['avant-bras', 'avant bras', 'poignet', 'forearm'] },
+  { groupe: 'Triceps', motsCles: [
+    'triceps', 'tricep', 'barre au front', 'kickback', 'skull', 'pushdown',
+    'overhead extension'] },
+  { groupe: 'Biceps', motsCles: ['biceps', 'bicep', 'curl', 'marteau', 'hammer', 'preacher'] },
+  { groupe: 'Épaules', motsCles: [
+    'militaire', 'military press', 'elevation', 'raise', 'lateral raise',
+    'front raise', 'side raise', 'face pull', 'oiseau', 'epaule', 'arnold',
+    'shoulder', 'overhead press', 'ohp', 'delt', 'upright row'] },
+  { groupe: 'Pectoraux', motsCles: [
+    'developpe couche', 'developpe incline', 'decline', 'ecarte', 'pec deck',
+    'pectoraux', 'pompe', 'push up', 'pushup', 'dips', 'dip', 'butterfly',
+    'fly', 'flye', 'bench press', 'bench', 'chest'] },
+  { groupe: 'Dos', motsCles: [
+    'traction', 'rowing', 'row', 'tirage', 'pulldown', 'pull down', 'pull up',
+    'pullup', 'chin up', 'chinup', 'pull over', 'pullover', 'soulevé de terre',
+    'souleve de terre', 'deadlift', 'dos', 'lat', 'shrug', 'trapeze', 'trap'] },
+  { groupe: 'Avant-bras', motsCles: ['avant bras', 'poignet', 'forearm', 'wrist'] },
 
   // --- Reste ---
-  { groupe: 'Abdos', motsCles: ['abdo', 'gainage', 'crunch', 'planche', 'relevé de jambes', 'russian twist'] },
-  { groupe: 'Cardio', motsCles: ['course', 'cardio', 'vélo', 'velo', 'rameur', 'corde à sauter', 'tapis', 'elliptique'] },
+  { groupe: 'Abdos', motsCles: [
+    'abdo', 'abs', 'gainage', 'crunch', 'planche', 'plank', 'sit up', 'situp',
+    'russian twist'] },
+  { groupe: 'Cardio', motsCles: [
+    'course', 'cardio', 'velo', 'bike', 'rameur', 'rower', 'corde a sauter',
+    'jump rope', 'tapis', 'treadmill', 'elliptique', 'elliptical', 'running'] },
 ];
 
 // Devine le groupe musculaire d'un exercice écrit en texte libre.
 // Renvoie null si aucun mot-clé ne correspond (à l'utilisateur de préciser).
 export function deviner_groupe(nomExercice) {
-  const texte = (nomExercice || '').toLowerCase();
+  const texte = normaliser(nomExercice);
   for (const regle of reglesDetection) {
-    if (regle.motsCles.some((mot) => texte.includes(mot))) return regle.groupe;
+    if (regle.motsCles.some((mot) => contientExpression(texte, mot))) return regle.groupe;
   }
   return null;
 }
@@ -79,15 +140,23 @@ export function compterSeriesParGroupe(entrainements, corrections, debutISO, fin
   return total;
 }
 
-// Les exercices loggés sur la période qui n'ont PAS de groupe (ni deviné, ni
-// corrigé) — l'app les propose à l'utilisateur pour qu'il les classe.
-export function exercicesNonClasses(entrainements, corrections, debutISO, finISO) {
-  const noms = new Set();
+// TOUS les exercices loggés sur la période, avec le groupe où ils sont
+// actuellement comptés (null = nulle part).
+// Sert à l'écran de correction : on doit pouvoir reclasser un exercice MAL
+// rangé, pas seulement un exercice non reconnu (sans ça, « unilateral raises »
+// classé à tort dans le Dos était impossible à corriger).
+export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finISO) {
+  const parNom = new Map();
   entrainements.forEach((entrainement) => {
     if (entrainement.date < debutISO || entrainement.date > finISO) return;
     entrainement.series.forEach((serie) => {
-      if (!groupeDeLExercice(serie.exercice, corrections)) noms.add(serie.exercice);
+      if (parNom.has(serie.exercice)) return;
+      parNom.set(serie.exercice, {
+        exercice: serie.exercice,
+        groupe: groupeDeLExercice(serie.exercice, corrections),
+        corrige: !!corrections[serie.exercice],
+      });
     });
   });
-  return [...noms];
+  return [...parNom.values()].sort((a, b) => a.exercice.localeCompare(b.exercice));
 }

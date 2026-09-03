@@ -21,7 +21,7 @@ import {
 } from '../data/programmesStandards';
 import {
   groupesMusculaires, groupeDeLExercice, lundiDeLaSemaine,
-  compterSeriesParGroupe, exercicesNonClasses,
+  compterSeriesParGroupe, exercicesDeLaPeriode,
 } from '../data/groupesMusculaires';
 import {
   suggererProchaineSerie, recordPersonnel, bat_le_record,
@@ -1602,10 +1602,11 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // ici on ne liste que les séances isolées (créées depuis la semaine type).
   const idsSeancesDeCycles = cycles.flatMap((c) => c.seances.map((s) => s.id));
   const programmesSeuls = programmes.filter((p) => !idsSeancesDeCycles.includes(p.id));
-  const aClasser = exercicesNonClasses(
+  const exercicesSemaine = exercicesDeLaPeriode(
     entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO
   );
   // Les groupes à afficher : ceux avec un objectif + ceux déjà travaillés.
+  const nbNonClasses = exercicesSemaine.filter((e) => !e.groupe).length;
   const groupesSuivis = groupesMusculaires.filter(
     (g) => objectifsSeries[g] || seriesFaites[g]
   );
@@ -1701,6 +1702,12 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           : ' · aucune séance encore'}
       </Text>
       {/* Résumé visible SANS déplier : on doit voir où on en est d'un coup d'œil. */}
+      {!volumeOuvert && nbNonClasses > 0 && (
+        <Text style={styles.alerteNonClasses}>
+          ❓ {nbNonClasses} exercice{nbNonClasses > 1 ? 's' : ''} n'{nbNonClasses > 1 ? 'ont' : 'a'} pas
+          de groupe — leurs séries ne sont comptées nulle part. Déplie pour les classer.
+        </Text>
+      )}
       {!volumeOuvert && groupesSuivis.length > 0 && (
         <View style={styles.resumeVolume}>
           {groupesSuivis.map((groupe) => {
@@ -1844,13 +1851,19 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             </View>
           )}
 
-          {/* Exercices que l'app n'a pas su classer : l'utilisateur tranche. */}
-          {!editionObjectifs && aClasser.length > 0 && (
+          {/* TOUS les exercices de la semaine, avec le groupe où ils sont
+              comptés — et pas seulement ceux que l'app n'a pas reconnus.
+              CORRECTIF DU 03/09/2026 : « unilateral raises » était classé à
+              tort dans le Dos, donc absent de la liste des non classés, donc
+              IMPOSSIBLE à corriger. Un exercice mal rangé est même plus
+              gênant qu'un exercice non rangé : il fausse deux compteurs à la
+              fois, en silence. */}
+          {!editionObjectifs && exercicesSemaine.length > 0 && (
             <>
               <Text style={[styles.indice, { marginTop: espacement.s }]}>
-                ❓ Exercices non classés (leurs séries ne sont comptées nulle part) :
+                🏷 Où comptent mes exercices ? Touche-en un pour le changer de groupe.
               </Text>
-              {aClasser.map((exercice) => (
+              {exercicesSemaine.map(({ exercice, groupe, corrige }) => (
                 <View key={exercice}>
                   <TouchableOpacity
                     style={styles.ligneChoixProgramme}
@@ -1859,16 +1872,21 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                     <Text style={styles.choixProgrammeTexte}>
                       {exerciceAClasser === exercice ? '▲' : '▼'} {exercice}
                     </Text>
+                    <Text style={[styles.groupeExercice, !groupe && { color: colors.rouge }]}>
+                      {groupe ? `${groupe}${corrige ? ' ✏️' : ''}` : '❓ compté nulle part'}
+                    </Text>
                   </TouchableOpacity>
                   {exerciceAClasser === exercice && (
                     <View style={styles.lignePuces}>
-                      {groupesMusculaires.map((groupe) => (
+                      {groupesMusculaires.map((g) => (
                         <TouchableOpacity
-                          key={groupe}
-                          style={styles.puceJour}
-                          onPress={() => classerExercice(exercice, groupe)}
+                          key={g}
+                          style={[styles.puceJour, g === groupe && styles.puceJourActive]}
+                          onPress={() => classerExercice(exercice, g)}
                         >
-                          <Text style={styles.puceJourTexte}>{groupe}</Text>
+                          <Text style={[styles.puceJourTexte, g === groupe && styles.puceJourTexteActif]}>
+                            {g}
+                          </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -2745,6 +2763,10 @@ const styles = StyleSheet.create({
   },
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
   attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
+  groupeExercice: { color: colors.texteGris, fontSize: 11, marginLeft: espacement.s },
+  alerteNonClasses: {
+    color: colors.rouge, fontSize: 12, lineHeight: 17, marginBottom: espacement.s,
+  },
   carteOfficielle: { borderColor: colors.or },
   codePartage: {
     color: colors.or, fontSize: 26, fontWeight: '800', letterSpacing: 4,

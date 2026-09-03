@@ -1648,6 +1648,47 @@ presque toujours à la même charge et au même nombre de reps (la capture montr
 quatre fois « 15 kg × 16 reps » d'affilée) : il fallait tout retaper à chaque
 fois. Les valeurs restent, on ne corrige un champ que quand ça change vraiment.
 
+## Volume par groupe musculaire : deux bugs silencieux — 03/09/2026
+
+Signalé par Hafiz : « lundi j'ai fait des unilatéral raises, elles n'ont pas
+été prises en compte comme série d'épaules ; mardi des leg curl, pas
+comptabilisées dans ischio ».
+
+**LA CAUSE : la détection cherchait ses mots-clés N'IMPORTE OÙ dans le texte**
+(`texte.includes(mot)`), sans respecter les limites de mots. Conséquences,
+toutes silencieuses :
+- « uni**lat**éral raises » contenait `lat` (mot-clé prévu pour « lat
+  pulldown ») → rangé dans le **DOS**. Les séries n'étaient donc pas perdues,
+  elles étaient comptées **dans le mauvais groupe** — ce qui est pire, parce
+  que ça fausse deux compteurs à la fois sans rien signaler.
+- « ab**dos** » tombait dans le même piège → Dos au lieu d'Abdos.
+- Un tiret suffisait à tout casser : « leg-curl » n'était pas reconnu comme
+  « leg curl » et repartait en Biceps via `curl`.
+
+**LE CORRECTIF** (`src/data/groupesMusculaires.js`) :
+- `normaliser()` : minuscules, accents retirés (NFD), toute la ponctuation
+  remplacée par des espaces. « Leg-curl », « LEG CURL » et « leg curl »
+  deviennent la même chose.
+- `contientExpression()` : un mot-clé ne correspond plus que s'il apparaît en
+  MOT ENTIER (ou suite de mots entiers), avec un pluriel toléré sur chacun.
+  C'est ce qui règle `lat` / `dos` définitivement.
+- **Vocabulaire ANGLAIS ajouté partout.** Hafiz nomme ses exercices en anglais
+  (« unilateral raises », « overhead triceps extension », « leg curl ») ; une
+  liste uniquement française ne pouvait pas marcher. Attention à l'ORDRE, qui
+  compte toujours : `leg raise`/`calf raise`/`leg press` sont tranchés AVANT
+  les règles générales `raise` (épaules) et `presse` (quadriceps).
+- Vérifié sur 38 cas français et anglais, dont les deux signalés.
+
+**UN SECOND MANQUE, découvert en corrigeant le premier** : l'écran ne
+proposait de classer QUE les exercices non reconnus. Un exercice **mal** rangé
+— exactement le cas d'« unilateral raises » — n'apparaissait donc nulle part
+et était **impossible à corriger**. La section liste maintenant TOUS les
+exercices de la semaine avec le groupe où ils comptent (`exercicesDeLaPeriode`
+remplace `exercicesNonClasses`), et n'importe lequel peut être réaffecté ; une
+correction manuelle est marquée ✏️ et prime toujours sur la détection.
+Un exercice compté nulle part est en plus signalé EN ROUGE sans avoir à
+déplier la section — le silence était le vrai défaut de cette fonctionnalité.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
