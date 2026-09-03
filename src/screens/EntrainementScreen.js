@@ -29,16 +29,24 @@ import {
 } from '../logic/surchargeProgressive';
 import * as notifications from '../notifications';
 
-function aujourdhui() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 // La date locale 'AAAA-MM-JJ' d'un objet Date (sans passer par l'UTC de
 // toISOString, qui peut décaler d'un jour selon le fuseau horaire).
 function enISO(date) {
   const mois = String(date.getMonth() + 1).padStart(2, '0');
   const jour = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${mois}-${jour}`;
+}
+
+// BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
+// (`toISOString`), alors que les cases du calendrier utilisent la date LOCALE
+// (`enISO`) — l'avertissement était pourtant écrit juste au-dessus, mais
+// n'avait été appliqué qu'à `enISO`. Les deux ne tombent pas le même jour
+// aux heures où le fuseau et l'UTC divergent (avant 2 h du matin en France) :
+// une séance terminée à ce moment-là était datée de la VEILLE, et le ✅
+// apparaissait donc sur une case où l'on n'avait encore rien fait.
+// Les deux passent maintenant par le même calcul.
+function aujourdhui() {
+  return enISO(new Date());
 }
 
 const nomsMois = [
@@ -2158,8 +2166,12 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         const detailOuvert = cyclesDeroules.includes(cycle.id);
         return (
         <View key={cycle.id} style={styles.carteModele}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>📋 {cycle.nom}</Text>
+          {/* Le nom sur SA PROPRE LIGNE : avec trois boutons à côté de lui sur
+              la même ligne, il était comprimé à une largeur nulle et se
+              repliait sur des dizaines de lignes invisibles (d'où les grands
+              vides de la capture), pendant que la croix débordait à droite. */}
+          <Text style={styles.nomProgrammeTexte}>📋 {cycle.nom}</Text>
+          <View style={styles.ligneActionsProgramme}>
             <TouchableOpacity
               style={styles.boutonModifier}
               onPress={() => basculerDetailCycle(cycle.id)}
@@ -2288,20 +2300,17 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         const deroulee = seanceDeroulee === programme.id;
         return (
           <View key={programme.id} style={styles.carteModele}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                style={{ flex: 1 }}
-                onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}
-              >
-                <Text style={styles.nomProgrammeTexte}>
-                  {deroulee ? '▲' : '▼'} {programme.nom}
-                </Text>
-                <Text style={styles.indice}>
-                  {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
-                  {(programme.jours || []).length > 0 &&
-                    ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
-                </Text>
-              </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}>
+              <Text style={styles.nomProgrammeTexte}>
+                {deroulee ? '▲' : '▼'} {programme.nom}
+              </Text>
+              <Text style={styles.indice}>
+                {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
+                {(programme.jours || []).length > 0 &&
+                  ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.ligneActionsProgramme}>
               <TouchableOpacity
                 style={styles.boutonModifier}
                 onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
@@ -2756,13 +2765,25 @@ const styles = StyleSheet.create({
   caseAujourdhui: { borderColor: colors.or },
   caseSelectionnee: { backgroundColor: colors.carteClaire, borderColor: colors.accent },
   numeroJour: { color: colors.texte, fontSize: 12, fontWeight: '600' },
-  marqueurJour: { color: colors.accent, fontSize: 9, height: 12 },
+  // Un emoji a besoin de plus de place que sa taille de police : avec une
+  // hauteur figée à 12 px, le ✅ était coupé (retour de Hafiz du 03/09/2026).
+  // On réserve la place avec minHeight + lineHeight, sans jamais rogner.
+  marqueurJour: {
+    color: colors.accent, fontSize: 11, lineHeight: 15, minHeight: 15,
+    textAlign: 'center',
+  },
   detailJour: {
     backgroundColor: colors.carteClaire, borderRadius: 10, padding: espacement.s,
     marginBottom: 4, marginLeft: espacement.m, borderWidth: 1, borderColor: colors.bordure,
   },
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
   attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
+  // Les actions d'un programme, sous son nom : elles passent à la ligne
+  // plutôt que d'écraser le titre ou de déborder de la carte.
+  ligneActionsProgramme: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center',
+    gap: 6, marginTop: espacement.s,
+  },
   groupeExercice: { color: colors.texteGris, fontSize: 11, marginLeft: espacement.s },
   alerteNonClasses: {
     color: colors.rouge, fontSize: 12, lineHeight: 17, marginBottom: espacement.s,

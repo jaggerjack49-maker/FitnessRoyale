@@ -1689,6 +1689,42 @@ correction manuelle est marquée ✏️ et prime toujours sur la détection.
 Un exercice compté nulle part est en plus signalé EN ROUGE sans avoir à
 déplier la section — le silence était le vrai défaut de cette fonctionnalité.
 
+## Trois défauts d'affichage + un bug de date — 03/09/2026
+
+**1. « Pourquoi ces espaces ? »** (capture à l'appui : une carte de programme
+presque entièrement vide, avec la croix qui dépasse du cadre à droite).
+Le nom du programme et TROIS boutons (« Voir le détail », « Partager par
+code », ✕) se disputaient la même ligne. Le nom, en `flex: 1`, était le seul à
+pouvoir rétrécir : comprimé à une largeur quasi nulle, il se repliait sur des
+dizaines de lignes invisibles — d'où les grands vides — pendant que les
+boutons, eux, débordaient. Corrigé en mettant le NOM SUR SA PROPRE LIGNE et
+les actions en dessous, dans une ligne qui passe à la ligne (`flexWrap`).
+LEÇON : `flex: 1` sur un texte ne le protège pas, il le désigne au contraire
+comme la seule chose qui peut être écrasée.
+
+**2. Le ✅ du calendrier était rogné.** `marqueurJour` imposait
+`fontSize: 9, height: 12` : un emoji a besoin de plus de place que sa taille
+de police. Remplacé par `minHeight` + `lineHeight`, qui réservent la place
+sans jamais couper.
+
+**3. BUG DE DATE — le ✅ apparaissait sur un jour où l'on n'avait rien fait.**
+`aujourdhui()` renvoyait la date **UTC** (`toISOString`), alors que les cases
+du calendrier utilisent la date **LOCALE** (`enISO`). Le piège était connu :
+l'avertissement était écrit noir sur blanc juste au-dessus de `enISO`… mais
+n'avait été appliqué qu'à `enISO`. Aux heures où les deux divergent (avant 2 h
+du matin en France), une séance terminée était datée de la VEILLE, et le ✅ se
+posait donc sur la mauvaise case. Les deux passent maintenant par le même
+calcul. À SURVEILLER : `aujourdhui()` sert aussi à dater les séances envoyées
+au serveur et à filtrer l'historique — ce correctif touche donc plus que le
+calendrier.
+
+**4. La carte « ma salle de gym » quitte la vue Membres du Clan.** Elle y
+faisait doublon avec le titre de l'écran (« 💬 Clan <nom> »). Elle reste
+affichée quand on n'a PAS encore de salle — sans quoi on ne pourrait jamais en
+rejoindre une — et, une fois dans un clan, derrière un lien discret
+« ⚙️ Changer de salle » : c'est le seul moyen de changer de clan ou d'en
+sortir, la retirer complètement aurait enfermé l'utilisateur.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

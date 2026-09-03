@@ -26,6 +26,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
   const [salleSaisie, setSalleSaisie] = useState(salle || '');
   const [enregistrementSalle, setEnregistrementSalle] = useState(false);
   const [messageSalle, setMessageSalle] = useState(null);
+  const [changementSalle, setChangementSalle] = useState(false);
   const [messages, setMessages] = useState([]);
   const [texte, setTexte] = useState('');
   const [chargement, setChargement] = useState(true);
@@ -175,7 +176,6 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
 
       {vue === 'membres' && (
         <ScrollView contentContainerStyle={{ paddingBottom: espacement.l }}>
-          {carteSalle}
           <Text style={styles.explicationGauche}>
             Les membres de ta salle, classés sur leurs performances vérifiées —
             mêmes règles que le classement global.
@@ -203,6 +203,17 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
               </View>
             );
           })}
+
+          {/* Changer de salle : replié par défaut (03/09/2026, « dans le clan
+              enlève la partie ma salle de gym »). La carte faisait doublon
+              avec le titre de l'écran, mais elle reste le seul moyen de
+              changer de clan — on la garde derrière un lien discret. */}
+          <TouchableOpacity onPress={() => setChangementSalle(!changementSalle)}>
+            <Text style={styles.lienChangerSalle}>
+              {changementSalle ? '▲ Fermer' : '⚙️ Changer de salle'}
+            </Text>
+          </TouchableOpacity>
+          {changementSalle && carteSalle}
         </ScrollView>
       )}
 
@@ -314,6 +325,10 @@ const styles = StyleSheet.create({
   },
   boutonSalleTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
   messageSalle: { color: colors.vert, fontSize: 12, marginTop: 6 },
+  lienChangerSalle: {
+    color: colors.texteGris, fontSize: 12, textAlign: 'center',
+    marginTop: espacement.m, marginBottom: espacement.s,
+  },
   bascule: { flexDirection: 'row', gap: 8, marginBottom: espacement.m },
   basculeBtn: {
     flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
