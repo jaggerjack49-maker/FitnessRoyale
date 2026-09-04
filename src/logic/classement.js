@@ -103,17 +103,47 @@ export function classerParCategories(joueurs) {
     .filter((groupe) => groupe.joueurs.length > 0);
 }
 
+// ----- La salle : un nom saisi à la main, donc à comparer avec précaution ---
+
+// La forme COMPARABLE d'un nom de salle : espaces normalisés, minuscules.
+//
+// POURQUOI (correctif du 04/09/2026) : la salle sert d'IDENTIFIANT de clan —
+// elle regroupe le classement par salle et donne accès au chat. Comparée telle
+// quelle, « Iron Temple », « iron temple » et « Iron Temple » (espace final)
+// étaient TROIS clans distincts : deux membres de la même salle ne se voyaient
+// jamais, ni au classement ni dans le chat.
+// On ne touche PAS aux accents, volontairement : ils distinguent des noms
+// réellement différents bien plus souvent qu'ils ne créent de doublons.
+// Portage identique de `cle_salle()` dans backend/app/logique.py.
+export function cleSalle(salle) {
+  return String(salle || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+}
+
+// L'orthographe GARDÉE POUR L'AFFICHAGE : espaces normalisés, casse laissée
+// telle que l'utilisateur l'a écrite.
+export function nomSalleAffiche(salle) {
+  return String(salle || '').split(/\s+/).filter(Boolean).join(' ');
+}
+
 // ----- Classement par salle (clans) -----
 // Chaque salle est notée au palier moyen de ses membres.
 // Égalité → départage au total de points de compétition de la salle.
 export function classerSalles(joueurs) {
+  // On REGROUPE sur la clé normalisée mais on AFFICHE l'orthographe du premier
+  // membre rencontré — sinon le classement montrerait « iron temple ».
   const parSalle = {};
+  const nomsAffiches = {};
   joueurs.forEach((j) => {
-    if (!j.salle) return;
-    if (!parSalle[j.salle]) parSalle[j.salle] = [];
-    parSalle[j.salle].push(j);
+    const cle = cleSalle(j.salle);
+    if (!cle) return;
+    if (!parSalle[cle]) {
+      parSalle[cle] = [];
+      nomsAffiches[cle] = nomSalleAffiche(j.salle);
+    }
+    parSalle[cle].push(j);
   });
-  const salles = Object.entries(parSalle).map(([salle, membres]) => {
+  const salles = Object.entries(parSalle).map(([cle, membres]) => {
+    const salle = nomsAffiches[cle];
     const somme = membres.reduce((total, m) => total + moyennePaliers(m), 0);
     return {
       salle,

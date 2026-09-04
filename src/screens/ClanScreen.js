@@ -13,7 +13,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { colors, espacement } from '../theme';
-import { classer, ligueJoueur } from '../logic/classement';
+import { classer, ligueJoueur, cleSalle, nomSalleAffiche } from '../logic/classement';
 import { couleursLigues } from '../data/clubSP';
 import { areneDeLaLigue } from '../data/arenes';
 import AvatarJoueur from '../components/AvatarJoueur';
@@ -36,6 +36,18 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
   const scrollRef = useRef(null);
 
   const peutDiscuter = estConnecte && !!moi.salle;
+
+  // Les salles qui existent déjà, déduites des joueurs déjà chargés (aucun
+  // appel serveur) — une par clé normalisée, dans l'orthographe la plus
+  // courante rencontrée.
+  const sallesExistantes = (() => {
+    const vues = new Map();
+    (joueurs || []).forEach((j) => {
+      const cle = cleSalle(j.salle);
+      if (cle && !vues.has(cle)) vues.set(cle, nomSalleAffiche(j.salle));
+    });
+    return [...vues.values()].sort((a, b) => a.localeCompare(b)).slice(0, 12);
+  })();
 
   useEffect(() => {
     if (!peutDiscuter) {
@@ -128,6 +140,29 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
           {messageSalle.texte}
         </Text>
       )}
+
+      {/* PRÉVENTION plutôt que correction : la normalisation rattrape la casse
+          et les espaces, mais pas une faute de frappe (« Iron Templ »). Toucher
+          une salle existante garantit de rejoindre le BON clan. */}
+      {sallesExistantes.length > 0 && (
+        <>
+          <Text style={[styles.explicationGauche, { marginTop: espacement.s }]}>
+            Salles déjà utilisées — touche la tienne pour être sûr de rejoindre
+            le bon clan :
+          </Text>
+          <View style={styles.lignePucesSalles}>
+            {sallesExistantes.map((nom) => (
+              <TouchableOpacity
+                key={nom}
+                style={[styles.puceSalle, cleSalle(nom) === cleSalle(salleSaisie) && styles.puceSalleActive]}
+                onPress={() => setSalleSaisie(nom)}
+              >
+                <Text style={styles.puceSalleTexte}>{nom}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
     </View>
   );
 
@@ -147,8 +182,10 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
 
   // ---- Les membres de ma salle, classés comme partout ailleurs dans l'app :
   // au palier moyen (`classer` fait déjà le tri et pose le rang `moi`). ----
+  // Comparaison NORMALISÉE : un membre qui a écrit « iron temple » appartient
+  // au même clan que celui qui a écrit « Iron Temple » (correctif 04/09/2026).
   const membres = classer(
-    (joueurs || []).filter((j) => (j.salle || '').trim() === (moi.salle || '').trim()),
+    (joueurs || []).filter((j) => cleSalle(j.salle) === cleSalle(moi.salle)),
     'global'
   );
 
@@ -325,6 +362,13 @@ const styles = StyleSheet.create({
   },
   boutonSalleTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
   messageSalle: { color: colors.vert, fontSize: 12, marginTop: 6 },
+  lignePucesSalles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  puceSalle: {
+    borderWidth: 1, borderColor: colors.bordure, borderRadius: 999,
+    paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.carteClaire,
+  },
+  puceSalleActive: { borderColor: colors.or },
+  puceSalleTexte: { color: colors.texte, fontSize: 12 },
   lienChangerSalle: {
     color: colors.texteGris, fontSize: 12, textAlign: 'center',
     marginTop: espacement.m, marginBottom: espacement.s,

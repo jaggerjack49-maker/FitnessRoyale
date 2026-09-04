@@ -28,7 +28,9 @@ from .logique import (
     classer_global,
     classer_par_categories,
     classer_salles,
+    cle_salle,
     ligue_joueur,
+    nom_salle_affiche,
     palier_exercice,
 )
 
@@ -328,7 +330,10 @@ def inscription(donnees: Inscription):
     if db.lire_joueur_par_pseudo(donnees.pseudo):
         raise HTTPException(409, "Ce pseudo est déjà pris.")
     hash_mdp = auth.hacher_mot_de_passe(donnees.mot_de_passe)
-    joueur_id = db.creer_joueur(donnees.pseudo, donnees.sexe, donnees.poids, donnees.salle, hash_mdp)
+    # Espaces normalisés dès l'entrée : une salle saisie « Iron Temple  »
+    # ne doit pas former un clan à part (voir logique.cle_salle).
+    salle = nom_salle_affiche(donnees.salle) or None
+    joueur_id = db.creer_joueur(donnees.pseudo, donnees.sexe, donnees.poids, salle, hash_mdp)
     # CODE DE SECOURS ("mot de passe oublié") : généré à l'inscription et
     # renvoyé EN CLAIR UNE SEULE FOIS — l'app l'affiche pour que le joueur le
     # note. Côté base, seul son hash est stocké (comme un mot de passe) :
@@ -903,7 +908,13 @@ def voter_sans_video(joueur_id: int, exercice: str, vote: VotePerf,
 # écrire dans un clan qui n'est pas le leur.
 
 def _verifier_membre_salle(courant: dict, salle: str) -> None:
-    if courant.get("salle") != salle:
+    """L'appartenance se juge sur la forme NORMALISÉE de la salle.
+
+    Correctif du 04/09/2026 : comparées telles quelles, « Iron Temple » et
+    « iron temple » étaient deux clans distincts — un membre qui écrivait sa
+    salle avec une casse différente se voyait refuser l'accès à son propre chat.
+    """
+    if cle_salle(courant.get("salle")) != cle_salle(salle):
         raise HTTPException(403, "Tu dois être membre de cette salle pour accéder à son chat.")
 
 
@@ -1108,7 +1119,7 @@ def changer_salle(joueur_id: int, donnees: SalleJoueur,
     sur une valeur qui ne vivrait que dans l'app.
     """
     auth.verifier_proprietaire(courant, joueur_id)
-    salle = donnees.salle.strip()
+    salle = nom_salle_affiche(donnees.salle)
     db.changer_salle(joueur_id, salle or None)
     return db.lire_joueur(joueur_id)
 

@@ -114,16 +114,44 @@ def classer_par_categories(joueurs: list) -> list:
     return groupes
 
 
+def cle_salle(salle) -> str:
+    """La forme COMPARABLE d'un nom de salle : espaces normalisés, minuscules.
+
+    POURQUOI (correctif du 04/09/2026) : la salle sert d'identifiant de clan —
+    elle regroupe le classement par salle ET donne accès au chat. Comparée
+    telle quelle, « Iron Temple », « iron temple » et « Iron Temple » (espace
+    final) étaient TROIS clans distincts : deux membres de la même salle ne se
+    voyaient jamais.
+
+    On ne touche PAS aux accents, volontairement : ils distinguent des noms
+    réellement différents bien plus souvent qu'ils ne créent de doublons.
+    Portage identique de `cleSalle()` dans src/logic/classement.js.
+    """
+    return " ".join(str(salle or "").split()).lower()
+
+
+def nom_salle_affiche(salle) -> str:
+    """L'orthographe GARDÉE POUR L'AFFICHAGE : espaces normalisés, casse
+    laissée telle que l'utilisateur l'a écrite."""
+    return " ".join(str(salle or "").split())
+
+
 def classer_salles(joueurs: list) -> list:
     """Classement des salles (clans) : palier moyen des membres, départage aux points cumulés."""
+    # On REGROUPE sur la clé normalisée mais on AFFICHE l'orthographe du
+    # premier membre rencontré — sinon le classement montrerait « iron temple ».
     par_salle = {}
+    noms_affiches = {}
     for joueur in joueurs:
         salle = joueur.get("salle")
-        if not salle:
+        if not salle or not cle_salle(salle):
             continue
-        par_salle.setdefault(salle, []).append(joueur)
+        cle = cle_salle(salle)
+        noms_affiches.setdefault(cle, nom_salle_affiche(salle))
+        par_salle.setdefault(cle, []).append(joueur)
     salles = []
-    for salle, membres in par_salle.items():
+    for cle, membres in par_salle.items():
+        salle = noms_affiches[cle]
         moyenne = round(sum(moyenne_paliers(m) for m in membres) / len(membres), 2)
         salles.append({
             "salle": salle,

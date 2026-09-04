@@ -1073,7 +1073,7 @@ def messages_du_clan(salle: str, limite: int = 200) -> list:
             for ligne in conn.execute(
                 "SELECT mc.id, mc.salle, mc.joueur_id, j.pseudo, mc.texte, mc.cree_le "
                 "FROM messages_clan mc JOIN joueurs j ON j.id = mc.joueur_id "
-                "WHERE mc.salle = ? ORDER BY mc.id ASC LIMIT ?",
+                "WHERE LOWER(TRIM(mc.salle)) = LOWER(TRIM(?)) ORDER BY mc.id ASC LIMIT ?",
                 (salle, limite),
             )
         ]

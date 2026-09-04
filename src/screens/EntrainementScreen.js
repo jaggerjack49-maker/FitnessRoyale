@@ -879,13 +879,25 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     }
   }
 
+  // ⚠️ QUAND LE SERVEUR REFUSE UNE SUPPRESSION (correctif du 04/09/2026) :
+  // ces trois fonctions retiraient l'élément à l'écran puis AVALAIENT l'erreur
+  // réseau (« pas grave, supprimé localement »). L'élément revenait donc tout
+  // seul au prochain chargement, sans la moindre explication — l'app et le
+  // serveur divergeaient en silence.
+  // On fait maintenant deux choses : on le DIT, et on RESYNCHRONISE tout de
+  // suite (`chargerTout`) pour que l'écran remontre la vérité du serveur
+  // immédiatement, plutôt qu'au prochain passage sur l'onglet.
   async function retirerDuPlanning(planif) {
     setPlanning((l) => l.filter((pl) => pl.id !== planif.id));
     if (!estConnecte || String(planif.id).startsWith('local-')) return;
     try {
       await api.deplanifierJour(planif.id);
-    } catch {
-      // Pas grave : retiré localement.
+    } catch (err) {
+      setErreur(
+        err.message
+        || "Le serveur n'a pas pu retirer cette date — elle est toujours là."
+      );
+      await chargerTout();
     }
   }
 
@@ -1065,8 +1077,12 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     if (!estConnecte || String(cycle.id).startsWith('local-')) return;
     try {
       await api.supprimerCycle(cycle.id);
-    } catch {
-      // Pas grave : supprimé localement.
+    } catch (err) {
+      setErreur(
+        err.message
+        || `Le serveur n'a pas pu supprimer « ${cycle.nom} » — le programme est toujours là.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1150,8 +1166,12 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     if (!estConnecte || String(programme.id).startsWith('local-')) return;
     try {
       await api.supprimerProgramme(programme.id);
-    } catch {
-      // Pas grave : le programme reste supprimé localement.
+    } catch (err) {
+      setErreur(
+        err.message
+        || `Le serveur n'a pas pu supprimer « ${programme.nom} » — la séance est toujours là.`
+      );
+      await chargerTout();
     }
   }
 

@@ -1775,7 +1775,10 @@ naître.
 - Tests : `backend/tests/test_api_renommage_exercice.py` — 9 tests.
   Suite complète : **218 tests, tous OK.**
 
-### Audit : la même classe de problème ailleurs (relevé, non corrigé)
+### Audit : la même classe de problème ailleurs
+
+⚠️ LES POINTS 1 ET 2 ONT ÉTÉ CORRIGÉS LE 04/09/2026 (voir la section suivante).
+Les points 3 à 5 restent des chantiers ouverts.
 
 Recherche demandée par Hafiz (« parcours toute l'application et relève des
 problèmes de ce genre »). Le motif recherché : une VALEUR recopiée à plusieurs
@@ -1814,6 +1817,55 @@ pas. Classées par gravité, à traiter dans un lot séparé.
    voulu (l'historique est un journal), mais il continue d'apparaître dans
    « 🏆 Mes records » et dans le comptage de séries de la semaine. Pas un bug ;
    à savoir si la liste des records devient longue.
+
+## La salle normalisée + les suppressions qui parlent — 04/09/2026
+
+Les deux premiers points de l'audit de la veille, corrigés sur demande de Hafiz.
+
+### 1. La salle cesse d'être une chaîne brute
+
+C'était le MÊME bug que le nom d'exercice, en plus grave : la salle sert
+d'identifiant de clan (classement par salle ET accès au chat) et n'était
+comparée que par égalité exacte. « Iron Temple », « iron temple » et
+« Iron Temple » (espace final) formaient donc TROIS clans : deux membres de la
+même salle ne se voyaient jamais.
+
+- `cle_salle()` / `cleSalle()` (portage identique dans `backend/app/logique.py`
+  et `src/logic/classement.js`) : espaces normalisés + minuscules. C'est la
+  forme utilisée pour COMPARER et REGROUPER.
+- `nom_salle_affiche()` / `nomSalleAffiche()` : la même normalisation d'espaces
+  mais SANS toucher à la casse — c'est ce qu'on montre à l'écran. Le classement
+  affiche l'orthographe du premier membre rencontré, jamais « iron temple ».
+- LES ACCENTS SONT VOLONTAIREMENT CONSERVÉS : deux noms qui ne diffèrent que
+  par un accent sont bien plus souvent DIFFÉRENTS que le même nom mal
+  orthographié. Choix opposé à celui fait pour les exercices, où l'on retire
+  les accents — parce que là on compare à une liste FERMÉE de mots-clés, alors
+  qu'ici on compare deux saisies libres entre elles.
+- CÔTÉ BASE, deux mesures complémentaires : la salle est nettoyée À L'ÉCRITURE
+  (inscription et `PUT /joueurs/{id}/salle`), et le chat compare en
+  `LOWER(TRIM(...))` — ce qui rend les messages écrits AVANT ce correctif
+  toujours accessibles, sans rien réécrire en base. `LOWER` et `TRIM` existent
+  à l'identique sur SQLite et Postgres.
+- PRÉVENTION EN PLUS : l'écran Clan propose les salles DÉJÀ UTILISÉES sous
+  forme de puces à toucher (déduites des joueurs déjà chargés, aucun appel
+  serveur). La normalisation rattrape la casse et les espaces, pas une faute de
+  frappe — « Iron Templ » resterait un clan à part.
+- Tests : `backend/tests/test_salle_normalisee.py` — 11 tests, dont
+  `test_changer_la_casse_de_sa_salle_ne_perd_pas_le_chat` (le cas le plus
+  vicieux) et `test_un_membre_d_une_autre_salle_reste_refuse` (la normalisation
+  ne doit pas ouvrir le chat à tout le monde).
+
+### 2. Une suppression qui échoue ne disparaît plus en silence
+
+`retirerDuPlanning`, `supprimerCycle` et `supprimerProgramme` retiraient
+l'élément à l'écran puis AVALAIENT l'erreur réseau (« pas grave, supprimé
+localement »). L'élément revenait donc tout seul au prochain chargement, sans
+la moindre explication : l'app et le serveur divergeaient en silence.
+Ces trois fonctions font maintenant deux choses : elles le DISENT, et elles
+RESYNCHRONISENT immédiatement (`chargerTout()`) pour que l'écran remontre la
+vérité du serveur tout de suite plutôt qu'au prochain passage sur l'onglet.
+
+Suite complète : **229 tests, tous OK.**
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 
