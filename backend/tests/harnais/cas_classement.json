@@ -1,0 +1,123 @@
+{
+  "_lisez_moi": [
+    "CAS DE TEST COMMUNS aux deux implémentations du classement :",
+    "backend/app/logique.py (Python) et src/logic/classement.js (JavaScript).",
+    "Ils sont volontairement dans UN SEUL fichier, lu par les deux côtés :",
+    "c'est ce qui garantit qu'on ne teste pas deux choses différentes.",
+    "Voir backend/tests/test_parite_front_back.py."
+  ],
+
+  "polyvalence_contre_specialisation": {
+    "_pourquoi": "Règle fondatrice : à niveau égal par exercice, celui qui a des perfs sur PLUS d'exercices passe devant. Un joueur maxé sur un seul exercice ne doit pas rivaliser.",
+    "joueurs": [
+      {
+        "pseudo": "Polyvalent", "sexe": "homme", "poids": 80, "points": 0, "salle": "Iron Temple",
+        "performances": {
+          "Développé couché": { "valeur": 100, "statut": "communaute" },
+          "Squat": { "valeur": 120, "statut": "communaute" },
+          "Soulevé de terre": { "valeur": 170, "statut": "communaute" },
+          "Traction prise large": { "valeur": 20, "statut": "communaute" }
+        }
+      },
+      {
+        "pseudo": "Specialiste", "sexe": "homme", "poids": 80, "points": 0, "salle": "Iron Temple",
+        "performances": {
+          "Développé couché": { "valeur": 145, "statut": "communaute" }
+        }
+      }
+    ],
+    "exercices": ["Développé couché", "Squat"]
+  },
+
+  "seul_le_verifie_compte": {
+    "_pourquoi": "Une perf DÉCLARÉE ne pèse rien au classement — l'ADN du projet.",
+    "joueurs": [
+      {
+        "pseudo": "Verifie", "sexe": "homme", "poids": 75, "points": 0, "salle": "Gym A",
+        "performances": { "Squat": { "valeur": 100, "statut": "communaute" } }
+      },
+      {
+        "pseudo": "Declare", "sexe": "homme", "poids": 75, "points": 0, "salle": "Gym A",
+        "performances": { "Squat": { "valeur": 180, "statut": "declare" } }
+      }
+    ],
+    "exercices": ["Squat"]
+  },
+
+  "hommes_et_femmes_sur_la_meme_echelle": {
+    "_pourquoi": "Le classement par exercice se départage au PALIER puis aux POINTS, jamais aux kg bruts : les barèmes n'ont pas la même échelle selon le sexe.",
+    "joueurs": [
+      {
+        "pseudo": "HommeGold", "sexe": "homme", "poids": 88, "points": 10, "salle": "Gym B",
+        "performances": { "Développé couché": { "valeur": 100, "statut": "communaute" } }
+      },
+      {
+        "pseudo": "FemmeGold", "sexe": "femme", "poids": 62, "points": 50, "salle": "Gym B",
+        "performances": { "Développé couché": { "valeur": 45, "statut": "communaute" } }
+      }
+    ],
+    "exercices": ["Développé couché"]
+  },
+
+  "categories_de_poids_du_plus_lourd_au_plus_leger": {
+    "_pourquoi": "L'ordre des catégories a été inversé le 01/09/2026 : les lourds ouvrent le classement.",
+    "joueurs": [
+      { "pseudo": "Leger", "sexe": "homme", "poids": 55, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Moyen", "sexe": "homme", "poids": 75, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Lourd", "sexe": "homme", "poids": 95, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Limite90", "sexe": "homme", "poids": 90, "points": 0, "salle": null, "performances": {} }
+    ],
+    "exercices": []
+  },
+
+  "salles_ecrites_differemment": {
+    "_pourquoi": "Correctif du 04/09/2026 : la casse et les espaces ne doivent plus créer des clans distincts.",
+    "joueurs": [
+      {
+        "pseudo": "Majuscules", "sexe": "homme", "poids": 80, "points": 5, "salle": "Iron Temple",
+        "performances": { "Squat": { "valeur": 120, "statut": "communaute" } }
+      },
+      {
+        "pseudo": "Minuscules", "sexe": "homme", "poids": 80, "points": 3, "salle": "iron temple",
+        "performances": { "Squat": { "valeur": 100, "statut": "communaute" } }
+      },
+      {
+        "pseudo": "Espaces", "sexe": "homme", "poids": 80, "points": 1, "salle": "  IRON   TEMPLE  ",
+        "performances": {}
+      },
+      {
+        "pseudo": "SansSalle", "sexe": "homme", "poids": 80, "points": 0, "salle": null,
+        "performances": {}
+      },
+      {
+        "pseudo": "SalleVide", "sexe": "homme", "poids": 80, "points": 0, "salle": "   ",
+        "performances": {}
+      }
+    ],
+    "exercices": ["Squat"]
+  },
+
+  "egalites_departagees_aux_points": {
+    "_pourquoi": "À palier moyen identique, ce sont les points de compétition qui tranchent.",
+    "joueurs": [
+      {
+        "pseudo": "PeuDePoints", "sexe": "homme", "poids": 80, "points": 10, "salle": "Gym C",
+        "performances": { "Squat": { "valeur": 120, "statut": "communaute" } }
+      },
+      {
+        "pseudo": "BeaucoupDePoints", "sexe": "homme", "poids": 80, "points": 900, "salle": "Gym C",
+        "performances": { "Squat": { "valeur": 120, "statut": "communaute" } }
+      }
+    ],
+    "exercices": ["Squat"]
+  },
+
+  "aucune_perf_du_tout": {
+    "_pourquoi": "Cas limite : personne n'a rien vérifié, rien ne doit planter ni diverger.",
+    "joueurs": [
+      { "pseudo": "Vide1", "sexe": "homme", "poids": 80, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Vide2", "sexe": "femme", "poids": 60, "points": 0, "salle": null, "performances": {} }
+    ],
+    "exercices": ["Squat"]
+  }
+}

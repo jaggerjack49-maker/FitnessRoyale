@@ -72,7 +72,14 @@ def categorie_poids(poids: float) -> str:
     return "+90 kg"
 
 
-ORDRE_CATEGORIES = ["-60 kg", "-70 kg", "-80 kg", "-90 kg", "+90 kg"]
+# Du PLUS LOURD au plus léger, comme en sport de force.
+# DIVERGENCE CORRIGÉE (04/09/2026) : l'ordre avait été inversé côté app le
+# 01/09 (`ordreCategories` dans src/logic/classement.js) mais PAS ici — les
+# deux implémentations du classement se contredisaient depuis trois jours,
+# sans que rien ne le signale. C'est exactement ce que le test de parité
+# (backend/tests/test_parite_front_back.py) est là pour attraper ; il l'a
+# trouvé le jour même où il a été écrit.
+ORDRE_CATEGORIES = ["+90 kg", "-90 kg", "-80 kg", "-70 kg", "-60 kg"]
 
 
 def _enrichir(joueur: dict) -> dict:

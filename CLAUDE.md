@@ -1867,6 +1867,71 @@ vérité du serveur tout de suite plutôt qu'au prochain passage sur l'onglet.
 
 Suite complète : **229 tests, tous OK.**
 
+## Les trois derniers points de l'audit — 04/09/2026
+
+Points 3, 4 et 5 de l'audit du 03/09. Le point 4 a trouvé DEUX vraies
+divergences dès sa première exécution.
+
+### 3. Les listes recopiées ne peuvent plus diverger sans qu'on le sache
+
+`backend/tests/test_listes_partagees.py` lit les fichiers JS et compare
+`groupesMusculaires` / `joursSemaine` aux constantes de `main.py`. La
+duplication N'EST PAS supprimée — faire servir ces listes par le serveur
+ajouterait un appel réseau à un écran qui marche hors-ligne — elle devient
+IMPOSSIBLE À OUBLIER. Vérifié en introduisant une divergence exprès : le test
+échoue bien, avec un message qui dit quoi faire.
+
+### 4. Les deux classements sont vérifiés l'un contre l'autre
+
+Le classement existe en double depuis toujours (`logique.py` / `classement.js`,
+« portage exact »). Chacun avait ses tests, mais rien ne comparait les deux —
+et c'est l'APP qui calcule les classements affichés.
+
+- Les cas vivent dans UN SEUL fichier, `backend/tests/harnais/cas_classement.json`,
+  lu par les deux côtés : impossible de tester deux choses différentes.
+- `harnais/harnais_classement.mjs` exécute le VRAI code de l'app avec Node ;
+  `test_parite_front_back.py` fait passer les mêmes cas dans Python et compare.
+- PIÈGE TECHNIQUE : `classement.js` importe `'../data/clubSP'` SANS extension
+  (convention de Metro), ce que Node refuse. `harnais/resolveur.mjs` complète
+  l'extension via `registerHooks` — on n'a pas touché au code de l'app pour
+  l'amour d'un test.
+- Le test s'IGNORE si Node est absent : la suite backend doit rester lançable
+  sans l'outillage de l'app.
+
+**DEUX DIVERGENCES TROUVÉES IMMÉDIATEMENT :**
+
+**(a) `estVerifiee()` était écrite à l'envers.** Elle acceptait TOUT SAUF
+`'non_verifie'`. Or le serveur n'emploie pas ce mot : sa base n'autorise que
+`'declare'`, `'communaute'` et `'salle'`. Une perf DÉCLARÉE arrivant du serveur
+était donc comptée comme VÉRIFIÉE — en contradiction frontale avec la règle
+fondatrice (« seul le vérifié compte »), qui gouverne ligue, arène, classement
+et titres.
+NUANCE HONNÊTE : ce n'était PAS un bug visible. `statutDepuisAPI()` (src/api.js)
+traduit `'declare'` en `'non_verifie'` à l'entrée, et les 9 points d'entrée
+passent bien par `joueurDepuisAPI`. Mais il suffisait d'UN chemin oubliant la
+traduction pour fausser tout le classement sans le moindre signal.
+`estVerifiee` énumère désormais ce qui COMPTE (`STATUTS_VERIFIES`, miroir de
+`logique.py`) au lieu d'exclure ce qui ne compte pas.
+
+**(b) L'ordre des catégories de poids se contredisait depuis trois jours.**
+Le 01/09, `ordreCategories` est passé du plus lourd au plus léger côté app —
+mais `ORDRE_CATEGORIES` (`logique.py`) est resté dans l'ancien ordre. Latent
+pour l'app (elle recalcule en local) mais l'API `/classement/categories`
+répondait autre chose que ce que le produit affiche. Corrigé.
+C'est exactement le scénario que ce test devait attraper ; il l'a trouvé le
+jour même de son écriture.
+
+### 5. Renommer un exercice depuis ses records
+
+Le renommage n'était atteignable que depuis l'éditeur d'un programme. Un
+exercice qui ne vit PLUS que dans l'historique — retiré du programme, ou mal
+tapé une seule fois — était donc IMPOSSIBLE à corriger : il restait à jamais
+dans « 🏆 Mes records » et dans le comptage de séries, sous son nom fautif.
+Toucher un record ouvre maintenant un champ de renommage, qui appelle le même
+`renommerExercicePartout` que l'éditeur.
+
+Suite complète : **239 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

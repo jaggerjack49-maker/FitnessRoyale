@@ -478,6 +478,9 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // en attente de la réponse « partout ou seulement ici ? ».
   const [renommages, setRenommages] = useState([]);
   const [renommageEnCours, setRenommageEnCours] = useState(false);
+  // Renommage lancé depuis la liste des records (exercice + saisie en cours).
+  const [recordARenommer, setRecordARenommer] = useState(null);
+  const [nomRecordSaisi, setNomRecordSaisi] = useState('');
 
   // ---- Programmes OFFICIELS (publiés par l'admin, voir CLAUDE.md) ----
   // Un joueur ordinaire ne fait que les LIRE et les copier ; l'admin peut en
@@ -1234,6 +1237,35 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       setErreurCode(err.message || "Aucun programme ne correspond à ce code.");
     } finally {
       setRechercheCode(false);
+    }
+  }
+
+  // RENOMMER UN EXERCICE DEPUIS SES RECORDS (04/09/2026, point 5 de l'audit).
+  // Le renommage n'était atteignable que depuis l'éditeur d'un programme :
+  // un exercice qui ne vit PLUS que dans l'historique — parce qu'il a été
+  // retiré du programme, ou parce que son nom a été mal tapé une fois — était
+  // donc impossible à corriger. Il restait à jamais dans « Mes records » et
+  // dans le comptage de séries, sous son nom fautif.
+  async function renommerDepuisRecord(ancien) {
+    const nouveau = nomRecordSaisi.trim();
+    if (!nouveau || nouveau === ancien) {
+      setRecordARenommer(null);
+      return;
+    }
+    if (!estConnecte) {
+      setErreur('Renommage impossible hors-ligne : reconnecte-toi.');
+      return;
+    }
+    setRenommageEnCours(true);
+    try {
+      await api.renommerExercicePartout(moi.id, ancien, nouveau);
+      setRecordARenommer(null);
+      setNomRecordSaisi('');
+      await chargerTout();
+    } catch (err) {
+      setErreur(err.message || 'Renommage impossible.');
+    } finally {
+      setRenommageEnCours(false);
     }
   }
 
@@ -2758,15 +2790,51 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
               <Text style={styles.indice}>
                 Ta série la plus lourde sur chaque exercice, toutes séances confondues.
               </Text>
-              {mesRecords.map((r) => (
-                <View key={r.exercice} style={styles.ligneRecord}>
-                  <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
-                  <Text style={styles.valeurRecord}>
-                    {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
-                  </Text>
-                  <Text style={styles.dateRecord}>{r.date}</Text>
-                </View>
-              ))}
+              <Text style={styles.indice}>
+                Un nom mal tapé ? Touche l'exercice pour le renommer partout —
+                dans tes programmes, ton historique et ton comptage de séries.
+              </Text>
+              {mesRecords.map((r) => {
+                if (recordARenommer !== r.exercice) {
+                  return (
+                    <TouchableOpacity
+                      key={r.exercice}
+                      style={styles.ligneRecord}
+                      onPress={() => { setRecordARenommer(r.exercice); setNomRecordSaisi(r.exercice); }}
+                    >
+                      <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
+                      <Text style={styles.valeurRecord}>
+                        {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
+                      </Text>
+                      <Text style={styles.dateRecord}>{r.date}</Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return (
+                  <View key={r.exercice} style={styles.ligneAjoutSerie}>
+                    <TextInput
+                      style={[styles.champ, { flex: 1 }]}
+                      value={nomRecordSaisi}
+                      onChangeText={setNomRecordSaisi}
+                      placeholder="Nouveau nom"
+                      placeholderTextColor={colors.texteGris}
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      style={styles.boutonAjouterSerie}
+                      onPress={() => renommerDepuisRecord(r.exercice)}
+                      disabled={renommageEnCours}
+                    >
+                      {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
+                        <Text style={styles.boutonAjouterSerieTexte}>Renommer</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.boutonRetirer} onPress={() => setRecordARenommer(null)}>
+                      <Text style={styles.boutonRetirerTexte}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
             </View>
           )}
         </>
