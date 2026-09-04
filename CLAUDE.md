@@ -1725,6 +1725,96 @@ rejoindre une — et, une fois dans un clan, derrière un lien discret
 « ⚙️ Changer de salle » : c'est le seul moyen de changer de clan ou d'en
 sortir, la retirer complètement aurait enfermé l'utilisateur.
 
+## Le NOM d'un exercice est son identifiant — 04/09/2026
+
+Deux demandes de Hafiz, dont la seconde touche au modèle de données.
+
+### Modifier une série pendant la séance
+
+On ne pouvait qu'AJOUTER : une faute de frappe obligeait à sortir de la séance
+en perdant tout. Toucher une série l'ouvre maintenant en modification (reps,
+charge, 🗑). Ces séries vivent dans `seriesLoggees` (état local) jusqu'à
+« Terminer », donc aucun appel serveur ici — la séance part d'un bloc à la fin.
+Deux pièges traités : les numéros de série sont RENUMÉROTÉS après une
+suppression (sinon « Série 1, Série 3 » partait tel quel au serveur), et les
+champs texte sont reconvertis en nombres à la fermeture (un champ vidé aurait
+donné NaN).
+⚠️ RESTE À FAIRE : modifier une séance DÉJÀ ENREGISTRÉE (l'historique) — la
+ligne correspondante de « À faire » n'est donc levée qu'à moitié.
+
+### Renommer un exercice le renomme PARTOUT
+
+Demande : « si on modifie les noms des exercices du programme, cela doit
+impacter toutes les fois où l'exercice est mentionné ».
+
+LE FOND DU PROBLÈME : il n'existe AUCUNE table d'exercices. Le nom, en texte
+libre, EST l'identifiant — et il est recopié dans trois tables :
+`programme_exercices`, `series_journal` et `groupes_exercices`. Le changer dans
+un programme cassait donc silencieusement tous les liens : historique, record
+personnel, suggestion de charge et comptage de séries continuaient de vivre
+sous l'ANCIEN nom, comme si l'exercice avait disparu et qu'un autre venait de
+naître.
+
+- `PUT /joueurs/{id}/exercices/{ancien}/nom` renomme dans les trois tables, en
+  UNE SEULE transaction — on ne veut pas d'un état où l'historique est renommé
+  mais pas les programmes. Uniquement chez le joueur courant
+  (`verifier_proprietaire` + filtres `WHERE ... IN (SELECT ... WHERE joueur_id)`).
+- PIÈGE TRAITÉ : `groupes_exercices` porte `UNIQUE (joueur_id, exercice)`. Si le
+  NOUVEAU nom a déjà sa propre correction de groupe, un UPDATE violerait la
+  contrainte — on garde alors la correction du nouveau nom et on jette l'ancienne.
+- LE BARÈME N'EST PAS CONCERNÉ : les perfs Fitness Royale sont un AUTRE espace
+  de noms (voir « Entraînement — INDÉPENDANCE TOTALE »). Verrouillé par
+  `test_le_renommage_ne_touche_pas_les_performances_du_bareme`.
+- CÔTÉ APP, ON PROPOSE, ON N'IMPOSE PAS. `detecterRenommages()` ne compare que
+  si la liste garde la même longueur et le même ordre : un nom qui change à la
+  même position est un renommage probable. Une carte demande alors
+  « Renommer partout » ou « Seulement ici ».
+  POURQUOI NE PAS LE FAIRE TOUT SEUL : renommer RÉÉCRIT L'HISTORIQUE, et
+  « remplacer un exercice par un autre mouvement » est indiscernable d'un
+  renommage vu du code. Seul l'utilisateur sait s'il s'agit du même exercice.
+- Tests : `backend/tests/test_api_renommage_exercice.py` — 9 tests.
+  Suite complète : **218 tests, tous OK.**
+
+### Audit : la même classe de problème ailleurs (relevé, non corrigé)
+
+Recherche demandée par Hafiz (« parcours toute l'application et relève des
+problèmes de ce genre »). Le motif recherché : une VALEUR recopiée à plusieurs
+endroits, qu'on peut modifier à un seul — ou une divergence qui ne se signale
+pas. Classées par gravité, à traiter dans un lot séparé.
+
+1. **LA SALLE EST UNE CHAÎNE BRUTE, exactement le même bug** (le plus grave).
+   `classerSalles` regroupe par `j.salle` tel quel et `/clans/{salle}/messages`
+   compare la chaîne à l'identique. Donc « Iron Temple », « iron temple » et
+   « Iron Temple » (espace final) sont TROIS clans différents : deux membres de
+   la même salle ne se voient jamais, ni au classement ni au chat. Et changer
+   sa salle abandonne silencieusement les messages de l'ancienne, qui restent
+   sous l'ancienne chaîne. À l'inscription (`main.py:331`), la salle n'est même
+   pas `strip()`. PISTE : normaliser (trim + casse) pour la COMPARAISON tout en
+   gardant l'orthographe saisie pour l'affichage, et proposer les salles
+   existantes en autocomplétion plutôt qu'un champ libre.
+2. **Une suppression qui échoue côté serveur revient toute seule.**
+   `retirerDuPlanning`, `supprimerCycle`, `supprimerProgramme` retirent
+   l'élément localement puis avalent l'erreur réseau (« Pas grave : supprimé
+   localement »). Au prochain chargement, l'élément réapparaît sans explication.
+   PISTE : signaler l'échec comme le fait déjà `sauvegarderProgramme`
+   (« gardé en local, l'envoi au serveur a échoué »).
+3. **Deux listes recopiées entre front et back** : `GROUPES_MUSCULAIRES` /
+   `groupesMusculaires` et `JOURS_SEMAINE` / `joursSemaine`. VÉRIFIÉ LE
+   04/09/2026 : elles sont identiques aujourd'hui — c'est un risque, pas un bug
+   en cours. Une divergence donnerait un 400 incompréhensible côté app.
+   PISTE : faire servir la liste par le serveur, ou un test qui compare les deux
+   fichiers.
+4. **Le classement est écrit deux fois** (`src/logic/classement.js` et
+   `backend/app/logique.py`, « portage exact »). Les deux sont testés
+   séparément, mais rien ne garantit qu'ils restent d'accord : un changement de
+   règle appliqué d'un seul côté passerait inaperçu, l'app recalculant les
+   classements en local (voir « Branchement backend »). PISTE : des cas de test
+   COMMUNS aux deux, décrits dans un fichier de données partagé.
+5. **Un exercice retiré d'un programme reste dans l'historique** — normal et
+   voulu (l'historique est un journal), mais il continue d'apparaître dans
+   « 🏆 Mes records » et dans le comptage de séries de la semaine. Pas un bug ;
+   à savoir si la liste des records devient longue.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -1770,7 +1860,8 @@ sortir, la retirer complètement aurait enfermé l'utilisateur.
   hors-ligne sont perdus si l'app redémarre avant reconnexion (voir "Entraînement")
 - Champ durée explicite pour une séance loggée (Entraînement) — actuellement estimée automatiquement
   (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement"
-- Éditer/supprimer une série déjà loggée dans le journal de séance (actuellement : ajout seulement)
+- Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait
+  depuis le 04/09/2026 — voir « Le NOM d'un exercice est son identifiant »)
 - Un programme « vidé » d'un jour (🗑 dans la semaine type) reste dans « Mes programmes » sans
   aucun jour — à supprimer à la main avec ✕ s'il n'est plus voulu (pas de ménage automatique)
 - Volume par groupe musculaire : seule la SEMAINE EN COURS est affichée (pas d'historique des

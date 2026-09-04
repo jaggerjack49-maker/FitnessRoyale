@@ -423,6 +423,17 @@ export async function voterSansVideo(joueurId, exercice, valide) {
   return post(`/joueurs/${joueurId}/performances/${encodeURIComponent(exercice)}/voter-sans-video`, { valide });
 }
 
+// Renomme un exercice PARTOUT : mes programmes, mon historique de séries, et
+// ma correction de groupe musculaire. Le nom d'un exercice est son seul
+// identifiant (texte libre, aucune table d'exercices) : le changer à un seul
+// endroit couperait le lien avec les records, la suggestion de charge et le
+// comptage de séries.
+export async function renommerExercicePartout(joueurId, ancien, nouveau) {
+  return appel(`/joueurs/${joueurId}/exercices/${encodeURIComponent(ancien)}/nom`, {
+    method: 'PUT', body: JSON.stringify({ nouveau }),
+  });
+}
+
 // Change MA salle de gym (= mon clan). Depuis le 01/09/2026 la salle est
 // vraiment enregistrée côté serveur : le chat de clan et le classement des
 // membres s'appuient dessus, une valeur qui ne vivrait que dans l'app ferait

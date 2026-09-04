@@ -234,6 +234,10 @@ class ProgrammeOfficiel(BaseModel):
     seances: list[SeanceOfficielle] = Field(min_length=1)
 
 
+class RenommageExercice(BaseModel):
+    nouveau: str = Field(min_length=1, max_length=100)
+
+
 class SalleJoueur(BaseModel):
     # Chaîne vide autorisée = « je quitte ma salle » (stockée NULL).
     salle: str = Field(default="", max_length=100)
@@ -1073,6 +1077,25 @@ def retirer_programme_officiel(programme_id: int,
     """
     db.supprimer_programme_officiel(programme_id)
     return None
+
+
+@app.put("/joueurs/{joueur_id}/exercices/{ancien}/nom")
+def renommer_exercice(joueur_id: int, ancien: str, donnees: RenommageExercice,
+                      courant: dict = Depends(auth.utilisateur_courant)):
+    """Renomme un exercice PARTOUT chez ce joueur : ses programmes, son
+    historique de séries, et sa correction de groupe musculaire.
+
+    Le nom d'un exercice est son seul identifiant (texte libre, aucune table
+    d'exercices) : le changer à un seul endroit coupait le lien avec tout le
+    reste — records, suggestion de charge, comptage de séries par groupe.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
+    nouveau = donnees.nouveau.strip()
+    if not nouveau:
+        raise HTTPException(400, "Le nouveau nom ne peut pas être vide.")
+    if nouveau == ancien:
+        return {"programmes": 0, "series": 0, "groupes": 0}
+    return db.renommer_exercice_partout(joueur_id, ancien, nouveau)
 
 
 @app.put("/joueurs/{joueur_id}/salle")

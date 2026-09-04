@@ -471,6 +471,13 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   const [seriesLoggees, setSeriesLoggees] = useState({}); // { exercice: [{numero_serie, reps, poids}] }
   const [champsSaisie, setChampsSaisie] = useState({}); // { exercice: { reps, poids } }
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
+  // Quelle série est ouverte en modification : `${exercice}#${index}` ou null.
+  const [serieEnEdition, setSerieEnEdition] = useState(null);
+
+  // Renommages d'exercices détectés au dernier enregistrement d'une séance,
+  // en attente de la réponse « partout ou seulement ici ? ».
+  const [renommages, setRenommages] = useState([]);
+  const [renommageEnCours, setRenommageEnCours] = useState(false);
 
   // ---- Programmes OFFICIELS (publiés par l'admin, voir CLAUDE.md) ----
   // Un joueur ordinaire ne fait que les LIRE et les copier ; l'admin peut en
@@ -714,8 +721,32 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // Modifie une séance EXISTANTE (nom + exercices) — utilisé par le calendrier.
   // La séance est le même objet partout : la modifier mets à jour toutes les
   // dates et tous les jours où elle est prévue (l'éditeur prévient si c'est le cas).
+  // Un exercice a-t-il été RENOMMÉ (par opposition à remplacé par un autre) ?
+  // On ne compare que si la liste garde la même longueur et le même ordre :
+  // dans ce cas, un nom qui change à la même position est un renommage.
+  // Si des lignes ont été ajoutées ou retirées, on ne devine rien — mieux vaut
+  // ne rien proposer qu'aller réécrire l'historique sur une fausse piste.
+  function detecterRenommages(ancienne, nouvelle) {
+    if (!ancienne || ancienne.length !== nouvelle.length) return [];
+    const trouves = [];
+    ancienne.forEach((exo, i) => {
+      const apres = nouvelle[i].exercice.trim();
+      if (exo.exercice !== apres && apres) {
+        trouves.push({ ancien: exo.exercice, nouveau: apres });
+      }
+    });
+    return trouves;
+  }
+
   async function sauvegarderProgramme(programme, nom, exercices) {
     setErreur(null);
+    // À PROPOSER, PAS À FAIRE TOUT SEUL : renommer réécrit l'historique, et
+    // « remplacer un exercice par un autre » ressemble de l'extérieur à un
+    // renommage. C'est à l'utilisateur de trancher (demande de Hafiz du
+    // 04/09/2026 : le renommage doit se propager — mais lui seul sait s'il
+    // s'agit du même mouvement sous un autre nom).
+    const trouves = detecterRenommages(programme.exercices, exercices);
+    if (trouves.length > 0) setRenommages(trouves);
     setProgrammes((liste) =>
       liste.map((p) => (p.id === programme.id ? { ...p, nom, exercices } : p))
     );
@@ -1186,6 +1217,29 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     }
   }
 
+  // Applique les renommages en attente PARTOUT, puis recharge tout : les
+  // records, la suggestion de charge et le comptage de séries se calculent
+  // depuis l'historique, ils doivent repartir des nouveaux noms.
+  async function appliquerRenommages() {
+    if (!estConnecte) {
+      setErreur('Renommage partout impossible hors-ligne : reconnecte-toi.');
+      setRenommages([]);
+      return;
+    }
+    setRenommageEnCours(true);
+    try {
+      for (const { ancien, nouveau } of renommages) {
+        await api.renommerExercicePartout(moi.id, ancien, nouveau);
+      }
+      setRenommages([]);
+      await chargerTout();
+    } catch (err) {
+      setErreur(err.message || 'Renommage impossible.');
+    } finally {
+      setRenommageEnCours(false);
+    }
+  }
+
   // ----- Logger une séance -----
   function demarrerSeance(programme) {
     setProgrammeActif(programme);
@@ -1231,6 +1285,50 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     setChampsSaisie((c) => ({
       ...c, [exercice]: { reps: String(reps), poids: String(poids) },
     }));
+  }
+
+  // MODIFIER / SUPPRIMER UNE SÉRIE DÉJÀ SAISIE pendant la séance (demande de
+  // Hafiz du 04/09/2026). Jusqu'ici on ne pouvait qu'AJOUTER : une faute de
+  // frappe obligeait à sortir de la séance en perdant tout.
+  // Ces séries vivent dans `seriesLoggees` (état local) jusqu'à « Terminer »,
+  // donc rien à envoyer au serveur ici — la séance part d'un bloc à la fin.
+  function modifierSerie(exercice, index, champ, valeur) {
+    setSeriesLoggees((tout) => {
+      const series = [...(tout[exercice] || [])];
+      if (!series[index]) return tout;
+      series[index] = { ...series[index], [champ]: valeur };
+      return { ...tout, [exercice]: series };
+    });
+  }
+
+  // On renumérote après coup : sans ça, supprimer la série 2 laisserait
+  // « Série 1, Série 3 » à l'écran ET dans ce qui part au serveur.
+  function supprimerSerie(exercice, index) {
+    setSerieEnEdition(null);
+    setSeriesLoggees((tout) => {
+      const restantes = (tout[exercice] || [])
+        .filter((_, i) => i !== index)
+        .map((serie, i) => ({ ...serie, numero_serie: i + 1 }));
+      const copie = { ...tout };
+      if (restantes.length === 0) delete copie[exercice];
+      else copie[exercice] = restantes;
+      return copie;
+    });
+  }
+
+  // À la fermeture de l'édition, on remet des NOMBRES valides : les champs de
+  // saisie manipulent du texte, et un champ vidé donnerait NaN au serveur.
+  function fermerEditionSerie(exercice, index) {
+    setSeriesLoggees((tout) => {
+      const series = [...(tout[exercice] || [])];
+      const serie = series[index];
+      if (!serie) return tout;
+      const reps = Math.max(1, parseInt(serie.reps, 10) || 1);
+      const poids = Math.max(0, parseFloat(String(serie.poids).replace(',', '.')) || 0);
+      series[index] = { ...serie, reps, poids };
+      return { ...tout, [exercice]: series };
+    });
+    setSerieEnEdition(null);
   }
 
   async function terminerSeance() {
@@ -1542,11 +1640,54 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 </Text>
               )}
 
-              {seriesFaites.map((s, i) => (
-                <Text key={i} style={styles.serieFaite}>
-                  Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
-                </Text>
-              ))}
+              {/* Toucher une série l'ouvre en modification (04/09/2026). */}
+              {seriesFaites.map((s, i) => {
+                const cle = `${exercice}#${i}`;
+                const enEdition = serieEnEdition === cle;
+                if (!enEdition) {
+                  return (
+                    <TouchableOpacity key={i} onPress={() => setSerieEnEdition(cle)}>
+                      <Text style={styles.serieFaite}>
+                        Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
+                        <Text style={styles.indiceModifier}>  ✏️</Text>
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return (
+                  <View key={i} style={styles.ligneEditionSerie}>
+                    <Text style={styles.numeroSerieEdition}>S{s.numero_serie}</Text>
+                    <TextInput
+                      style={[styles.champ, styles.champCourt]}
+                      value={String(s.reps)}
+                      onChangeText={(v) => modifierSerie(exercice, i, 'reps', v)}
+                      keyboardType="numeric"
+                      placeholder="Reps"
+                      placeholderTextColor={colors.texteGris}
+                    />
+                    <TextInput
+                      style={[styles.champ, styles.champCourt]}
+                      value={String(s.poids)}
+                      onChangeText={(v) => modifierSerie(exercice, i, 'poids', v)}
+                      keyboardType="numeric"
+                      placeholder="Kg"
+                      placeholderTextColor={colors.texteGris}
+                    />
+                    <TouchableOpacity
+                      style={styles.boutonAjouterSerie}
+                      onPress={() => fermerEditionSerie(exercice, i)}
+                    >
+                      <Text style={styles.boutonAjouterSerieTexte}>OK</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.boutonRetirer}
+                      onPress={() => supprimerSerie(exercice, i)}
+                    >
+                      <Text style={styles.boutonRetirerTexte}>🗑</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
 
               <View style={styles.ligneAjoutSerie}>
                 <TextInput
@@ -2145,6 +2286,38 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           </View>
         );
       })()}
+
+      {/* Proposition de propager un renommage d'exercice (04/09/2026). */}
+      {renommages.length > 0 && (
+        <View style={styles.carteRenommage}>
+          <Text style={styles.titreRenommage}>✏️ Exercice renommé</Text>
+          {renommages.map((r) => (
+            <Text key={r.ancien} style={styles.ligneRenommage}>
+              « {r.ancien} » → « {r.nouveau} »
+            </Text>
+          ))}
+          <Text style={styles.indice}>
+            Le renommer partout met à jour tes autres programmes, ton historique
+            de séries, tes records et le comptage par groupe musculaire.
+            Si tu as en fait REMPLACÉ l'exercice par un autre mouvement, garde
+            le changement ici seulement — ton historique restera séparé.
+          </Text>
+          <View style={styles.ligneActionsProgramme}>
+            <TouchableOpacity
+              style={styles.boutonUtiliserModele}
+              onPress={appliquerRenommages}
+              disabled={renommageEnCours}
+            >
+              {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
+                <Text style={styles.boutonDemarrerTexte}>Renommer partout</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.boutonModifier} onPress={() => setRenommages([])}>
+              <Text style={styles.boutonModifierTexte}>Seulement ici</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <Text style={styles.sectionTitre}>Mes programmes</Text>
       {cycles.length === 0 && programmesSeuls.length === 0 && (
@@ -2778,6 +2951,19 @@ const styles = StyleSheet.create({
   },
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
   attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
+  indiceModifier: { color: colors.texteGris, fontSize: 10 },
+  carteRenommage: {
+    backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.or, marginBottom: espacement.m,
+  },
+  titreRenommage: { color: colors.or, fontWeight: '800', marginBottom: 4 },
+  ligneRenommage: { color: colors.texte, fontSize: 13, marginBottom: 2 },
+  ligneEditionSerie: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4,
+  },
+  numeroSerieEdition: {
+    color: colors.texteGris, fontSize: 12, fontWeight: '700', width: 24,
+  },
   // Les actions d'un programme, sous son nom : elles passent à la ligne
   // plutôt que d'écraser le titre ou de déborder de la carte.
   ligneActionsProgramme: {

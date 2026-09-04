@@ -617,6 +617,68 @@ def supprimer_programme_officiel(programme_id: int) -> None:
         conn.execute("DELETE FROM programmes_officiels WHERE id = ?", (programme_id,))
 
 
+# ----- Renommer un exercice partout -----
+
+def renommer_exercice_partout(joueur_id: int, ancien: str, nouveau: str) -> dict:
+    """Renomme un exercice dans TOUT ce qui appartient à ce joueur.
+
+    POURQUOI CETTE FONCTION EXISTE : le NOM de l'exercice est son seul
+    identifiant. Il est écrit tel quel dans trois tables — les exercices
+    cibles d'un programme, les séries réellement loggées, et la correction
+    manuelle de groupe musculaire. Renommer dans un seul programme cassait
+    donc silencieusement les liens : l'historique, les records, la suggestion
+    de charge et le comptage de séries continuaient de vivre sous l'ANCIEN
+    nom, comme si l'exercice avait disparu et qu'un autre venait de naître.
+
+    Tout se fait dans UNE SEULE connexion, donc une seule transaction : on ne
+    veut pas d'un état où l'historique est renommé mais pas les programmes.
+
+    Renvoie le compte de lignes touchées par table (utile pour dire à
+    l'utilisateur ce qui a bougé).
+    """
+    with connexion() as conn:
+        # Les exercices cibles, uniquement dans MES programmes.
+        curseur = conn.execute(
+            "UPDATE programme_exercices SET exercice = ? "
+            "WHERE exercice = ? AND programme_id IN "
+            "(SELECT id FROM programmes WHERE joueur_id = ?)",
+            (nouveau, ancien, joueur_id),
+        )
+        programmes = curseur.rowcount
+
+        # Les séries loggées, uniquement dans MES séances.
+        curseur = conn.execute(
+            "UPDATE series_journal SET exercice = ? "
+            "WHERE exercice = ? AND entrainement_id IN "
+            "(SELECT id FROM entrainements WHERE joueur_id = ?)",
+            (nouveau, ancien, joueur_id),
+        )
+        series = curseur.rowcount
+
+        # La correction manuelle de groupe musculaire. ATTENTION : la table
+        # porte UNIQUE (joueur_id, exercice) — si le NOUVEAU nom a déjà sa
+        # propre correction, un UPDATE violerait la contrainte. Dans ce cas
+        # la correction du nouveau nom fait autorité et on jette l'ancienne.
+        deja = conn.execute(
+            "SELECT 1 FROM groupes_exercices WHERE joueur_id = ? AND exercice = ?",
+            (joueur_id, nouveau),
+        ).fetchone()
+        if deja:
+            conn.execute(
+                "DELETE FROM groupes_exercices WHERE joueur_id = ? AND exercice = ?",
+                (joueur_id, ancien),
+            )
+            groupes = 0
+        else:
+            curseur = conn.execute(
+                "UPDATE groupes_exercices SET exercice = ? WHERE joueur_id = ? AND exercice = ?",
+                (nouveau, joueur_id, ancien),
+            )
+            groupes = curseur.rowcount
+
+    return {"programmes": programmes, "series": series, "groupes": groupes}
+
+
 def creer_joueur(pseudo: str, sexe: str, poids: float, salle: str | None,
                  mot_de_passe_hash: str | None = None) -> int:
     """Crée un joueur. mot_de_passe_hash=None pour les joueurs de démo (ne peuvent pas se connecter)."""
