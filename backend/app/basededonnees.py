@@ -691,6 +691,26 @@ def creer_joueur(pseudo: str, sexe: str, poids: float, salle: str | None,
         return curseur.lastrowid
 
 
+def pseudo_deja_pris(pseudo: str) -> bool:
+    """Ce pseudo est-il déjà pris, À LA CASSE ET AUX ESPACES PRÈS ?
+
+    Trouvé par l'audit du 06/09/2026 : la comparaison était EXACTE, donc
+    « Champion », « champion », « CHAMPION » et « Champion » (espace final)
+    formaient QUATRE comptes distincts, indiscernables à l'écran. Le
+    classement affichait cinq lignes visuellement identiques.
+    C'est le même piège que la salle de gym et le nom d'exercice : une saisie
+    libre qui sert d'identifiant, comparée telle quelle.
+
+    On compare en LOWER(TRIM(...)) — portable SQLite et Postgres, et surtout
+    ça n'oblige PAS à réécrire les comptes déjà créés.
+    """
+    with connexion() as conn:
+        return conn.execute(
+            "SELECT 1 FROM joueurs WHERE LOWER(TRIM(pseudo)) = LOWER(TRIM(?))",
+            (pseudo,),
+        ).fetchone() is not None
+
+
 def lire_joueur_par_pseudo(pseudo: str) -> dict | None:
     """Pour la connexion : retrouve un joueur par son pseudo (avec son hash de mot de passe)."""
     with connexion() as conn:

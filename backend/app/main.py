@@ -327,13 +327,20 @@ def inscription(donnees: Inscription):
 
     Renvoie un token à garder côté app (en-tête "Authorization: Bearer <token>"
     sur les prochains appels) — voir src/api.js et backend/app/auth.py."""
-    if db.lire_joueur_par_pseudo(donnees.pseudo):
+    # Espaces normalisés (« Champion  » devient « Champion ») : un pseudo ne
+    # doit pas se distinguer d'un autre par de l'invisible.
+    pseudo = nom_salle_affiche(donnees.pseudo)
+    if len(pseudo) < 2:
+        raise HTTPException(400, "Le pseudo doit faire au moins 2 caractères.")
+    # Unicité À LA CASSE PRÈS : sans ça « Champion » et « champion » étaient
+    # deux comptes indiscernables au classement (audit du 06/09/2026).
+    if db.pseudo_deja_pris(pseudo):
         raise HTTPException(409, "Ce pseudo est déjà pris.")
     hash_mdp = auth.hacher_mot_de_passe(donnees.mot_de_passe)
     # Espaces normalisés dès l'entrée : une salle saisie « Iron Temple  »
     # ne doit pas former un clan à part (voir logique.cle_salle).
     salle = nom_salle_affiche(donnees.salle) or None
-    joueur_id = db.creer_joueur(donnees.pseudo, donnees.sexe, donnees.poids, salle, hash_mdp)
+    joueur_id = db.creer_joueur(pseudo, donnees.sexe, donnees.poids, salle, hash_mdp)
     # CODE DE SECOURS ("mot de passe oublié") : généré à l'inscription et
     # renvoyé EN CLAIR UNE SEULE FOIS — l'app l'affiche pour que le joueur le
     # note. Côté base, seul son hash est stocké (comme un mot de passe) :
@@ -372,12 +379,15 @@ def moi(courant: dict = Depends(auth.utilisateur_courant)):
 
 
 @app.get("/joueurs/{joueur_id}/xp")
-def xp_du_joueur(joueur_id: int):
+def xp_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
     """L'XP du joueur et son détail par source.
 
     RAPPEL : l'XP ne change NI l'arène, NI la ligue, NI le classement — elle
     mesure l'activité (séances, défis, duels gagnés) et alimentera l'Arena
     Pass. Voir backend/app/xp.py et docs/VISION_ARENA_PASS.md."""
+    # LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : répondait à n'importe
+    # qui, sans connexion. Voir `entrainements_du_joueur` pour le détail.
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return regles_xp.detail_xp(joueur_id)
@@ -570,7 +580,10 @@ def detail_duel(duel_id: int):
 
 
 @app.get("/joueurs/{joueur_id}/duels")
-def duels_du_joueur(joueur_id: int):
+def duels_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    # LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : répondait à n'importe
+    # qui, sans connexion. Voir `entrainements_du_joueur` pour le détail.
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.duels_du_joueur(joueur_id)
@@ -683,7 +696,16 @@ def ajouter_seance(joueur_id: int, seance: NouvelleSeance,
 
 
 @app.get("/joueurs/{joueur_id}/seances")
-def seances_du_joueur(joueur_id: int):
+def seances_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes séances enregistrées.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.seances_du_joueur(joueur_id)
@@ -692,8 +714,11 @@ def seances_du_joueur(joueur_id: int):
 # ----- Défis récurrents (journalier / hebdomadaire) -----
 
 @app.get("/joueurs/{joueur_id}/defis")
-def etat_des_defis(joueur_id: int):
+def etat_des_defis(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
     """L'état des 2 défis : réussi ? déjà validé aujourd'hui / cette semaine ?"""
+    # LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : répondait à n'importe
+    # qui, sans connexion. Voir `entrainements_du_joueur` pour le détail.
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     seances = db.seances_du_joueur(joueur_id)
@@ -969,17 +994,30 @@ def creer_programme(joueur_id: int, programme: NouveauProgramme,
 
 
 @app.get("/joueurs/{joueur_id}/programmes")
-def programmes_du_joueur(joueur_id: int):
+def programmes_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes programmes d'entraînement.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.programmes_du_joueur(joueur_id)
 
 
 @app.get("/programmes/{programme_id}")
-def detail_programme(programme_id: int):
+def detail_programme(programme_id: int,
+                     courant: dict = Depends(auth.utilisateur_courant)):
+    """Un programme précis. RÉSERVÉ À SON PROPRIÉTAIRE depuis le 06/09/2026 :
+    il exposait le contenu de n'importe quel programme à n'importe qui."""
     programme = db.lire_programme(programme_id)
     if programme is None:
         raise HTTPException(404, "Programme introuvable.")
+    auth.verifier_proprietaire(courant, programme["joueur_id"])
     return programme
 
 
@@ -1211,7 +1249,16 @@ def admin_supprimer_joueurs_test(courant: dict = Depends(auth.utilisateur_admin)
 # séances loggées (elle a déjà toute la liste, pas besoin d'un aller-retour).
 
 @app.get("/joueurs/{joueur_id}/objectifs-series")
-def objectifs_series(joueur_id: int):
+def objectifs_series(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes objectifs de séries par groupe musculaire.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.objectifs_series_du_joueur(joueur_id)
@@ -1235,8 +1282,16 @@ def definir_objectifs_series(joueur_id: int, donnees: ObjectifsSeries,
 
 
 @app.get("/joueurs/{joueur_id}/groupes-exercices")
-def groupes_exercices(joueur_id: int):
-    """Les corrections manuelles « cet exercice = ce groupe musculaire »."""
+def groupes_exercices(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes corrections manuelles de groupe musculaire.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.groupes_exercices_du_joueur(joueur_id)
@@ -1281,7 +1336,16 @@ def creer_cycle(joueur_id: int, cycle: NouveauCycle,
 
 
 @app.get("/joueurs/{joueur_id}/cycles")
-def cycles_du_joueur(joueur_id: int):
+def cycles_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes programmes complets (cycles) avec leurs séances.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.cycles_du_joueur(joueur_id)
@@ -1301,7 +1365,16 @@ def supprimer_cycle(cycle_id: int, courant: dict = Depends(auth.utilisateur_cour
 # ----- Planning par date précise (calendrier interactif) -----
 
 @app.get("/joueurs/{joueur_id}/planning")
-def planning_du_joueur(joueur_id: int):
+def planning_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mon calendrier : les programmes posés à une date précise.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.planning_du_joueur(joueur_id)
@@ -1387,16 +1460,29 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
 
 
 @app.get("/joueurs/{joueur_id}/entrainements")
-def entrainements_du_joueur(joueur_id: int):
+def entrainements_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mon journal de séances, de la plus récente à la plus ancienne.
+
+    LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : cet endpoint répondait à
+    N'IMPORTE QUI, sans même être connecté — il suffisait de connaître un
+    numéro de joueur pour lire ses données d'entraînement. L'écriture, elle,
+    était correctement verrouillée depuis toujours : c'était une asymétrie,
+    pas un choix.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.entrainements_du_joueur(joueur_id)
 
 
 @app.get("/joueurs/{joueur_id}/exercices/{exercice}/dernier")
-def dernieres_series(joueur_id: int, exercice: str, avant: str | None = None):
+def dernieres_series(joueur_id: int, exercice: str, avant: str | None = None,
+                     courant: dict = Depends(auth.utilisateur_courant)):
     """SURCHARGE PROGRESSIVE : dernières séries loggées pour cet exercice,
     avant la date donnée (par défaut aujourd'hui) — pour savoir quoi battre."""
+    # LECTURE PROTÉGÉE depuis le 06/09/2026 (audit) : répondait à n'importe
+    # qui, sans connexion. Voir `entrainements_du_joueur` pour le détail.
+    auth.verifier_proprietaire(courant, joueur_id)
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     avant_date = avant or date.today().isoformat()

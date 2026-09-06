@@ -47,8 +47,8 @@ class TestAPIXP(unittest.TestCase):
         return {"Authorization": f"Bearer {token}"}
 
     def test_un_nouveau_joueur_a_zero_xp(self):
-        _, joueur_id = self._inscrire("XPZero")
-        r = self.client.get(f"/joueurs/{joueur_id}/xp")
+        token, joueur_id = self._inscrire("XPZero")
+        r = self.client.get(f"/joueurs/{joueur_id}/xp", headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["total"], 0)
 
@@ -56,7 +56,7 @@ class TestAPIXP(unittest.TestCase):
         token, joueur_id = self._inscrire("XPSeance")
         self.client.post(f"/joueurs/{joueur_id}/seances", json={"minutes": 45, "date": "2026-08-10"},
                          headers=self._en_tete(token))
-        corps = self.client.get(f"/joueurs/{joueur_id}/xp").json()
+        corps = self.client.get(f"/joueurs/{joueur_id}/xp", headers=self._en_tete(token)).json()
         self.assertEqual(corps["total"], 20)
         self.assertEqual(corps["sources"]["seances"]["nombre"], 1)
 
@@ -69,7 +69,7 @@ class TestAPIXP(unittest.TestCase):
             "date": "2026-08-10",
             "series": [{"exercice": "Squat", "numero_serie": 1, "reps": 8, "poids": 100}],
         }, headers=self._en_tete(token))
-        corps = self.client.get(f"/joueurs/{joueur_id}/xp").json()
+        corps = self.client.get(f"/joueurs/{joueur_id}/xp", headers=self._en_tete(token)).json()
         self.assertEqual(corps["sources"]["seances"]["nombre"], 1)
         self.assertEqual(corps["total"], 20)
 
@@ -78,7 +78,7 @@ class TestAPIXP(unittest.TestCase):
         for jour in ("2026-08-10", "2026-08-11"):
             self.client.post(f"/joueurs/{joueur_id}/seances", json={"minutes": 45, "date": jour},
                              headers=self._en_tete(token))
-        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/xp").json()["total"], 40)
+        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/xp", headers=self._en_tete(token)).json()["total"], 40)
 
     def test_l_xp_apparait_dans_le_profil(self):
         token, joueur_id = self._inscrire("XPProfil")
@@ -113,8 +113,12 @@ class TestAPIXP(unittest.TestCase):
             self.client.post(f"/joueurs/{id_fort}/performances/{exercice}/verifier",
                              json={"statut": "salle"}, headers=self._en_tete(token_fort))
 
-        xp_actif = self.client.get(f"/joueurs/{id_actif}/xp").json()["total"]
-        xp_fort = self.client.get(f"/joueurs/{id_fort}/xp").json()["total"]
+        # Chacun lit SON XP : la lecture est réservée à son propriétaire
+        # depuis le 06/09/2026.
+        xp_actif = self.client.get(f"/joueurs/{id_actif}/xp",
+                                   headers=self._en_tete(token_actif)).json()["total"]
+        xp_fort = self.client.get(f"/joueurs/{id_fort}/xp",
+                                  headers=self._en_tete(token_fort)).json()["total"]
         self.assertEqual(xp_actif, 200)   # 10 jours x 20
         self.assertEqual(xp_fort, 0)
 
@@ -125,7 +129,13 @@ class TestAPIXP(unittest.TestCase):
         self.assertNotEqual(fort["ligue"], "Aucune")
 
     def test_xp_dun_joueur_inconnu(self):
-        self.assertEqual(self.client.get("/joueurs/999999/xp").status_code, 404)
+        # 403 et NON 404 : depuis que la lecture est réservée au
+        # propriétaire, on ne peut plus deviner si un numéro de joueur
+        # existe en comparant les codes de réponse.
+        jeton, _ = self._inscrire("SondeXPInconnu")
+        self.assertEqual(
+            self.client.get("/joueurs/999999/xp",
+                            headers=self._en_tete(jeton)).status_code, 403)
 
 
 if __name__ == "__main__":

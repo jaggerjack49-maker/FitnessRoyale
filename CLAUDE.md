@@ -1932,6 +1932,109 @@ Toucher un record ouvre maintenant un champ de renommage, qui appelle le même
 
 Suite complète : **239 tests, tous OK.**
 
+## Audit général : sondes adversariales — 06/09/2026
+
+Demande de Hafiz : « effectue beaucoup de tests multiples et des audits, relève
+des problèmes en proposant des améliorations ». Méthode : des SONDES qui
+essaient de casser l'app (76 endpoints balayés côté serveur, entrées dégradées
+côté logique), pas une relecture de code. Trois familles de problèmes trouvées
+et corrigées, plus des points signalés sans être traités.
+
+### 1. TOUTES les données personnelles se lisaient sans connexion
+
+Le plus grave. L'ÉCRITURE était parfaitement verrouillée — sonde vérifiée :
+**15 tentatives d'écriture dans les données d'un autre joueur, 15 refus**, et
+ses données intactes après coup. Mais la LECTURE ne l'était NULLE PART : il
+suffisait de connaître un numéro de joueur (un entier) pour lire, **sans même
+être connecté**, ses programmes, son journal de séances, son calendrier, ses
+objectifs, ses cycles, ses duels, ses défis, son XP. Vérifié en dumpant le
+journal d'entraînement d'un joueur en anonyme.
+
+C'était une ASYMÉTRIE, pas un choix : rien dans le projet ne dit que ces
+données sont publiques.
+
+- 12 endpoints protégés par `verifier_proprietaire` + `Depends(utilisateur_courant)`.
+- LE CLASSEMENT RESTE OUVERT (`/joueurs`, `/classement/*`, `/bareme/*`) —
+  c'est son rôle. Une contre-épreuve le verrouille explicitement, pour qu'on
+  ne « sécurise » pas un jour ce qui doit rester public.
+- EFFET DE BORD VOULU : un id inexistant renvoie désormais 403 comme un id qui
+  ne m'appartient pas — on ne peut plus sonder la base en comparant les codes.
+- AUCUN IMPACT SUR L'APP : vérifié, elle n'appelle ces endpoints qu'avec
+  `moi.id`. Les tests existants ont dû être adaptés — ils affirmaient
+  l'ancien comportement, c'est-à-dire l'absence de protection.
+- Tests : `backend/tests/test_api_lecture_privee.py` — 7 tests.
+
+### 2. Les pseudos : TROISIÈME occurrence du même motif
+
+Après le nom d'exercice (04/09) et la salle de gym (04/09), voici la même
+erreur une troisième fois : **une saisie libre qui sert d'identifiant,
+comparée telle quelle**. La sonde a créé cinq comptes distincts —
+« Champion », « champion », « CHAMPION », « Champion » (espace final),
+« Champion » (espaces autour) — **visuellement identiques au classement**.
+Un pseudo fait uniquement d'espaces passait aussi.
+
+- `db.pseudo_deja_pris()` compare en `LOWER(TRIM(...))`, donc sans réécrire
+  les comptes existants ; le pseudo est nettoyé de ses espaces à l'écriture.
+- Accents CONSERVÉS, comme pour la salle : « Rene » et « René » sont deux
+  personnes différentes.
+- Tests : `backend/tests/test_api_pseudo_unique.py` — 8 tests.
+
+⚠️ LEÇON À RETENIR POUR LA SUITE : dès qu'une saisie libre sert à identifier
+ou regrouper quelque chose, il faut une fonction de comparaison normalisée,
+AVANT d'écrire la première ligne qui l'utilise. Trois fois le même bug en trois
+jours.
+
+### 3. Huit familles de plantage sur des données incomplètes
+
+Sondes d'entrées dégradées (séance sans `series`, `null` dans une liste, joueur
+sans `performances`, nom d'exercice qui n'est pas une chaîne…) passées dans la
+logique de l'app exécutée par Node. Toutes levaient une exception.
+
+POURQUOI C'EST GRAVE malgré l'absence de bug visible : ces fonctions sont au
+pied de TOUT l'affichage. `perfsVerifiees` alimente ligue, arène, classement et
+titres ; `suggererProchaineSerie` et `recordPersonnel` tournent PENDANT la
+séance. Une exception y déclenche l'Error Boundary — un écran d'erreur à la
+place de l'app, au moment précis où l'on s'entraîne. Ces aides sont du
+CONFORT : elles doivent se taire sur une donnée bancale, jamais casser l'écran.
+
+Durcis : `perfsVerifiees`, `classerParExercice` (donc tous les titres, qui en
+découlent), `seancesAvec`, `recordPersonnel`, `tousLesRecords`,
+`compterSeriesParGroupe`, `exercicesDeLaPeriode`, `normaliser`.
+- Tests : `test_robustesse_front.py` + `harnais/harnais_robustesse.mjs` —
+  ~80 entrées dégradées, le test échoue dès qu'un seul plantage reparaît.
+
+### Ce que l'audit a trouvé SAIN (contre-épreuves utiles)
+
+- **Propriété en écriture** : 15/15 refusées. Le modèle est solide.
+- **Sessions** : token inventé, en-tête malformé, token après déconnexion →
+  401 dans les trois cas.
+- **Validation** : poids corporel (hors 30-300 refusé), reps/poids d'une série
+  (0, négatif, absurde refusés), date d'entraînement mal formée (400), pseudo
+  trop court/long (422), mot de passe < 4 (422), exercice hors barème (400).
+- **Cas limites** : joueur inexistant (404), sexe inconnu au barème (404),
+  classements sur liste vide (`[]`, pas d'exception).
+- **La règle fondatrice tient** : 8 perfs DÉCLARÉES → ligue « Aucune ».
+- Une date vide sur un entraînement est remplacée par la date du jour — pas
+  une faille, un défaut acceptable.
+
+### Signalés, NON corrigés (décision à prendre)
+
+1. **Une perf à 1 000 000 000 kg est acceptée** (`valeur` n'a pas de plafond).
+   Non exploitable pour tricher — « la polyvalence récompensée » plafonne
+   l'effet d'un seul exercice, la ligue reste « Aucune » — mais ça pollue
+   l'affichage. PISTE : un maximum par exercice, ex. 3× le palier le plus haut.
+2. **Mot de passe minimum : 4 caractères.** Faible. PISTE : passer à 8, en
+   sachant que ça n'invalide pas les comptes existants.
+3. **Un joueur seul classé sur un exercice rafle un « 🥇 N°1 ».** Logique mais
+   discutable quand il n'y a aucun concurrent. PISTE : exiger 2 ou 3 joueurs
+   classés pour décerner un titre.
+4. **Le CORS est ouvert à tous les domaines** (`allow_origins=["*"]`, posé pour
+   la future version web). Sans conséquence tant que l'API exige un token
+   `Authorization` (pas de cookie de session), mais à resserrer le jour où le
+   site web sera hébergé.
+
+Suite complète : **255 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -1944,7 +2047,7 @@ Suite complète : **239 tests, tous OK.**
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (194 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (255 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

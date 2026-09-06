@@ -17,7 +17,12 @@ export function palierExercice(sexe, exercice, valeur) {
 
 // Performances vérifiées uniquement, sous forme de liste [exercice, perf].
 function perfsVerifiees(joueur) {
-  return Object.entries(joueur.performances).filter(([, perf]) => estVerifiee(perf));
+  // `|| {}` : un joueur SANS champ `performances` faisait planter tout l'écran
+  // (« Cannot convert undefined or null to object »), trouvé par l'audit du
+  // 06/09/2026. Cette fonction est au pied de TOUT — ligue, arène, classement,
+  // titres — donc une seule donnée incomplète noircissait l'app entière via
+  // l'Error Boundary. Un joueur sans perfs vaut désormais « aucune perf ».
+  return Object.entries(joueur?.performances || {}).filter(([, perf]) => estVerifiee(perf));
 }
 
 // Score SP global = somme des paliers atteints (perfs vérifiées uniquement).
@@ -167,8 +172,11 @@ export const listeExercicesClassement = Object.keys(baremes.homme);
 // comparer des kg entre hommes et femmes serait injuste (échelles de
 // barème différentes), le palier normalise déjà ça.
 export function classerParExercice(joueurs, exercice) {
-  return joueurs
-    .filter((j) => j.performances[exercice] && estVerifiee(j.performances[exercice]))
+  // `j?.performances?.[...]` : un joueur sans champ `performances` faisait
+  // planter ce classement — et avec lui TOUS les titres, qui en découlent
+  // (audit du 06/09/2026).
+  return (joueurs || [])
+    .filter((j) => j?.performances?.[exercice] && estVerifiee(j.performances[exercice]))
     .map((j) => ({
       ...j,
       palierExo: palierExercice(j.sexe, exercice, j.performances[exercice].valeur),

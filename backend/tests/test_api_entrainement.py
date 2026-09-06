@@ -157,7 +157,7 @@ class TestAPIEntrainement(unittest.TestCase):
                              json={"date": "2026-08-21", "programme_id": programme["id"]},
                              headers=self._en_tete(token))
         self.assertEqual(r.status_code, 201)
-        liste = self.client.get(f"/joueurs/{joueur_id}/planning").json()
+        liste = self.client.get(f"/joueurs/{joueur_id}/planning", headers=self._en_tete(token)).json()
         self.assertEqual(len(liste), 1)
         self.assertEqual(liste[0]["date"], "2026-08-21")
         self.assertEqual(liste[0]["programme_id"], programme["id"])
@@ -216,7 +216,7 @@ class TestAPIEntrainement(unittest.TestCase):
             {"groupe": "Dos", "series_cibles": 16},
         ]}, headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
-        liste = self.client.get(f"/joueurs/{joueur_id}/objectifs-series").json()
+        liste = self.client.get(f"/joueurs/{joueur_id}/objectifs-series", headers=self._en_tete(token)).json()
         self.assertEqual(len(liste), 2)
         par_groupe = {o["groupe"]: o["series_cibles"] for o in liste}
         self.assertEqual(par_groupe, {"Pectoraux": 12, "Dos": 16})
@@ -229,7 +229,7 @@ class TestAPIEntrainement(unittest.TestCase):
         self.client.put(f"/joueurs/{joueur_id}/objectifs-series", json={"objectifs": [
             {"groupe": "Biceps", "series_cibles": 8},
         ]}, headers=self._en_tete(token))
-        liste = self.client.get(f"/joueurs/{joueur_id}/objectifs-series").json()
+        liste = self.client.get(f"/joueurs/{joueur_id}/objectifs-series", headers=self._en_tete(token)).json()
         self.assertEqual(len(liste), 1)
         self.assertEqual(liste[0]["groupe"], "Biceps")
 
@@ -253,13 +253,13 @@ class TestAPIEntrainement(unittest.TestCase):
         r = self.client.put(f"/joueurs/{joueur_id}/groupes-exercices/Mon%20exo%20maison",
                             json={"groupe": "Dos"}, headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
-        liste = self.client.get(f"/joueurs/{joueur_id}/groupes-exercices").json()
+        liste = self.client.get(f"/joueurs/{joueur_id}/groupes-exercices", headers=self._en_tete(token)).json()
         self.assertEqual(liste[0]["exercice"], "Mon exo maison")
         self.assertEqual(liste[0]["groupe"], "Dos")
         # Réassigner le même exercice écrase l'ancien groupe (pas de doublon).
         self.client.put(f"/joueurs/{joueur_id}/groupes-exercices/Mon%20exo%20maison",
                         json={"groupe": "Biceps"}, headers=self._en_tete(token))
-        liste2 = self.client.get(f"/joueurs/{joueur_id}/groupes-exercices").json()
+        liste2 = self.client.get(f"/joueurs/{joueur_id}/groupes-exercices", headers=self._en_tete(token)).json()
         self.assertEqual(len(liste2), 1)
         self.assertEqual(liste2[0]["groupe"], "Biceps")
 
@@ -301,7 +301,7 @@ class TestAPIEntrainement(unittest.TestCase):
         self.assertEqual(cycle["seances"][2]["exercices"][0]["exercice"], "Squat")
         # Les séances apparaissent aussi comme programmes classiques
         # (donc dans la semaine type et le calendrier).
-        programmes = self.client.get(f"/joueurs/{joueur_id}/programmes").json()
+        programmes = self.client.get(f"/joueurs/{joueur_id}/programmes", headers=self._en_tete(token)).json()
         self.assertEqual(len(programmes), 3)
 
     def test_une_seance_de_cycle_peut_revenir_plusieurs_jours(self):
@@ -337,12 +337,12 @@ class TestAPIEntrainement(unittest.TestCase):
         token, joueur_id = self._inscrire("CyclisteSuppr")
         cycle = self.client.post(f"/joueurs/{joueur_id}/cycles", json=self._cycle_exemple(),
                                  headers=self._en_tete(token)).json()
-        self.assertEqual(len(self.client.get(f"/joueurs/{joueur_id}/cycles").json()), 1)
+        self.assertEqual(len(self.client.get(f"/joueurs/{joueur_id}/cycles", headers=self._en_tete(token)).json()), 1)
         r = self.client.delete(f"/cycles/{cycle['id']}", headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/cycles").json(), [])
+        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/cycles", headers=self._en_tete(token)).json(), [])
         # Les séances du cycle disparaissent avec lui.
-        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/programmes").json(), [])
+        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/programmes", headers=self._en_tete(token)).json(), [])
 
     def test_supprimer_le_cycle_dun_autre_refuse(self):
         token_a, id_a = self._inscrire("CyclisteSupprA")
@@ -386,7 +386,7 @@ class TestAPIEntrainement(unittest.TestCase):
                              ]}, headers=self._en_tete(token))
         self.assertEqual(r.status_code, 201)
         self.assertEqual(len(r.json()), 2)  # le doublon n'est pas recréé
-        liste = self.client.get(f"/joueurs/{joueur_id}/planning").json()
+        liste = self.client.get(f"/joueurs/{joueur_id}/planning", headers=self._en_tete(token)).json()
         self.assertEqual(len(liste), 3)
 
     def test_planifier_un_lot_avec_programme_dun_autre_refuse(self):
@@ -409,7 +409,7 @@ class TestAPIEntrainement(unittest.TestCase):
                                   headers=self._en_tete(token)).json()
         r = self.client.delete(f"/planning/{planif['id']}", headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/planning").json(), [])
+        self.assertEqual(self.client.get(f"/joueurs/{joueur_id}/planning", headers=self._en_tete(token)).json(), [])
 
     def test_lister_programmes_du_joueur(self):
         token, joueur_id = self._inscrire("Epsilon")
@@ -419,7 +419,7 @@ class TestAPIEntrainement(unittest.TestCase):
                          json={"nom": "Pull", "exercices": [
                              {"exercice": "Rowing barre", "series_cibles": 4, "reps_cibles": 10}
                          ]}, headers=self._en_tete(token))
-        r = self.client.get(f"/joueurs/{joueur_id}/programmes")
+        r = self.client.get(f"/joueurs/{joueur_id}/programmes", headers=self._en_tete(token))
         self.assertEqual(len(r.json()), 2)
 
     def test_supprimer_son_propre_programme(self):
@@ -428,7 +428,9 @@ class TestAPIEntrainement(unittest.TestCase):
                                 headers=self._en_tete(token)).json()
         r = self.client.delete(f"/programmes/{cree['id']}", headers=self._en_tete(token))
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(self.client.get(f"/programmes/{cree['id']}").status_code, 404)
+        self.assertEqual(
+            self.client.get(f"/programmes/{cree['id']}",
+                            headers=self._en_tete(token)).status_code, 404)
 
     def test_supprimer_le_programme_dun_autre_refuse(self):
         token_a, id_a = self._inscrire("Eta")
@@ -482,7 +484,7 @@ class TestAPIEntrainement(unittest.TestCase):
                 "date": jour,
                 "series": [{"exercice": "Squat", "numero_serie": 1, "reps": 8, "poids": 80}],
             }, headers=self._en_tete(token))
-        r = self.client.get(f"/joueurs/{joueur_id}/entrainements")
+        r = self.client.get(f"/joueurs/{joueur_id}/entrainements", headers=self._en_tete(token))
         dates = [e["date"] for e in r.json()]
         self.assertEqual(dates, ["2026-07-15", "2026-07-10", "2026-07-01"])
 
@@ -503,7 +505,7 @@ class TestAPIEntrainement(unittest.TestCase):
             "series": [{"exercice": "Squat", "numero_serie": 1, "reps": 8, "poids": 100}],
         }, headers=self._en_tete(token))
 
-        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Développé couché/dernier?avant=2026-07-20")
+        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Développé couché/dernier?avant=2026-07-20", headers=self._en_tete(token))
         corps = r.json()
         self.assertEqual(corps["date"], "2026-07-10")
         self.assertEqual(len(corps["series"]), 2)
@@ -517,12 +519,12 @@ class TestAPIEntrainement(unittest.TestCase):
         }, headers=self._en_tete(token))
         # "avant" = la même date que la séance -> ne doit PAS la voir (utile pour
         # comparer "aujourd'hui" à la fois précédente sans se comparer à soi-même).
-        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Squat/dernier?avant=2026-07-10")
+        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Squat/dernier?avant=2026-07-10", headers=self._en_tete(token))
         self.assertIsNone(r.json()["date"])
 
     def test_dernieres_series_exercice_jamais_fait(self):
         token, joueur_id = self._inscrire("Pi")
-        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Inconnu/dernier")
+        r = self.client.get(f"/joueurs/{joueur_id}/exercices/Inconnu/dernier", headers=self._en_tete(token))
         self.assertIsNone(r.json()["date"])
         self.assertEqual(r.json()["series"], [])
 

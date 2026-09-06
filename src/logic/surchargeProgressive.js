@@ -11,9 +11,15 @@
 // Les séances (plus récentes d'abord) où cet exercice a été fait.
 // `avantDate` exclut la séance en cours (on ne se compare pas à soi-même).
 function seancesAvec(entrainements, exercice, avantDate = null) {
-  return entrainements
-    .filter((e) => (!avantDate || e.date < avantDate)
-      && e.series.some((s) => s.exercice === exercice))
+  // Garde-fous ajoutés le 06/09/2026 (audit) : une séance sans `series`, ou un
+  // trou dans la liste, faisait planter la suggestion de charge — donc tout
+  // l'écran de séance, au moment précis où l'on s'entraîne. Ces trois aides
+  // (suggestion, record, stagnation) sont du CONFORT : elles doivent se taire
+  // sur une donnée incomplète, jamais casser la séance en cours.
+  return (entrainements || [])
+    .filter((e) => e && Array.isArray(e.series)
+      && (!avantDate || e.date < avantDate)
+      && e.series.some((s) => s && s.exercice === exercice))
     .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
 }
 
@@ -71,9 +77,12 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, avan
 // Renvoie { poids, reps, date } ou null si jamais fait.
 export function recordPersonnel(entrainements, exercice) {
   let record = null;
-  entrainements.forEach((entrainement) => {
+  // Mêmes garde-fous que `seancesAvec` : une séance incomplète ne doit pas
+  // faire tomber l'écran (audit du 06/09/2026).
+  (entrainements || []).forEach((entrainement) => {
+    if (!entrainement || !Array.isArray(entrainement.series)) return;
     entrainement.series
-      .filter((s) => s.exercice === exercice)
+      .filter((s) => s && s.exercice === exercice)
       .forEach((serie) => {
         if (!record
           || serie.poids > record.poids
@@ -114,7 +123,10 @@ export function detecterStagnation(entrainements, exercice, seuil = 3, avantDate
 // récapitulative « 🏆 Mes records ».
 export function tousLesRecords(entrainements) {
   const exercices = new Set();
-  entrainements.forEach((e) => e.series.forEach((s) => exercices.add(s.exercice)));
+  (entrainements || []).forEach((e) => {
+    if (!e || !Array.isArray(e.series)) return;
+    e.series.forEach((s) => { if (s && s.exercice) exercices.add(s.exercice); });
+  });
   return [...exercices]
     .map((exercice) => ({ exercice, ...recordPersonnel(entrainements, exercice) }))
     .sort((a, b) => b.poids - a.poids);

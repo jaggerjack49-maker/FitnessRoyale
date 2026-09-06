@@ -16,7 +16,10 @@ export const groupesMusculaires = [
 // et toute la ponctuation remplacée par des espaces. « Leg-curl », « leg curl »
 // et « LEG CURL » deviennent donc la même chose.
 function normaliser(texte) {
-  return (texte || '')
+  // `String(...)` et non `(texte || '')` : un nom d'exercice qui ne serait pas
+  // une chaîne (un nombre venu d'un import, un objet) faisait planter
+  // `.toLowerCase()` — donc tout le comptage de séries (audit du 06/09/2026).
+  return String(texte == null ? '' : texte)
     .toLowerCase()
     .normalize('NFD')
     // ̀-ͯ = les accents détachés par NFD, écrits en échappement
@@ -129,9 +132,13 @@ export function lundiDeLaSemaine(date = new Date()) {
 // Renvoie { Pectoraux: 12, Dos: 8, ... } (groupes sans série absents).
 export function compterSeriesParGroupe(entrainements, corrections, debutISO, finISO) {
   const total = {};
-  entrainements.forEach((entrainement) => {
+  // Garde-fous (audit du 06/09/2026) : une séance sans date ou sans `series`
+  // faisait planter le comptage, donc tout l'onglet Entraînement.
+  (entrainements || []).forEach((entrainement) => {
+    if (!entrainement || !Array.isArray(entrainement.series)) return;
     if (entrainement.date < debutISO || entrainement.date > finISO) return;
     entrainement.series.forEach((serie) => {
+      if (!serie) return;
       const groupe = groupeDeLExercice(serie.exercice, corrections);
       if (!groupe) return; // exercice non classé : compté nulle part
       total[groupe] = (total[groupe] || 0) + 1;
@@ -147,10 +154,11 @@ export function compterSeriesParGroupe(entrainements, corrections, debutISO, fin
 // classé à tort dans le Dos était impossible à corriger).
 export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finISO) {
   const parNom = new Map();
-  entrainements.forEach((entrainement) => {
+  (entrainements || []).forEach((entrainement) => {
+    if (!entrainement || !Array.isArray(entrainement.series)) return;
     if (entrainement.date < debutISO || entrainement.date > finISO) return;
     entrainement.series.forEach((serie) => {
-      if (parNom.has(serie.exercice)) return;
+      if (!serie || !serie.exercice || parNom.has(serie.exercice)) return;
       parNom.set(serie.exercice, {
         exercice: serie.exercice,
         groupe: groupeDeLExercice(serie.exercice, corrections),
