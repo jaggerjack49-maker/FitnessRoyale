@@ -2035,6 +2035,47 @@ découlent), `seancesAvec`, `recordPersonnel`, `tousLesRecords`,
 
 Suite complète : **255 tests, tous OK.**
 
+## Écran de chargement illustré — 06/09/2026
+
+Demande de Hafiz : utiliser l'illustration qu'il a fournie comme fond pendant
+le réveil et la connexion au serveur. Nouveau composant
+`src/components/EcranChargement.js`, préparation par
+`scripts/preparer_fond_chargement.py` (même convention que les arènes et
+l'icône : on dépose l'image dans `icones/`, on relance le script).
+
+- LE SCRIPT COUPE LE BANDEAU PEINT que contenait l'illustration
+  (« INITIALISATION DU SERVEUR… », une barre de progression, « PLUS FORTS
+  ENSEMBLE »), et l'app pose le sien au même endroit. DEUX RAISONS :
+  1. le message doit CHANGER — « Connexion au serveur… » puis « Réveil du
+     serveur… / il dormait, jusqu'à 1 minute, c'est normal ». C'est
+     précisément cette phrase qui évite de croire à une panne (voir
+     « Réveil du serveur, côté app ») ; un texte peint ne peut pas la porter ;
+  2. une barre FIGÉE à 65 % pendant une minute d'attente donne exactement
+     l'impression de blocage qu'on cherche à éviter.
+- La barre de l'app est donc ANIMÉE et volontairement INDÉTERMINÉE : un
+  reflet doré qui balaie la piste en aller-retour. On ne connaît pas la durée
+  d'un réveil, on ne prétend pas afficher un pourcentage.
+- Motif d'animation : `Animated.loop(Animated.sequence([aller, retour]))`,
+  le même que l'aura pulsante de `CarteArenAccueil` — on ne dépend d'aucune
+  remise à zéro implicite entre deux passages.
+- PNG 2,1 Mo → **JPEG 305 ko** : aucune transparence n'est utile pour un fond.
+- `App.js` enveloppe l'écran dans un `View style={styles.conteneur}` : avec un
+  simple fragment `<>`, l'image n'a aucune hauteur à remplir. Et `fond` porte
+  `width/height: '100%'` EN PLUS de `flex: 1` — vérifié en les retirant, le bas
+  de l'écran redevient noir sur le web.
+
+⚠️ PIÈGE DE MÉTHODE À RETENIR (m'a coûté trois faux diagnostics) :
+**dans le volet navigateur masqué, `requestAnimationFrame` est en pause**,
+donc AUCUNE animation React Native ne progresse — pas même un `Animated.timing`
+nu. J'ai d'abord cru à une boucle cassée, puis à `useNativeDriver`, et écrit
+deux fois des commentaires affirmant une cause jamais démontrée. C'est une
+sonde (`window.__sonde` comptant les ticks d'un `addListener`, plus un timing
+témoin) qui a tranché : zéro tick partout, y compris sur le témoin. LEÇON :
+avant de conclure qu'une animation est cassée, vérifier que l'environnement
+d'observation la fait tourner.
+L'animation reste donc À CONFIRMER SUR L'APK — le rendu statique des deux
+états, lui, est vérifié en capture.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

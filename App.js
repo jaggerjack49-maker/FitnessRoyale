@@ -28,6 +28,7 @@ import CompetitionScreen from './src/screens/CompetitionScreen';
 import PerformancesScreen from './src/screens/PerformancesScreen';
 import PaliersScreen from './src/screens/PaliersScreen';
 import ClanScreen from './src/screens/ClanScreen';
+import EcranChargement from './src/components/EcranChargement';
 import EntrainementScreen from './src/screens/EntrainementScreen';
 import LimiteErreur from './src/components/LimiteErreur';
 import Losange from './src/components/Losange';
@@ -302,13 +303,17 @@ function AppInterne() {
   // le message change pour ne pas donner une fausse impression de panne
   // pendant l'attente (jusqu'à ~1 minute).
   if (chargement) {
+    // Écran plein cadre (illustration fournie par Hafiz le 06/09/2026), donc
+    // PAS de SafeAreaView ici : l'image doit aller jusqu'aux bords, y compris
+    // sous la barre d'état. Le texte, lui, est posé en bas, loin de l'encoche.
     return (
-      <SafeAreaView style={[styles.conteneur, styles.conteneurChargement]}>
+      // Un conteneur `flex: 1` est INDISPENSABLE ici : sans lui (un simple
+      // fragment `<>`), l'image de fond n'a aucune hauteur à remplir et se
+      // contente de sa taille naturelle, le bas de l'écran restant noir.
+      <View style={styles.conteneur}>
         <StatusBar style="light" />
-        <Text style={styles.chargementTexte}>
-          {reveil ? '🔄 Réveil du serveur… (jusqu\'à 1 min)' : '⏳ Connexion au serveur…'}
-        </Text>
-      </SafeAreaView>
+        <EcranChargement reveil={reveil} />
+      </View>
     );
   }
 
@@ -422,8 +427,6 @@ const styles = StyleSheet.create({
   },
   onglet: { flex: 1, alignItems: 'center', gap: 5 },
   ongletLibelle: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.5 },
-  conteneurChargement: { alignItems: 'center', justifyContent: 'center' },
-  chargementTexte: { color: colors.texteGris, fontSize: 16 },
   banniereHorsLigne: {
     backgroundColor: colors.carteClaire,
     borderBottomWidth: 1,
