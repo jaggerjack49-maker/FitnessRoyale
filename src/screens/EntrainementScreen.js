@@ -28,14 +28,10 @@ import {
   detecterStagnation, tousLesRecords,
 } from '../logic/surchargeProgressive';
 import * as notifications from '../notifications';
-
-// La date locale 'AAAA-MM-JJ' d'un objet Date (sans passer par l'UTC de
-// toISOString, qui peut décaler d'un jour selon le fuseau horaire).
-function enISO(date) {
-  const mois = String(date.getMonth() + 1).padStart(2, '0');
-  const jour = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${mois}-${jour}`;
-}
+import * as stockageSeance from '../stockageSeance';
+import {
+  enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
+} from '../logic/rattrapage';
 
 // BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
 // (`toISOString`), alors que les cases du calendrier utilisent la date LOCALE
@@ -47,6 +43,13 @@ function enISO(date) {
 // Les deux passent maintenant par le même calcul.
 function aujourdhui() {
   return enISO(new Date());
+}
+
+// « lundi 7 septembre » — pour nommer un jour manqué sans faire lire une
+// date ISO à l'utilisateur.
+function libelleDate(dateISO) {
+  const date = new Date(`${dateISO}T12:00:00`);
+  return `${jourDeLaDate(date)} ${date.getDate()} ${nomsMois[date.getMonth()]}`;
 }
 
 const nomsMois = [
@@ -67,23 +70,6 @@ function grilleDuMois(annee, mois) {
   const semaines = [];
   for (let i = 0; i < cases.length; i += 7) semaines.push(cases.slice(i, i + 7));
   return semaines;
-}
-
-// Un programme est-il "actif" ce jour-là, et si planifié, à quelle semaine en
-// est-il ? (pour le calendrier et le badge "Semaine 2/4" des programmes)
-function planificationProgramme(programme, dateISO) {
-  const jours = programme.jours || [];
-  if (jours.length === 0) return { prevuCeJour: false, semaine: null };
-  const dateJs = new Date(`${dateISO}T12:00:00`); // midi : à l'abri des fuseaux
-  const prevuCeJour = jours.includes(jourDeLaDate(dateJs));
-  if (!programme.date_debut) return { prevuCeJour, semaine: null };
-  if (dateISO < programme.date_debut) return { prevuCeJour: false, semaine: null };
-  const debut = new Date(`${programme.date_debut}T12:00:00`);
-  const numSemaine = Math.floor((dateJs - debut) / (7 * 24 * 3600 * 1000)) + 1;
-  if (programme.duree_semaines && numSemaine > programme.duree_semaines) {
-    return { prevuCeJour: false, semaine: null }; // programme terminé
-  }
-  return { prevuCeJour, semaine: numSemaine };
 }
 
 // Cherche les dernières séries loggées pour un exercice, AVANT une date donnée
@@ -147,6 +133,40 @@ function LigneExercicePrevu({ exo, entrainements }) {
           {suggestion.reps} reps
         </Text>
       )}
+    </View>
+  );
+}
+
+// LES JOURS D'UNE SÉANCE, MODIFIABLES D'UNE TOUCHE (07/09/2026).
+// Demande de Hafiz : « on doit pouvoir configurer les jours du programme sur
+// une semaine, et ceux-ci seront projetés sur le mois ».
+//
+// LA PROJECTION EST AUTOMATIQUE, il n'y a rien à « appliquer » : le calendrier
+// mensuel demande à `planificationProgramme` si la séance tombe ce jour-là, et
+// cette fonction ne regarde que les jours cochés ici. Cocher « lundi » remplit
+// donc TOUS les lundis du mois affiché — et des mois suivants — d'un seul geste.
+//
+// Ce qui manquait n'était pas la projection (elle existait depuis la v2) mais
+// le moyen de CHANGER ces jours après coup : il fallait supprimer le programme
+// et le recréer.
+function ChoixJoursSeance({ programme, onBasculer }) {
+  const jours = programme.jours || [];
+  return (
+    <View style={styles.lignePucesJoursSeance}>
+      {joursSemaine.map((jour) => {
+        const actif = jours.includes(jour);
+        return (
+          <TouchableOpacity
+            key={jour}
+            style={[styles.puceJourPetite, actif && styles.puceJourActive]}
+            onPress={() => onBasculer(programme, jour)}
+          >
+            <Text style={[styles.puceJourTexte, actif && styles.puceJourTexteActif]}>
+              {abreviationsJours[jour]}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -351,7 +371,15 @@ const stylesConfirmation = StyleSheet.create({
   texteAnnuler: { color: colors.texteGris, fontSize: 12 },
 });
 
-export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLocale }) {
+// `idStockage` : sous quel compte ranger la séance en cours et la file
+// d'attente sur CE téléphone. Ce n'est pas toujours `moi.id` — sans réseau,
+// l'app retombe sur l'identité de démonstration alors que la séance doit
+// rester rattachée au vrai compte (voir src/stockageSeance.js).
+// Les appels au SERVEUR, eux, continuent d'utiliser `moi.id`.
+export default function EntrainementScreen({
+  moi, estConnecte, ajouterSeanceLocale, idStockage,
+}) {
+  const idLocal = idStockage ?? moi.id;
   const [vue, setVue] = useState('accueil'); // 'accueil' | 'nouveauProgramme' | 'seance'
   const [programmes, setProgrammes] = useState([]);
   const [entrainements, setEntrainements] = useState([]);
@@ -497,10 +525,72 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
 
+  // ---- La séance survit à tout (07/09/2026) ----
+  // `seanceRestauree` : a-t-on FINI de relire la séance interrompue ?
+  // Ce drapeau existe pour ne pas écraser la mémoire avec un état vide
+  // pendant le tout premier rendu, avant que la lecture soit revenue.
+  const [seanceRestauree, setSeanceRestauree] = useState(false);
+  // La date de la séance qu'on est en train de RATTRAPER (null sinon) —
+  // purement informatif : la séance reste enregistrée au jour où on la fait.
+  const [rattrapageDe, setRattrapageDe] = useState(null);
+  // Combien de séances terminées attendent encore d'être envoyées au serveur.
+  const [nbEnAttente, setNbEnAttente] = useState(0);
+
   useEffect(() => {
     if (!estConnecte) return;
     chargerTout();
   }, [estConnecte]);
+
+  // AU DÉMARRAGE : REPRENDRE LA SÉANCE INTERROMPUE (demande de Hafiz du
+  // 07/09/2026 : « on doit pouvoir rattraper une séance en cours même si on
+  // est déconnecté du serveur, et si on se reconnecte on est lancé
+  // directement sur la séance »).
+  // Ça ne concerne pas que la reconnexion : App.js DÉMONTE cet écran dès
+  // qu'on change d'onglet, donc jusqu'ici toucher « Profil » au milieu
+  // d'une séance suffisait à perdre toutes les séries saisies.
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      // Les séances terminées que le serveur n'a pas encore reçues doivent
+      // apparaître dans l'historique DÈS LE DÉPART, même hors-ligne : sans ça
+      // une séance faite sans réseau semblait ne jamais avoir existé au
+      // relancement de l'app (records, suggestions et volume de la semaine
+      // l'ignoraient tous).
+      const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
+      if (annule) return;
+      setNbEnAttente(enAttente.length);
+      if (enAttente.length > 0) {
+        setEntrainements((liste) => {
+          const connus = new Set(liste.map((e) => e.id));
+          return [...enAttente.filter((s) => !connus.has(s.id)), ...liste];
+        });
+      }
+
+      const seance = await stockageSeance.lireSeanceEnCours(idLocal);
+      if (annule) return;
+      if (seance) {
+        setProgrammeActif(seance.programmeActif || null);
+        setExercicesSession(seance.exercicesSession || []);
+        setSeriesLoggees(seance.seriesLoggees || {});
+        setChampsSaisie(seance.champsSaisie || {});
+        setRattrapageDe(seance.rattrapageDe || null);
+        setVue('seance');
+      }
+      setSeanceRestauree(true);
+    })();
+    return () => { annule = true; };
+  }, [idLocal]);
+
+  // On réécrit la séance à CHAQUE changement. L'écriture est locale et
+  // minuscule ; c'est le seul moyen qu'elle survive à une fermeture
+  // brutale de l'app (batterie vide, Android qui récupère la mémoire).
+  useEffect(() => {
+    if (!seanceRestauree || vue !== 'seance') return;
+    stockageSeance.ecrireSeanceEnCours(idLocal, {
+      programmeActif, exercicesSession, seriesLoggees, champsSaisie, rattrapageDe,
+    });
+  }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
+      champsSaisie, rattrapageDe, idLocal]);
 
   async function chargerTout() {
     setChargement(true);
@@ -514,7 +604,14 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         api.groupesExercices(moi.id),
       ]);
       setProgrammes(p);
-      setEntrainements(e);
+      // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
+      // dont l'envoi a échoué) n'existent que sur ce téléphone. Écraser la
+      // liste par celle du serveur les effaçait — au moment PRÉCIS où l'on
+      // se reconnectait, c'est-à-dire là où l'on croyait justement qu'elles
+      // étaient enfin sauvegardées (correctif du 07/09/2026).
+      const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
+      setNbEnAttente(enAttente.length);
+      setEntrainements([...enAttente, ...e]);
       setPlanning(pl);
       setCycles(c);
       setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
@@ -533,19 +630,46 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     } finally {
       setChargement(false);
     }
+    // Le serveur répond : on lui remet les séances qu'il n'a jamais reçues.
+    viderLaFileDAttente();
+  }
+
+  // Renvoie au serveur les séances terminées restées sur le téléphone.
+  // Une séance ne quitte la file QUE lorsque le serveur a confirmé l'avoir
+  // enregistrée : en cas d'échec elle y reste et repartira au prochain
+  // chargement. On préfère renvoyer une séance une fois de trop que la perdre.
+  async function viderLaFileDAttente() {
+    if (!estConnecte) return;
+    const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
+    if (enAttente.length === 0) return;
+    for (const seance of enAttente) {
+      try {
+        // Un programme créé hors-ligne porte un id « local-… » que le
+        // serveur ne connaît pas : la séance part alors sans programme
+        // plutôt que d'être refusée. Les séries, elles, sont intactes.
+        const programmeId = seance.programme_id
+          && !String(seance.programme_id).startsWith('local-')
+          ? seance.programme_id : null;
+        const cree = await api.creerEntrainement(
+          moi.id, programmeId, seance.date, seance.series
+        );
+        await stockageSeance.retirerSeanceEnAttente(seance.id);
+        setEntrainements((liste) =>
+          liste.map((ent) => (ent.id === seance.id ? cree : ent))
+        );
+      } catch {
+        break; // réseau coupé : inutile d'insister sur les suivantes
+      }
+    }
+    setNbEnAttente((await stockageSeance.lireSeancesEnAttente(idLocal)).length);
   }
 
   // Tout ce qui est prévu une date donnée : les programmes RÉCURRENTS (jours
   // de la semaine type) + ceux posés sur cette DATE PRÉCISE via le calendrier.
+  // Le calcul vit dans `src/logic/rattrapage.js` — c'est le même que celui qui
+  // sert à repérer les séances manquées, et deux copies finiraient par diverger.
   function programmesPlanifiesLe(dateISO) {
-    const recurrents = programmes
-      .map((p) => ({ programme: p, plan: planificationProgramme(p, dateISO) }))
-      .filter(({ plan }) => plan.prevuCeJour);
-    const precis = planning
-      .filter((pl) => pl.date === dateISO)
-      .map((pl) => ({ planif: pl, programme: programmes.find((p) => p.id === pl.programme_id) }))
-      .filter((x) => x.programme);
-    return { recurrents, precis };
+    return programmesPrevusLe(programmes, planning, dateISO);
   }
 
   // Semaine type : enregistre LA SÉANCE d'un jour (nom + exercices écrits sur
@@ -739,6 +863,30 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       }
     });
     return trouves;
+  }
+
+  // Coche ou décoche UN jour pour une séance. La liste est remise dans
+  // l'ordre de la semaine (lundi → dimanche) pour que l'affichage reste lisible
+  // quel que soit l'ordre dans lequel on a touché les puces.
+  async function basculerJourProgramme(programme, jour) {
+    const actuels = programme.jours || [];
+    const vises = actuels.includes(jour)
+      ? actuels.filter((j) => j !== jour)
+      : [...actuels, jour];
+    const jours = joursSemaine.filter((j) => vises.includes(j));
+    setProgrammes((liste) =>
+      liste.map((p) => (p.id === programme.id ? { ...p, jours } : p))
+    );
+    setCycles((liste) => liste.map((c) => ({
+      ...c,
+      seances: c.seances.map((s) => (s.id === programme.id ? { ...s, jours } : s)),
+    })));
+    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    try {
+      await api.changerJoursProgramme(programme.id, jours);
+    } catch (err) {
+      setErreur(err.message || "Jours gardés en local, l'envoi au serveur a échoué.");
+    }
   }
 
   async function sauvegarderProgramme(programme, nom, exercices) {
@@ -1293,14 +1441,29 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
   }
 
   // ----- Logger une séance -----
-  function demarrerSeance(programme) {
+  // `dateRattrapee` = la date du jour manqué qu'on rattrape (voir la
+  // section « séances à rattraper »). Purement informatif : la séance est
+  // enregistrée au jour où on la FAIT, on ne réécrit jamais le calendrier.
+  function demarrerSeance(programme, dateRattrapee = null) {
     setProgrammeActif(programme);
     setExercicesSession(programme ? programme.exercices.map((e) => e.exercice) : []);
     setSeriesLoggees({});
     setChampsSaisie({});
     setNouvelExerciceLibre('');
+    setRattrapageDe(dateRattrapee);
     setErreur(null);
     setVue('seance');
+  }
+
+  // Quitter la séance SANS l'enregistrer. Maintenant que la séance survit à
+  // la fermeture de l'app, l'abandon doit effacer explicitement la mémoire —
+  // sinon on serait renvoyé sur cette séance au prochain lancement.
+  async function abandonnerSeance() {
+    await stockageSeance.effacerSeanceEnCours();
+    setRattrapageDe(null);
+    setSeriesLoggees({});
+    setChampsSaisie({});
+    setVue('accueil');
   }
 
   function ajouterExerciceLibre() {
@@ -1308,6 +1471,52 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     if (!nom || exercicesSession.includes(nom)) return;
     setExercicesSession((l) => [...l, nom]);
     setNouvelExerciceLibre('');
+  }
+
+  // MODIFIER UN PROGRAMME EN COURS D'UTILISATION (demande de Hafiz du
+  // 07/09/2026 : « on doit pouvoir modifier un programme en cours en y
+  // ajoutant des exercices »). Jusqu'ici il fallait sortir de la séance,
+  // aller dans « Mes programmes », ouvrir l'éditeur — donc en pratique on ne
+  // le faisait pas, et l'exercice ajouté à la volée restait absent du
+  // programme la fois suivante.
+  //
+  // L'OBJECTIF DE DÉPART EST DÉDUIT DE CE QU'ON VIENT DE FAIRE (nombre de
+  // séries réellement loggées, reps de la dernière) plutôt qu'inventé : c'est
+  // la seule information honnête dont on dispose à cet instant.
+  async function ajouterExerciceAuProgramme(exercice) {
+    const programme = programmeActif;
+    if (!programme) return;
+    const deja = (programme.exercices || []).some((e) => e.exercice === exercice);
+    if (deja) return;
+    const faites = seriesLoggees[exercice] || [];
+    const derniere = faites[faites.length - 1];
+    const exercices = [
+      ...(programme.exercices || []),
+      {
+        exercice,
+        series_cibles: Math.max(1, faites.length || 3),
+        reps_cibles: Math.max(1, parseInt(derniere?.reps, 10) || 10),
+      },
+    ];
+    // L'écran de séance lit `programmeActif.exercices` (cible de reps de la
+    // suggestion de charge) : il faut donc le mettre à jour lui aussi, pas
+    // seulement la liste des programmes.
+    setProgrammeActif({ ...programme, exercices });
+    setProgrammes((liste) =>
+      liste.map((p) => (p.id === programme.id ? { ...p, exercices } : p))
+    );
+    setCycles((liste) => liste.map((c) => ({
+      ...c,
+      seances: c.seances.map((s) => (s.id === programme.id ? { ...s, exercices } : s)),
+    })));
+    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    try {
+      await api.changerExercicesProgramme(programme.id, exercices);
+    } catch (err) {
+      setErreur(
+        err.message || "Exercice ajouté en local, l'envoi au serveur a échoué."
+      );
+    }
   }
 
   function majChampSaisie(exercice, champ, valeur) {
@@ -1401,6 +1610,16 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
     };
     setEntrainements((e) => [local, ...e]);
 
+    // ON MET LA SÉANCE À L'ABRI AVANT DE TENTER QUOI QUE CE SOIT (07/09/2026).
+    // L'ordre compte : si l'envoi échoue, si le réseau tombe pendant l'envoi,
+    // ou si l'app est fermée en plein milieu, elle est DÉJÀ dans la file
+    // d'attente locale. Elle repartira toute seule à la prochaine connexion.
+    await stockageSeance.ajouterSeanceEnAttente(idLocal, local);
+    // La séance est finie : la mémoire « séance en cours » n'a plus lieu d'être
+    // (sinon on serait renvoyé dessus au prochain lancement de l'app).
+    await stockageSeance.effacerSeanceEnCours();
+    setNbEnAttente((n) => n + 1);
+
     // Lie la séance loggée au compteur hebdo du Profil (estimation simple :
     // ~3 min par série, 20 min minimum).
     const dureeEstimee = Math.max(20, toutesLesSeries.length * 3);
@@ -1411,15 +1630,22 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
           ? programmeActif.id : null;
         const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries);
+        // Confirmée par le serveur : elle peut enfin sortir de la file.
+        await stockageSeance.retirerSeanceEnAttente(local.id);
+        setNbEnAttente((n) => Math.max(0, n - 1));
         setEntrainements((e) => e.map((ent) => (ent.id === local.id ? cree : ent)));
       } catch (err) {
-        setErreur(err.message || "Séance gardée en local, l'envoi au serveur a échoué.");
+        setErreur(
+          err.message
+          || "Séance gardée sur le téléphone : elle repartira toute seule au retour du réseau."
+        );
       }
     }
     // Le volume de la semaine vient de changer : on remet à jour le message du
     // rappel de suivi (sinon il annoncerait des chiffres périmés).
     rafraichirRappelSuivi([local, ...entrainements]);
     setEnregistrementEnCours(false);
+    setRattrapageDe(null);
     setVue('accueil');
   }
 
@@ -1633,6 +1859,19 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           💪 {programmeActif ? programmeActif.nom : 'Séance libre'}
         </Text>
         <Text style={styles.sousTitre}>{jour}</Text>
+        {rattrapageDe && (
+          <Text style={styles.bandeauRattrapage}>
+            ⏳ Rattrapage de la séance du {libelleDate(rattrapageDe)} — elle sera
+            enregistrée aujourd'hui.
+          </Text>
+        )}
+        {nbEnAttente > 0 && (
+          <Text style={styles.bandeauRattrapage}>
+            📡 {nbEnAttente} séance{nbEnAttente > 1 ? 's' : ''} gardée
+            {nbEnAttente > 1 ? 's' : ''} sur ce téléphone — elle
+            {nbEnAttente > 1 ? 's partiront' : ' partira'} au retour du réseau.
+          </Text>
+        )}
 
         {exercicesSession.map((exercice) => {
           const dernieres = trouverDernieresSeries(entrainements, exercice, jour);
@@ -1645,6 +1884,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           // jusqu'à « Terminer »), donc aucun risque de se comparer à soi-même.
           // Et si une séance a déjà été loggée aujourd'hui, elle compte bien.
           const cibleExo = programmeActif?.exercices?.find((e) => e.exercice === exercice);
+          const dansLeProgramme = !!cibleExo;
           const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles);
           const record = recordPersonnel(entrainements, exercice);
           const nouveauRecord = bat_le_record(seriesFaites, record);
@@ -1741,6 +1981,21 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 );
               })}
 
+              {/* Cet exercice ne fait pas partie du programme : on propose de
+                  l'y ajouter POUR DE BON, sans quitter la séance. On propose,
+                  on n'impose pas — un exercice de dépannage (machine prise) n'a
+                  pas à entrer dans le programme. */}
+              {programmeActif && !dansLeProgramme && (
+                <TouchableOpacity
+                  style={styles.boutonSecondaire}
+                  onPress={() => ajouterExerciceAuProgramme(exercice)}
+                >
+                  <Text style={styles.boutonSecondaireTexte}>
+                    ➕ Ajouter au programme « {programmeActif.nom} »
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <View style={styles.ligneAjoutSerie}>
                 <TextInput
                   style={[styles.champ, styles.champCourt]}
@@ -1766,20 +2021,22 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
           );
         })}
 
-        {!programmeActif && (
-          <View style={styles.ligneAjoutSerie}>
-            <TextInput
-              style={[styles.champ, { flex: 1 }]}
-              value={nouvelExerciceLibre}
-              onChangeText={setNouvelExerciceLibre}
-              placeholder="Ajouter un exercice…"
-              placeholderTextColor={colors.texteGris}
-            />
-            <TouchableOpacity style={styles.boutonAjouterSerie} onPress={ajouterExerciceLibre}>
-              <Text style={styles.boutonAjouterSerieTexte}>+ Exo</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* AJOUTER UN EXERCICE EN PLEINE SÉANCE — y compris quand on suit un
+            programme (07/09/2026). Ce champ n'apparaissait qu'en séance LIBRE :
+            avec un programme, une machine occupée ou un exercice ajouté au
+            débotté n'avait aucune place où être noté. */}
+        <View style={styles.ligneAjoutSerie}>
+          <TextInput
+            style={[styles.champ, { flex: 1 }]}
+            value={nouvelExerciceLibre}
+            onChangeText={setNouvelExerciceLibre}
+            placeholder="Ajouter un exercice…"
+            placeholderTextColor={colors.texteGris}
+          />
+          <TouchableOpacity style={styles.boutonAjouterSerie} onPress={ajouterExerciceLibre}>
+            <Text style={styles.boutonAjouterSerieTexte}>+ Exo</Text>
+          </TouchableOpacity>
+        </View>
 
         {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
 
@@ -1790,7 +2047,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
         </TouchableOpacity>
         {/* Sortir SANS enregistrer. C'était un lien gris discret (« Abandonner »)
             que Hafiz n'a pas trouvé — c'est maintenant un vrai bouton. */}
-        <TouchableOpacity style={styles.boutonSortir} onPress={() => setVue('accueil')}>
+        <TouchableOpacity style={styles.boutonSortir} onPress={abandonnerSeance}>
           <Text style={styles.boutonSortirTexte}>🚪 Sortir du programme (sans enregistrer)</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -1824,6 +2081,17 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
 
   // Records personnels, tous exercices confondus (section « 🏆 Mes records »).
   const mesRecords = tousLesRecords(entrainements);
+
+  // ---- LES SÉANCES MANQUÉES DE LA SEMAINE (07/09/2026) ----
+  // Demande de Hafiz : « si en cours de semaine on rate un jour, il peut être
+  // rattrapé ». Le calcul lui-même vit dans `src/logic/rattrapage.js` : il ne
+  // se voit à l'écran que les jours où l'on a vraiment raté quelque chose,
+  // donc il doit pouvoir se tester sur des dates choisies.
+  const jourJ = aujourdhui();
+  const manquees = seancesARattraper({
+    programmes, planning, entrainements, lundiISO: debutSemaineISO, jourJ,
+  });
+  const datesManquees = new Set(manquees.map((m) => m.date));
 
   // UN PROGRAMME EST-IL EN SERVICE ? (27/08/2026, demande de Hafiz : « si un
   // programme est enregistré et utilisé, la semaine type disparaît »)
@@ -2150,6 +2418,32 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
       </>
       )}
 
+      {/* ---- Les séances manquées de la semaine, et leur rattrapage ---- */}
+      {manquees.length > 0 && (
+        <View style={styles.carteRattrapage}>
+          <Text style={styles.titreRattrapage}>
+            ⏳ À rattraper cette semaine ({manquees.length})
+          </Text>
+          <Text style={styles.indice}>
+            Ces séances étaient prévues et n'ont pas été faites. La rattraper
+            l'enregistre à la date d'AUJOURD'HUI — on ne réécrit pas le
+            calendrier, on comble le trou.
+          </Text>
+          {manquees.map(({ date, programme }) => (
+            <View key={`${date}-${programme.id}`} style={styles.detailJour}>
+              <Text style={styles.nomProgrammeTexte}>{programme.nom}</Text>
+              <Text style={styles.indice}>prévue {libelleDate(date)}</Text>
+              <TouchableOpacity
+                style={styles.boutonUtiliserModele}
+                onPress={() => demarrerSeance(programme, date)}
+              >
+                <Text style={styles.boutonDemarrerTexte}>🏋️ Rattraper maintenant</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* ---- Calendrier mensuel interactif : touche une DATE pour voir son
            programme, en ajouter un, ou démarrer la séance du jour. ---- */}
       <Text style={styles.sectionTitre}>📆 Calendrier</Text>
@@ -2180,6 +2474,7 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             const { recurrents, precis } = programmesPlanifiesLe(dateISO);
             const prevu = recurrents.length + precis.length > 0;
             const fait = entrainements.some((e) => e.date === dateISO);
+            const manquee = datesManquees.has(dateISO);
             const estAujourdhui = dateISO === aujourdhui();
             const selectionne = jourOuvert === dateISO;
             return (
@@ -2198,7 +2493,9 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 <Text style={[styles.numeroJour, estAujourdhui && { color: colors.or, fontWeight: '800' }]}>
                   {dateJs.getDate()}
                 </Text>
-                <Text style={styles.marqueurJour}>{fait ? '✅' : prevu ? '•' : ''}</Text>
+                <Text style={[styles.marqueurJour, manquee && { color: colors.rouge }]}>
+                  {fait ? '✅' : manquee ? '!' : prevu ? '•' : ''}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -2473,6 +2770,10 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
                 </View>
                 {deroulee && !enEdition && (
                   <View style={styles.detailJour}>
+                    <Text style={styles.libelleJoursSeance}>
+                      Jours de la semaine (projetés sur tout le calendrier) :
+                    </Text>
+                    <ChoixJoursSeance programme={seance} onBasculer={basculerJourProgramme} />
                     {seance.exercices.length === 0 ? (
                       <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                     ) : seance.exercices.map((exo, i) => (
@@ -2557,6 +2858,10 @@ export default function EntrainementScreen({ moi, estConnecte, ajouterSeanceLoca
             />
             {deroulee && !enEdition && (
               <View style={styles.detailJour}>
+                <Text style={styles.libelleJoursSeance}>
+                  Jours de la semaine (projetés sur tout le calendrier) :
+                </Text>
+                <ChoixJoursSeance programme={programme} onBasculer={basculerJourProgramme} />
                 {programme.exercices.length === 0 ? (
                   <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                 ) : programme.exercices.map((exo, i) => (
@@ -2933,6 +3238,16 @@ const styles = StyleSheet.create({
   },
   boutonAjouterSerieTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
   lignePuces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  lignePucesJoursSeance: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: espacement.s,
+  },
+  puceJourPetite: {
+    paddingVertical: 5, paddingHorizontal: 7, borderRadius: 8,
+    backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
+  },
+  libelleJoursSeance: {
+    color: colors.texteGris, fontSize: 11, marginBottom: 4,
+  },
   puceJour: {
     paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
     backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
@@ -3040,6 +3355,14 @@ const styles = StyleSheet.create({
   exerciceDetailJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
   attenduDetailJour: { color: colors.or, fontSize: 11, marginTop: 1 },
   indiceModifier: { color: colors.texteGris, fontSize: 10 },
+  carteRattrapage: {
+    backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.rouge, marginBottom: espacement.m,
+  },
+  titreRattrapage: { color: colors.rouge, fontWeight: '800', marginBottom: 4 },
+  bandeauRattrapage: {
+    color: colors.or, fontSize: 12, lineHeight: 17, marginBottom: espacement.s,
+  },
   carteRenommage: {
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
     borderWidth: 1, borderColor: colors.or, marginBottom: espacement.m,

@@ -2076,6 +2076,139 @@ d'observation la fait tourner.
 L'animation reste donc À CONFIRMER SUR L'APK — le rendu statique des deux
 états, lui, est vérifié en capture.
 
+## Entraînement v5 : la séance ne se perd plus — 07/09/2026
+
+Cinq demandes de Hafiz en une, toutes autour du même constat : l'entraînement
+était la partie la plus fragile de l'app. Le fil conducteur : **une séance
+n'appartient ni à son programme, ni à l'écran qui l'affiche, ni au réseau.**
+
+### 1. Les performances survivent à tout, y compris à un programme refait à zéro
+
+⚠️ CÔTÉ SERVEUR, C'ÉTAIT DÉJÀ VRAI et ça n'a pas changé : `entrainements`
+porte `programme_id ... ON DELETE SET NULL` (et non CASCADE). Supprimer un
+programme ou un cycle entier ne touche donc jamais aux séries loggées —
+vérifié avant d'écrire une ligne de code, puis verrouillé par
+`backend/tests/test_historique_survit.py` (3 tests). C'est un simple mot-clé
+dans une définition de table, exactement le genre de détail qu'on change sans
+y penser en réécrivant un schéma.
+Les records et les suggestions de charge se retrouvent par le NOM de
+l'exercice (le seul identifiant qui existe, voir « Le NOM d'un exercice est
+son identifiant »), donc un programme recréé repart avec tout son historique.
+
+**LA VRAIE PERTE ÉTAIT CÔTÉ APP, et elle était double :**
+- la séance EN COURS vivait dans l'état React de `EntrainementScreen`. Or
+  App.js ne monte que l'onglet affiché : **toucher « Profil » au milieu d'une
+  séance effaçait toutes les séries saisies**, sans le moindre avertissement.
+  Fermer l'app faisait pire.
+- une séance TERMINÉE hors-ligne n'était ajoutée qu'à l'état local, et
+  `chargerTout()` remplaçait ensuite toute la liste par celle du serveur — qui
+  ne l'avait jamais reçue. Elle disparaissait donc **au moment précis où l'on
+  se reconnectait**, c'est-à-dire là où l'on croyait justement qu'elle était
+  enfin sauvegardée.
+
+### 2. `src/stockageSeance.js` — deux mémoires locales (AsyncStorage)
+
+- **La séance en cours** (`fitnessRoyale.seanceEnCours`) : réécrite à chaque
+  changement. C'est le seul moyen de survivre à une fermeture brutale
+  (batterie, Android qui récupère la mémoire).
+- **La file d'attente** (`fitnessRoyale.seancesAEnvoyer`) : les séances
+  TERMINÉES que le serveur n'a pas encore accusé réception.
+  ORDRE CRITIQUE dans `terminerSeance` : on écrit dans la file **avant** de
+  tenter l'envoi. Une séance ne sort de la file que sur confirmation du
+  serveur — on préfère la renvoyer une fois de trop que la perdre.
+  `viderLaFileDAttente()` la rejoue à chaque `chargerTout()`.
+- **`idStockage` — le piège qui a demandé un second correctif.** Tout est
+  rangé PAR JOUEUR. Mais si l'app redémarre SANS réseau, elle n'a personne à
+  qui demander qui est connecté : elle retombe sur l'identité de démonstration
+  (mockData, `moi.id` = 1). Une séance faite dans cet état aurait été rangée
+  sous un compte fictif et serait restée invisible — donc jamais envoyée — au
+  retour du réseau, exactement le scénario visé par la demande. D'où
+  `memoriserJoueurConnecte()` : on retient le dernier compte réellement
+  connecté sur ce téléphone. C'est un simple numéro, jamais une preuve
+  d'identité (le serveur exige toujours le token et vérifie la propriété).
+  `EntrainementScreen` reçoit donc `idStockage` en plus de `moi` : le
+  STOCKAGE local utilise `idStockage`, les appels au SERVEUR gardent `moi.id`.
+- Tests : `test_stockage_seance.py` + `harnais/harnais_stockage_seance.mjs`
+  (9 cas : relecture à l'identique, cloisonnement entre comptes, mémoire
+  corrompue, file qui ne se vide que sur confirmation). Le harnais utilise
+  `harnais/faux_asyncstorage.mjs`, un AsyncStorage en mémoire vers lequel
+  `resolveur.mjs` redirige le module natif.
+
+### 3. « Si on se reconnecte, on est lancé directement sur la séance »
+
+`EntrainementScreen` sait relire la séance interrompue — mais ça ne sert à
+rien tant qu'on ne REGARDE pas cet onglet, et l'app s'ouvre sur le Profil.
+C'est donc **App.js** qui vérifie au démarrage s'il existe une séance en cours
+et bascule sur l'onglet Entraînement. Uniquement au démarrage : on ne rapatrie
+pas l'utilisateur de force s'il vient de quitter la séance pour aller ailleurs.
+
+⚠️ CONSÉQUENCE : « 🚪 Sortir sans enregistrer » doit maintenant EFFACER
+explicitement la mémoire (`abandonnerSeance`), sinon on serait renvoyé sur
+cette séance au prochain lancement.
+
+### 4. Les jours de la semaine, modifiables et projetés sur le mois
+
+LA PROJECTION EXISTAIT DÉJÀ (le calendrier interroge `planificationProgramme`
+case par case, qui ne regarde que `programme.jours`) — ce qui manquait était le
+moyen de CHANGER ces jours après coup : il fallait supprimer le programme et le
+recréer. Un composant `ChoixJoursSeance` (7 puces) apparaît maintenant quand on
+déroule une séance dans « Mes programmes », sur les cycles comme sur les
+séances isolées. Cocher « mardi » remplit tous les mardis du calendrier, tout
+de suite et sans rien à « appliquer ».
+Vérifié dans le navigateur : Push Lun/Jeu → points sur 3, 7, 10, 14, 17, 21,
+24, 28 ; on ajoute Mardi → 1, 3, 7, 8, 10, 14, 15, 17, 21, 22, 24, 28, 29, et
+le serveur enregistre `["lundi", "mardi", "jeudi"]`.
+
+### 5. Rattraper un jour manqué (`src/logic/rattrapage.js`)
+
+AUCUNE NOUVELLE TABLE, AUCUN NOUVEL ÉTAT — même parti pris que les titres et
+l'XP : ce qui se recalcule tout seul ne peut pas se désynchroniser. Une séance
+prévue le jour J est FAITE si une séance a été loggée ce jour-là (peu importe
+laquelle), RATTRAPÉE si le MÊME programme a été loggé plus tard dans la
+semaine, MANQUÉE sinon. Seuls les jours DÉJÀ PASSÉS comptent.
+Un garde-fou non évident : on ne reproche pas un jour ANTÉRIEUR à la création
+du programme — cocher « lundi » un mercredi ferait sinon apparaître le lundi
+précédent comme manqué.
+Rattraper enregistre la séance **au jour où on la fait** : on ne réécrit pas
+le calendrier, on comble le trou. Un bandeau le dit pendant la séance.
+Le calendrier marque ces jours d'un `!` rouge (au lieu du `•`).
+
+POURQUOI CE CALCUL VIT DANS `src/logic/` ET PAS DANS L'ÉCRAN : il ne montre
+quelque chose que les jours où l'on a effectivement raté une séance —
+impossible à provoquer sur commande sans mentir à l'horloge (le jour où il a
+été écrit était un lundi, donc la section était forcément vide). Sorti de
+l'écran, il se teste sur des dates choisies : `test_rattrapage.py` +
+`harnais/cas_rattrapage.json` (9 cas). `planificationProgramme` et
+`programmesPrevusLe` ont déménagé là aussi — deux copies de la même règle
+finiraient par diverger.
+
+### 6. Ajouter un exercice à un programme EN COURS D'UTILISATION
+
+Le champ « ajouter un exercice » n'apparaissait qu'en séance LIBRE : avec un
+programme, une machine occupée ou un exercice ajouté au débotté n'avait aucune
+place où être noté. Il est désormais toujours là, et un exercice hors
+programme propose « ➕ Ajouter au programme "X" ».
+ON PROPOSE, ON N'IMPOSE PAS : un exercice de dépannage n'a pas à entrer dans
+le programme. L'objectif séries × reps est DÉDUIT de ce qu'on vient de faire
+(nombre de séries loggées, reps de la dernière) — la seule information honnête
+disponible à cet instant.
+Vérifié : 2 séries de face pull en séance → « face pull 2 × 15 » ajouté au
+programme côté serveur.
+
+### Ce qui a été vérifié dans l'app, et comment
+
+Parcours complet joué dans le navigateur contre un backend LOCAL (jamais la
+base de production) : séance démarrée, série saisie, changement d'onglet →
+séance intacte ; rechargement complet de la page → l'app rouvre DIRECTEMENT
+sur la séance ; serveur coupé, app redémarrée hors-ligne, séance terminée →
+rangée dans la file sous le vrai compte et non sous l'identité de
+démonstration ; serveur rallumé → la séance part et apparaît côté serveur.
+La seule chose forcée à la main est l'AFFICHAGE de la section « à rattraper »
+(un lundi, aucun jour de la semaine n'est encore passé) ; sa LOGIQUE, elle,
+est couverte par les 9 cas du harnais.
+
+Suite complète : **260 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -2088,7 +2221,7 @@ L'animation reste donc À CONFIRMER SUR L'APK — le rendu statique des deux
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (255 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (260 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -2117,8 +2250,9 @@ L'animation reste donc À CONFIRMER SUR L'APK — le rendu statique des deux
   en cours — le serveur garde tout via `GET /joueurs/{id}/duels`, non affiché pour l'instant)
 - Vraies illustrations d'avatar (physique/équipement qui évolue) — actuellement juste
   couleur/anneau/emblème, voir "Avatar évolutif"
-- Persistance hors-ligne de l'Entraînement (AsyncStorage) — actuellement, programmes/séances loggés
-  hors-ligne sont perdus si l'app redémarre avant reconnexion (voir "Entraînement")
+- Persistance hors-ligne des PROGRAMMES (AsyncStorage) — un programme créé hors-ligne est encore
+  perdu si l'app redémarre avant reconnexion. Les SÉANCES LOGGÉES, elles, ne le sont plus depuis
+  le 07/09/2026 (voir « Entraînement v5 »)
 - Champ durée explicite pour une séance loggée (Entraînement) — actuellement estimée automatiquement
   (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement"
 - Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait
@@ -2129,8 +2263,9 @@ L'animation reste donc À CONFIRMER SUR L'APK — le rendu statique des deux
   semaines passées, pas de graphique d'évolution) — voir "Entraînement v2"
 - Écran de progression PAR EXERCICE (toutes les séances d'un mouvement + courbe) — proposé à
   Hafiz le 12/08/2026, non retenu pour l'instant (il a choisi suggestion + records + stagnation)
-- Modifier un CYCLE existant (ajouter/retirer un jour, renommer le cycle) — actuellement il faut
-  le supprimer et le recréer ; ses séances restent éditables une par une dans la semaine type
+- Renommer un CYCLE (le nom du programme complet) — il faut encore le supprimer et le recréer.
+  Ajouter/retirer un JOUR se fait depuis le 07/09/2026 avec les puces de « Mes programmes »
+  (voir « Entraînement v5 »), et ses séances restent éditables une par une
 - IDÉE DE HAFIZ (12/08/2026) : transformer la SEMAINE TYPE en un programme à part entière
   (un objet « ma semaine » sauvegardable/partageable, plutôt qu'un simple assemblage de
   programmes par jour) — à creuser quand le reste sera stabilisé

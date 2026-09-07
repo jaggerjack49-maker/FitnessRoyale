@@ -1,0 +1,117 @@
+{
+  "_lisez_moi": [
+    "Les cas de test du RATTRAPAGE (src/logic/rattrapage.js), demande de Hafiz",
+    "du 07/09/2026. Ils vivent dans un fichier de DONNÉES parce que ce calcul",
+    "ne se voit à l'écran que les jours où l'on a vraiment raté une séance :",
+    "impossible à vérifier à l'œil sans mentir à l'horloge.",
+    "Semaine de référence : lundi 2026-09-07 -> dimanche 2026-09-13."
+  ],
+  "cas": [
+    {
+      "nom": "un lundi manqué ressort le mercredi",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-09",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [],
+      "attendu": [{"date": "2026-09-07", "programme": "Push"}]
+    },
+    {
+      "nom": "le jour même n'est jamais en retard",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-07",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [],
+      "attendu": []
+    },
+    {
+      "nom": "une seance loggee ce jour-la suffit, meme d'un autre programme",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-09",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [
+        {"id": 10, "programme_id": null, "date": "2026-09-07", "series": []}
+      ],
+      "attendu": []
+    },
+    {
+      "nom": "rattrapee plus tard dans la semaine : elle disparait",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-10",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [
+        {"id": 10, "programme_id": 1, "date": "2026-09-09", "series": []}
+      ],
+      "attendu": []
+    },
+    {
+      "nom": "un programme cree apres le jour manque ne compte pas",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-10",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-09T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [],
+      "attendu": []
+    },
+    {
+      "nom": "deux jours manques, dans l'ordre chronologique",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-10",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-09-01T10:00:00"},
+        {"id": 2, "nom": "Pull", "jours": ["mardi"], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [],
+      "entrainements": [],
+      "attendu": [
+        {"date": "2026-09-07", "programme": "Push"},
+        {"date": "2026-09-08", "programme": "Pull"}
+      ]
+    },
+    {
+      "nom": "une date posee au calendrier compte comme un jour prevu",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-09",
+      "programmes": [
+        {"id": 1, "nom": "Legs", "jours": [], "cree_le": "2026-09-01T10:00:00"}
+      ],
+      "planning": [{"id": 5, "date": "2026-09-08", "programme_id": 1}],
+      "entrainements": [],
+      "attendu": [{"date": "2026-09-08", "programme": "Legs"}]
+    },
+    {
+      "nom": "un programme termine (duree depassee) n'est plus prevu",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-09",
+      "programmes": [
+        {"id": 1, "nom": "Push", "jours": ["lundi"], "cree_le": "2026-08-01T10:00:00",
+         "date_debut": "2026-08-03", "duree_semaines": 2}
+      ],
+      "planning": [],
+      "entrainements": [],
+      "attendu": []
+    },
+    {
+      "nom": "listes vides ou absentes : aucune exception, aucun manque",
+      "lundiISO": "2026-09-07",
+      "jourJ": "2026-09-11",
+      "programmes": [],
+      "planning": [],
+      "entrainements": [],
+      "attendu": []
+    }
+  ]
+}

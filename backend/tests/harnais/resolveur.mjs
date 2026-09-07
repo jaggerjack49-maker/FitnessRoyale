@@ -15,6 +15,15 @@ import { fileURLToPath } from 'node:url';
 
 registerHooks({
   resolve(specifier, contexte, suivant) {
+    // Le stockage local de l'app (`src/stockageSeance.js`) importe le module
+    // NATIF d'AsyncStorage, qui n'existe ni sous Node ni ailleurs qu'à
+    // l'exécution sur téléphone. On le remplace par un faux en mémoire pour
+    // pouvoir tester la logique de sauvegarde (voir faux_asyncstorage.mjs).
+    if (specifier === '@react-native-async-storage/async-storage') {
+      return suivant('./faux_asyncstorage.mjs', {
+        ...contexte, parentURL: import.meta.url,
+      });
+    }
     if (specifier.startsWith('.') && !specifier.endsWith('.js')) {
       for (const essai of [`${specifier}.js`, `${specifier}/index.js`]) {
         const url = new URL(essai, contexte.parentURL);

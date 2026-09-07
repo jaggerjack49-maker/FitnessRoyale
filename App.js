@@ -22,6 +22,7 @@ import { colors } from './src/theme';
 import { utilisateur, autresJoueurs, duels, defiJournalier, defiHebdo } from './src/data/mockData';
 import { jouerRoundIA } from './src/logic/duels';
 import * as api from './src/api';
+import * as stockageSeance from './src/stockageSeance';
 import ConnexionScreen from './src/screens/ConnexionScreen';
 import ProfilScreen from './src/screens/ProfilScreen';
 import CompetitionScreen from './src/screens/CompetitionScreen';
@@ -89,6 +90,21 @@ function AppInterne() {
   const [enLigne, setEnLigne] = useState(false); // true si le SERVEUR répond (avec ou sans compte connecté)
   const [moiServeur, setMoiServeur] = useState(null); // mon compte réel (null = pas connecté)
   const [joueursServeur, setJoueursServeur] = useState(null); // autres joueurs venant du serveur
+  // SOUS QUEL COMPTE RANGER LES SÉANCES SUR CE TÉLÉPHONE (07/09/2026).
+  // Ce n'est PAS forcément `moi.id` : sans réseau, l'app retombe sur
+  // l'identité de démonstration, alors que la séance doit rester rattachée au
+  // vrai compte pour repartir au serveur une fois le réseau revenu.
+  const [idStockage, setIdStockage] = useState(null);
+
+  // Au tout premier rendu, on relit le dernier compte connu (le serveur, lui,
+  // n'a peut-être pas encore répondu — ou pas du tout).
+  useEffect(() => {
+    let annule = false;
+    stockageSeance.lireJoueurMemorise().then((id) => {
+      if (!annule && id !== null) setIdStockage((actuel) => actuel ?? id);
+    });
+    return () => { annule = true; };
+  }, []);
 
   // Applique les données d'un compte fraîchement connecté (login, inscription,
   // ou session retrouvée dans AsyncStorage au démarrage).
@@ -101,6 +117,11 @@ function AppInterne() {
   // zéro explicitement ici à chaque connexion.
   function entrerEnLigne(joueur) {
     setMoiServeur(joueur);
+    // On retient QUEL compte est connecté sur ce téléphone, pour que les
+    // séances faites plus tard SANS réseau soient rangées sous lui — et non
+    // sous l'identité de démonstration (voir src/stockageSeance.js).
+    stockageSeance.memoriserJoueurConnecte(joueur.id);
+    setIdStockage(joueur.id);
     setMesPerfs(joueur.performances);
     setMaSalle(joueur.salle || '');
     setMesPoints(joueur.points || 0);
@@ -290,6 +311,26 @@ function AppInterne() {
     points: mesPoints,
     titres: mesTitres,
   };
+  // ON REPREND LÀ OÙ ON S'EST ARRÊTÉ (07/09/2026, demande de Hafiz : « si on
+  // se reconnecte, on est lancé directement sur la séance »).
+  // L'écran Entraînement sait déjà retrouver la séance interrompue, mais il ne
+  // sert à rien tant qu'on ne le REGARDE pas : App.js ne monte que l'onglet
+  // affiché, et l'app s'ouvre normalement sur le Profil. C'est donc ici qu'il
+  // faut regarder, avant même de savoir quoi que ce soit du serveur — une
+  // séance en cours vit sur le téléphone, pas côté serveur.
+  useEffect(() => {
+    if (chargement) return;   // on attend de savoir QUI on est
+    let annule = false;
+    (async () => {
+      const seance = await stockageSeance.lireSeanceEnCours(idStockage ?? moi.id);
+      // Seulement au DÉMARRAGE : on ne rapatrie pas l'utilisateur de force
+      // s'il vient de quitter la séance pour aller voir autre chose.
+      if (!annule && seance) setOngletActif('entrainement');
+    })();
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargement, idStockage, moi.id]);
+
   const monId = moiServeur?.id ?? 0;
   // Les autres joueurs viennent du serveur si on est en ligne, sinon des données locales.
   const autresJoueursAffiches = enLigne && joueursServeur
@@ -365,6 +406,7 @@ function AppInterne() {
             moi={moi}
             estConnecte={!!moiServeur}
             ajouterSeanceLocale={ajouterSeanceLocale}
+            idStockage={idStockage ?? moi.id}
           />
         )}
         {ongletActif === 'paliers' && <PaliersScreen moi={moi} />}
