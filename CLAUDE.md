@@ -1345,6 +1345,8 @@ l'infrastructure du designer (cadre iPhone de prévisualisation, moteur de rendu
   évolutif, les losanges, le décor SVG de l'arène et les lignes de classement d'un seul coup.
 - BARRE D'ONGLETS : les emojis ont laissé place à un LOSANGE qui s'allume en or sur l'onglet
   actif, avec des libellés plus petits et plus gras (style de la maquette).
+  ⚠️ PÉRIMÉ DEPUIS LE 08/09/2026 : le losange a lui-même cédé la place à de vraies icônes
+  dessinées, voir « Barre d'onglets : la piste Arène » plus bas.
 - Vérifié écran par écran dans le navigateur après la bascule (Profil, Perfs, Entraînement,
   Paliers, Compétition, Clan) : fond global bien à #0c0b0f, couleurs de ligue correctes
   (GOLD = rgb(232,178,58)), 6 losanges dans la barre, aucune erreur.
@@ -2208,6 +2210,51 @@ La seule chose forcée à la main est l'AFFICHAGE de la section « à rattraper 
 est couverte par les 9 cas du harnais.
 
 Suite complète : **260 tests, tous OK.**
+
+## Barre d'onglets : la piste « Arène » — 08/09/2026
+
+Consigne de Hafiz, fournie clés en main (un fichier à copier + 4 modifications
+précises dans App.js). Le losange de la maquette du 12/08 disait bien « onglet
+actif », mais pas DE QUOI parle l'onglet : les six cases étaient identiques au
+losange près, donc illisibles sans lire les libellés.
+
+- `src/components/IconesOnglets.js` : six icônes SVG au trait
+  (`react-native-svg`, déjà installé pour l'arène — aucune dépendance ajoutée),
+  exportées par une table `ICONES_ONGLETS` rangée par la MÊME CLÉ que le
+  tableau `ONGLETS` d'App.js. Les deux doivent rester d'accord.
+  Chaque icône prend `{ taille, couleur }` : App.js décide de la couleur (or
+  si actif, gris sinon), le fichier ne connaît aucune couleur en dur.
+- L'onglet actif porte TROIS signaux : l'or, un liseré au-dessus, et une
+  pastille voilée d'or à 8 %. Le liseré est en `position: 'absolute'` avec
+  `top: -8` — il déborde volontairement sur le `paddingVertical` de la barre,
+  pour ne pas décaler l'icône vers le bas quand il apparaît.
+- LIBELLÉS RACCOURCIS : « Compétition » → « Compét. », « Entraînement » →
+  « Entraîn. ». Les longs passaient à la ligne dans leur case et déformaient la
+  hauteur de toute la barre.
+- Les emojis ont disparu du tableau `ONGLETS` (le champ `emoji` n'existe plus).
+  ATTENTION : les EN-TÊTES d'écran (« ⚔️ Compétition », « 💪 Entraînement ») en
+  gardent, eux — ce sont d'autres endroits, ils n'ont pas été touchés.
+
+⚠️ LES ICÔNES ACTUELLES SONT DE REMPLACEMENT. Le fichier d'origine devait venir
+de `a-copier/src-components-IconesOnglets.js`, introuvable sur le poste au
+moment d'appliquer la piste. Elles respectent le contrat à la lettre, donc les
+remplacer par les vraies ne demande QUE d'écraser
+`src/components/IconesOnglets.js` — App.js n'a rien à savoir de plus.
+
+PIÈGE DE DESSIN RENCONTRÉ : la première version des épées croisées (onglet
+Compétition) dessinait les lames en polygones, avec pointes et pommeaux
+séparés. À 20 px ces traits se chevauchaient et l'icône ne se lisait plus que
+comme un gribouillis — visible seulement une fois la barre à l'écran, pas dans
+le code. Réduite à quatre traits (deux diagonales + deux gardes). LEÇON
+générale pour ce projet : une icône se juge à sa TAILLE RÉELLE, jamais sur son
+`viewBox`.
+
+À SAVOIR : `accessibilityState={{ selected }}` ne produit pas d'`aria-selected`
+sur React Native Web. Sans conséquence sur mobile (la cible), mais inutile de
+chercher l'attribut dans le DOM de la version web.
+
+Vérifié dans le navigateur (format mobile, backend local) : les six icônes se
+lisent, et l'état actif suit bien quand on change d'onglet.
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 

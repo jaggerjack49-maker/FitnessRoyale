@@ -33,6 +33,7 @@ import EcranChargement from './src/components/EcranChargement';
 import EntrainementScreen from './src/screens/EntrainementScreen';
 import LimiteErreur from './src/components/LimiteErreur';
 import Losange from './src/components/Losange';
+import { ICONES_ONGLETS } from './src/components/IconesOnglets';
 
 const CLE_TOKEN = 'fitnessRoyale.token'; // clé AsyncStorage du token de session
 const DELAI_RAFRAICHISSEMENT_MS = 10000; // re-consulte le serveur toutes les 10s (classement, mon profil)
@@ -43,13 +44,17 @@ const DELAI_RAFRAICHISSEMENT_MS = 10000; // re-consulte le serveur toutes les 10
 // puis l'entraînement et le clan, qui sont des outils du quotidien.
 // L'écran affiché est choisi par la CLÉ (voir `ongletActif` plus bas) :
 // réordonner ici suffit, il n'y a rien d'autre à changer.
+// LIBELLÉS RACCOURCIS (08/09/2026) : « Compétition » et « Entraînement »
+// passaient à la ligne dans une case de barre et déformaient sa hauteur.
+// Les emojis ont disparu : chaque onglet porte maintenant une icône dessinée
+// (src/components/IconesOnglets.js), rangée par la même CLÉ que ci-dessous.
 const ONGLETS = [
-  { cle: 'profil', libelle: 'Profil', emoji: '👤' },
-  { cle: 'perfs', libelle: 'Perfs', emoji: '📊' },
-  { cle: 'paliers', libelle: 'Paliers', emoji: '🏅' },
-  { cle: 'competition', libelle: 'Compétition', emoji: '⚔️' },
-  { cle: 'entrainement', libelle: 'Entraînement', emoji: '💪' },
-  { cle: 'clan', libelle: 'Clan', emoji: '💬' },
+  { cle: 'profil', libelle: 'Profil' },
+  { cle: 'perfs', libelle: 'Perfs' },
+  { cle: 'paliers', libelle: 'Paliers' },
+  { cle: 'competition', libelle: 'Compét.' },
+  { cle: 'entrainement', libelle: 'Entraîn.' },
+  { cle: 'clan', libelle: 'Clan' },
 ];
 
 // Point d'entrée réel : enveloppe AppInterne dans un filet de sécurité
@@ -436,16 +441,29 @@ function AppInterne() {
         )}
       </View>
 
-      {/* Barre d'onglets en bas — style de la maquette : un LOSANGE au lieu
-          d'une icône, qui s'allume en or sur l'onglet actif. */}
+      {/* Barre d'onglets en bas — piste « Arène » : icône pleine ligne, et sur
+          l'onglet actif un liseré or au-dessus + une pastille voilée d'or. */}
       <View style={styles.barreOnglets}>
         {ONGLETS.map((o) => {
           const actif = o.cle === ongletActif;
           const couleur = actif ? colors.or : colors.texteGris;
+          const Icone = ICONES_ONGLETS[o.cle];
           return (
-            <TouchableOpacity key={o.cle} style={styles.onglet} onPress={() => setOngletActif(o.cle)}>
-              <Losange couleur={couleur} taille={7} />
-              <Text style={[styles.ongletLibelle, { color: couleur }]}>{o.libelle}</Text>
+            <TouchableOpacity
+              key={o.cle}
+              style={styles.onglet}
+              onPress={() => setOngletActif(o.cle)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: actif }}
+              accessibilityLabel={o.libelle}
+            >
+              {actif && <View style={styles.ongletLisere} />}
+              <View style={[styles.ongletPastille, actif && styles.ongletPastilleActive]}>
+                <Icone taille={20} couleur={couleur} />
+              </View>
+              <Text style={[styles.ongletLibelle, { color: couleur }]} numberOfLines={1}>
+                {o.libelle}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -468,6 +486,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   onglet: { flex: 1, alignItems: 'center', gap: 5 },
+  // Liseré or au-dessus de l'onglet actif. Positioné en absolu pour ne pas
+  // décaler l'icône : il déborde sur le padding de la barre.
+  ongletLisere: {
+    position: 'absolute',
+    top: -8,
+    width: 26,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: colors.or,
+  },
+  ongletPastille: {
+    width: 34,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Même teinte que colors.or (#e8b23a), à 8 % : un voile, pas un bouton.
+  ongletPastilleActive: { backgroundColor: 'rgba(232, 178, 58, 0.08)' },
   ongletLibelle: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.5 },
   banniereHorsLigne: {
     backgroundColor: colors.carteClaire,
