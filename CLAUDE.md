@@ -2218,12 +2218,24 @@ précises dans App.js). Le losange de la maquette du 12/08 disait bien « onglet
 actif », mais pas DE QUOI parle l'onglet : les six cases étaient identiques au
 losange près, donc illisibles sans lire les libellés.
 
-- `src/components/IconesOnglets.js` : six icônes SVG au trait
-  (`react-native-svg`, déjà installé pour l'arène — aucune dépendance ajoutée),
+- `src/components/IconesOnglets.js` : six icônes redessinées avec
+  `react-native-svg` (déjà installé pour l'arène — aucune dépendance ajoutée),
   exportées par une table `ICONES_ONGLETS` rangée par la MÊME CLÉ que le
   tableau `ONGLETS` d'App.js. Les deux doivent rester d'accord.
   Chaque icône prend `{ taille, couleur }` : App.js décide de la couleur (or
   si actif, gris sinon), le fichier ne connaît aucune couleur en dur.
+- LES TRACÉS VIENNENT DE **LUCIDE** (licence ISC, lucide.dev) : `user-round`,
+  `trending-up`, `crown`, `trophy`, `dumbbell`, `users-round`. Ils sont RECOPIÉS
+  dans le fichier plutôt qu'importés de `lucide-react-native` — six icônes ne
+  justifient pas une dépendance de plus (le projet en compte volontairement
+  peu). Le `stroke` et le `strokeWidth` (2,25) sont posés une seule fois sur le
+  `<Svg>` du composant `Cadre` et hérités par les tracés : une seule grille
+  24×24 et un seul trait pour les six, donc un alignement optique sans réglage
+  au cas par cas.
+- ATTENTION AU VOCABULAIRE : Paliers = une COURONNE, Compétition = un TROPHÉE.
+  Ce ne sont pas les métaphores les plus évidentes (on attendrait un podium et
+  des épées), mais ce sont celles retenues dans la maquette — la variante
+  `swords` et la variante `medal` y figurent explicitement comme écartées.
 - L'onglet actif porte TROIS signaux : l'or, un liseré au-dessus, et une
   pastille voilée d'or à 8 %. Le liseré est en `position: 'absolute'` avec
   `top: -8` — il déborde volontairement sur le `paddingVertical` de la barre,
@@ -2235,19 +2247,27 @@ losange près, donc illisibles sans lire les libellés.
   ATTENTION : les EN-TÊTES d'écran (« ⚔️ Compétition », « 💪 Entraînement ») en
   gardent, eux — ce sont d'autres endroits, ils n'ont pas été touchés.
 
-⚠️ LES ICÔNES ACTUELLES SONT DE REMPLACEMENT. Le fichier d'origine devait venir
-de `a-copier/src-components-IconesOnglets.js`, introuvable sur le poste au
-moment d'appliquer la piste. Elles respectent le contrat à la lettre, donc les
-remplacer par les vraies ne demande QUE d'écraser
-`src/components/IconesOnglets.js` — App.js n'a rien à savoir de plus.
+D'OÙ VIENT CETTE PISTE : une maquette Claude Design de Hafiz
+(« Onglets du bas - icônes.dc.html »), qui proposait TROIS pistes — 1a « ligne
+sobre », 1b « losange conservé » (l'icône vivant dans le losange de la marque,
+tourné à 45°), 1c « Arène ». C'est la 1c qui a été retenue et qui est
+implémentée ici. La maquette a été livrée en zip dans `icones/`, avec le
+fichier d'icônes tout prêt et les 4 modifications d'App.js décrites une par
+une ; `support.js` est l'infrastructure du canevas du designer — rien à porter,
+comme pour l'import de DA du 12/08/2026.
 
-PIÈGE DE DESSIN RENCONTRÉ : la première version des épées croisées (onglet
-Compétition) dessinait les lames en polygones, avec pointes et pommeaux
-séparés. À 20 px ces traits se chevauchaient et l'icône ne se lisait plus que
-comme un gribouillis — visible seulement une fois la barre à l'écran, pas dans
-le code. Réduite à quatre traits (deux diagonales + deux gardes). LEÇON
-générale pour ce projet : une icône se juge à sa TAILLE RÉELLE, jamais sur son
-`viewBox`.
+⚠️ ACCÈS AU PROJET DESIGN : le MCP `DesignSync` a refusé la lecture faute
+d'autorisation, et `/design-login` ne peut pas s'ouvrir depuis l'app Desktop
+(commande à panneau interactif). L'extension Claude n'était pas non plus
+connectée à Chrome. C'est le ZIP déposé à la main qui a débloqué la situation —
+c'est la voie la plus simple si ça se reproduit.
+
+PIÈGE DE DESSIN RENCONTRÉ (sur une première version faite à la main, avant que
+la maquette n'arrive) : des épées croisées dessinées en polygones, pointes et
+pommeaux séparés, se chevauchaient à 20 px et ne se lisaient plus que comme un
+gribouillis — visible seulement une fois la barre à l'écran, jamais dans le
+code. LEÇON générale pour ce projet : une icône se juge à sa TAILLE RÉELLE,
+jamais sur son `viewBox`.
 
 À SAVOIR : `accessibilityState={{ selected }}` ne produit pas d'`aria-selected`
 sur React Native Web. Sans conséquence sur mobile (la cible), mais inutile de
