@@ -464,6 +464,9 @@ export default function EntrainementScreen({
     annee: maintenant.getFullYear(), mois: maintenant.getMonth(),
   });
   const [choixProgrammeOuvert, setChoixProgrammeOuvert] = useState(false);
+  // Le choix d'une séance à FAIRE ce jour-là (à ne pas confondre avec le
+  // choix ci-dessus, qui PLANIFIE une séance pour plus tard).
+  const [choixSeanceAFaire, setChoixSeanceAFaire] = useState(false);
   // Séance en cours de retouche DANS le calendrier (id du programme) — permet
   // de corriger exercices/séries/reps sans repasser par la semaine type.
   const [programmeEnEdition, setProgrammeEnEdition] = useState(null);
@@ -1055,6 +1058,7 @@ export default function EntrainementScreen({
   function changerMois(direction) {
     setJourOuvert(null);
     setChoixProgrammeOuvert(false);
+    setChoixSeanceAFaire(false);
     setMoisAffiche(({ annee, mois }) => {
       const date = new Date(annee, mois + direction, 1);
       return { annee: date.getFullYear(), mois: date.getMonth() };
@@ -2488,6 +2492,7 @@ export default function EntrainementScreen({
                 onPress={() => {
                   setJourOuvert(selectionne ? null : dateISO);
                   setChoixProgrammeOuvert(false);
+                  setChoixSeanceAFaire(false);
                 }}
               >
                 <Text style={[styles.numeroJour, estAujourdhui && { color: colors.or, fontWeight: '800' }]}>
@@ -2525,8 +2530,66 @@ export default function EntrainementScreen({
               📌 {jourDeLaDate(dateJs).charAt(0).toUpperCase() + jourDeLaDate(dateJs).slice(1)}{' '}
               {dateJs.getDate()} {nomsMois[dateJs.getMonth()]}
             </Text>
+            {/* JOUR LIBRE : on doit pouvoir CHOISIR une séance et la FAIRE,
+                pas seulement en planifier une pour plus tard (demande de Hafiz
+                du 08/09/2026 : « en cliquant sur un jour on doit pouvoir
+                choisir un workout du programme et le faire ce jour si on n'est
+                pas dans un programme déjà fixé »).
+                Jusqu'ici, toucher un jour vide ne proposait QUE « ➕ Placer un
+                programme ce jour » — donc pour s'entraîner il fallait d'abord
+                planifier, ressortir, retoucher le jour, puis démarrer. Trois
+                gestes pour dire « aujourd'hui je fais ça ».
+                Ce choix n'apparaît QUE si le jour n'a rien de prévu : quand une
+                séance est déjà fixée, elle porte déjà son propre bouton
+                « Démarrer » juste au-dessus. */}
             {blocs.length === 0 && (
-              <Text style={[styles.indice, { marginTop: 4 }]}>Rien de prévu ce jour-là.</Text>
+              <>
+                <Text style={[styles.indice, { marginTop: 4 }]}>Rien de prévu ce jour-là.</Text>
+                {!choixSeanceAFaire ? (
+                  <TouchableOpacity
+                    style={styles.boutonUtiliserModele}
+                    onPress={() => { setChoixSeanceAFaire(true); setChoixProgrammeOuvert(false); }}
+                  >
+                    <Text style={styles.boutonDemarrerTexte}>
+                      🏋️ Faire une séance de mes programmes
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.detailJour}>
+                    {programmes.length === 0 ? (
+                      <Text style={styles.indice}>
+                        Tu n'as encore aucune séance enregistrée — crée un programme,
+                        ou lance une séance libre depuis le bas de cet écran.
+                      </Text>
+                    ) : (
+                      <>
+                        <Text style={[styles.indice, { marginBottom: 4 }]}>
+                          {cestAujourdhui
+                            ? 'Choisis la séance à faire :'
+                            : 'Choisis la séance — elle sera enregistrée au jour où tu la fais, pas à cette date :'}
+                        </Text>
+                        {programmes.map((p) => (
+                          <TouchableOpacity
+                            key={p.id}
+                            style={styles.ligneChoixProgramme}
+                            onPress={() => demarrerSeance(p)}
+                          >
+                            <Text style={styles.choixProgrammeTexte}>
+                              ▶ {p.nom}{' '}
+                              <Text style={styles.indice}>
+                                ({p.exercices.length} exo{p.exercices.length > 1 ? 's' : ''})
+                              </Text>
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </>
+                    )}
+                    <TouchableOpacity onPress={() => setChoixSeanceAFaire(false)}>
+                      <Text style={styles.lienAnnuler}>Annuler</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
             )}
             {/* Le calendrier ne fait plus QUE montrer et DÉMARRER (27/08/2026,
                 demande de Hafiz). Modifier une séance se fait désormais dans
@@ -2566,7 +2629,11 @@ export default function EntrainementScreen({
             {!choixProgrammeOuvert ? (
               <TouchableOpacity
                 style={styles.boutonSecondaire}
-                onPress={() => { setChoixProgrammeOuvert(true); setModeleAPlacer(null); }}
+                onPress={() => {
+                  setChoixProgrammeOuvert(true);
+                  setModeleAPlacer(null);
+                  setChoixSeanceAFaire(false);
+                }}
               >
                 <Text style={styles.boutonSecondaireTexte}>➕ Placer un programme ce jour</Text>
               </TouchableOpacity>

@@ -2197,6 +2197,35 @@ disponible à cet instant.
 Vérifié : 2 séries de face pull en séance → « face pull 2 × 15 » ajouté au
 programme côté serveur.
 
+### 7. Un jour libre du calendrier propose de FAIRE, pas seulement de planifier
+
+Ajouté le 08/09/2026, demande de Hafiz : « en cliquant sur un jour on doit
+pouvoir choisir un workout du programme et le faire ce jour si on n'est pas
+dans un programme déjà fixé ».
+
+Toucher un jour SANS séance prévue ne proposait que « ➕ Placer un programme ce
+jour » — qui PLANIFIE. Pour s'entraîner il fallait donc planifier, ressortir,
+retoucher le jour, puis démarrer : trois gestes pour dire « aujourd'hui je fais
+ça ». Un bouton « 🏋️ Faire une séance de mes programmes » ouvre maintenant la
+liste des séances enregistrées ; en toucher une la démarre directement.
+
+DEUX CHOIX QUI SE RESSEMBLENT, À NE PAS CONFONDRE (ils sont volontairement
+côte à côte, avec deux états séparés) :
+- « 🏋️ Faire une séance… » (`choixSeanceAFaire`) — on s'entraîne MAINTENANT,
+  rien n'est ajouté au calendrier ;
+- « ➕ Placer un programme ce jour » (`choixProgrammeOuvert`) — on remplit le
+  calendrier pour plus tard, on ne s'entraîne pas.
+Ouvrir l'un referme l'autre.
+
+LE CHOIX N'APPARAÎT QUE SI LE JOUR EST LIBRE (`blocs.length === 0`), ce qui est
+exactement la condition posée par la demande. Quand une séance est déjà fixée
+ce jour-là, elle porte déjà son propre « 🏋️ Démarrer cette séance » juste
+au-dessus — deux boutons de démarrage sur le même écran ne feraient qu'hésiter.
+
+La séance reste enregistrée AU JOUR OÙ ON LA FAIT, jamais à la date touchée —
+même règle que « Démarrer cette séance » (v4) et que le rattrapage. Le libellé
+le dit quand la date choisie n'est pas aujourd'hui.
+
 ### Ce qui a été vérifié dans l'app, et comment
 
 Parcours complet joué dans le navigateur contre un backend LOCAL (jamais la
