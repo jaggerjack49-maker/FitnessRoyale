@@ -2396,6 +2396,49 @@ SILVER · Prochain palier Gold : 10 × 100 kg », enregistrement confirmé par l
 message et par le serveur (`statut: declare`), et un appui à vide affiche
 « Choisis d'abord un exercice. »
 
+## Volume : un groupe musculaire se déplie sur ses dernières séries — 09/09/2026
+
+Demande de Hafiz : « on doit pouvoir cliquer sur les séries par groupe
+musculaire et elles vont afficher les dernières séries en date ».
+
+CE QUI MANQUAIT : le compteur annonçait « Pectoraux 3/12 » mais jamais
+LESQUELLES. Impossible de vérifier ce qui avait été compté — donc impossible de
+repérer un exercice rangé dans le mauvais groupe autrement qu'en fouillant tout
+l'historique à la main. C'est le prolongement direct du bug du 03/09 (« unilatéral
+raises » comptées dans le Dos) : on avait rendu le mauvais classement
+CORRIGEABLE, il devient maintenant VISIBLE.
+
+- `dernieresSeriesDuGroupe()` (`src/data/groupesMusculaires.js`) — la logique
+  vit avec le reste du classement par groupe, pas dans l'écran.
+  Une LIGNE = une date + un exercice, avec toutes ses séries de ce jour-là :
+  regrouper ainsi évite d'aligner huit lignes identiques quand on a fait quatre
+  fois le même développé couché. Bornée à 8 lignes — on veut les DERNIÈRES
+  séries, pas tout l'historique.
+- ⚠️ CONTRAIREMENT AU COMPTEUR, la liste n'est PAS limitée à la semaine en
+  cours. La question posée est « qu'est-ce que j'ai fait en dernier sur ce
+  groupe » ; un groupe peu travaillé n'aurait rien à montrer sinon. La phrase
+  sous la liste le dit (« toutes semaines confondues ») pour qu'on ne croie pas
+  à une incohérence avec le compteur juste au-dessus.
+- DEUX CHEMINS vers le même détail : la barre du groupe quand la section est
+  dépliée, et la PUCE du résumé quand elle est repliée — toucher une puce
+  ouvre la section ET déplie ce groupe, ce qui est le chemin le plus court
+  entre « Pectoraux 3/12 » et « lesquelles ? ». Un seul groupe ouvert à la fois
+  (`groupeDeploye`).
+- La fonction est ajoutée au harnais de robustesse
+  (`harnais/harnais_robustesse.mjs`) comme ses voisines : elle s'affiche
+  PENDANT qu'on consulte son volume, donc une exception y remplacerait l'onglet
+  par l'écran d'erreur (voir « Audit général », 06/09/2026).
+
+Vérifié dans le navigateur (backend local) : toucher la puce « Épaules » ouvre
+la section sur ce groupe et affiche « lundi 7 septembre · face pull —
+30 kg × 15 · 30 kg × 15 » ; toucher « Pectoraux » referme Épaules et montre
+« 100 kg × 8 ». Suite complète : 260 tests, tous OK.
+
+AU PASSAGE : c'est ce jour-là que la section « ⏳ À rattraper cette semaine »
+s'est déclenchée TOUTE SEULE pour la première fois (séance Push prévue lundi et
+mardi, non faite) — elle n'avait pu être vérifiée que par forçage le 07/09,
+faute d'un jour passé dans la semaine.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

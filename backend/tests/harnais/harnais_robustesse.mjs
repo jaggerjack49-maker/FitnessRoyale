@@ -15,7 +15,7 @@ import {
 import { moyennePaliers, ligueJoueur, classer, classerSalles, classerParExercice }
   from '../../../src/logic/classement.js';
 import { titresParExercice, mesTitresDExercice, titresAPortee } from '../../../src/logic/titres.js';
-import { compterSeriesParGroupe, exercicesDeLaPeriode, deviner_groupe }
+import { compterSeriesParGroupe, exercicesDeLaPeriode, deviner_groupe, dernieresSeriesDuGroupe }
   from '../../../src/data/groupesMusculaires.js';
 import { etatArene, areneDeLaLigue } from '../../../src/data/arenes.js';
 
@@ -47,6 +47,10 @@ for (const [i, cas] of seancesBancales.entries()) {
     compterSeriesParGroupe(cas, {}, '2026-09-01', '2026-09-30'));
   essaie(`exercicesDeLaPeriode #${i}`, () =>
     exercicesDeLaPeriode(cas, {}, '2026-09-01', '2026-09-30'));
+  // Ajoutée le 09/09/2026 : elle s'affiche PENDANT qu'on regarde son volume,
+  // donc une exception ici remplacerait l'onglet par l'écran d'erreur.
+  essaie(`dernieresSeriesDuGroupe #${i}`, () =>
+    dernieresSeriesDuGroupe(cas, {}, 'Pectoraux'));
 }
 essaie('bat_le_record(null, null)', () => bat_le_record(null, null));
 

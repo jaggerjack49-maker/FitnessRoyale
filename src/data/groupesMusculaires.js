@@ -168,3 +168,44 @@ export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finIS
   });
   return [...parNom.values()].sort((a, b) => a.exercice.localeCompare(b.exercice));
 }
+
+// LES DERNIÈRES SÉRIES D'UN GROUPE MUSCULAIRE, de la plus récente à la plus
+// ancienne (demande de Hafiz du 09/09/2026 : « on doit pouvoir cliquer sur les
+// séries par groupe musculaire et elles vont afficher les dernières séries en
+// date »).
+//
+// POURQUOI ÇA MANQUAIT : le compteur dit « Pectoraux 3/12 » mais jamais
+// LESQUELLES. Impossible de vérifier ce qui a été compté — donc impossible de
+// repérer un exercice rangé dans le mauvais groupe autrement qu'en fouillant
+// tout l'historique.
+//
+// Une LIGNE = une date + un exercice, avec toutes ses séries de ce jour-là.
+// Regrouper ainsi évite d'aligner huit lignes identiques quand on a fait
+// quatre fois le même développé couché.
+//
+// ⚠️ CONTRAIREMENT AU COMPTEUR, on ne se limite PAS à la semaine en cours :
+// la question posée est « qu'est-ce que j'ai fait en dernier sur ce groupe »,
+// et un groupe peu travaillé n'aurait rien à montrer sinon.
+export function dernieresSeriesDuGroupe(entrainements, corrections, groupe, limiteLignes = 8) {
+  // Mêmes garde-fous que le reste du fichier (audit du 06/09/2026) : une
+  // séance sans `series` ou sans date ne doit jamais faire planter l'écran.
+  const seances = (Array.isArray(entrainements) ? entrainements : [])
+    .filter((e) => e && Array.isArray(e.series) && e.date)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  const lignes = [];
+  for (const seance of seances) {
+    const parExercice = new Map();
+    seance.series.forEach((serie) => {
+      if (!serie) return;
+      if (groupeDeLExercice(serie.exercice, corrections) !== groupe) return;
+      if (!parExercice.has(serie.exercice)) parExercice.set(serie.exercice, []);
+      parExercice.get(serie.exercice).push({ reps: serie.reps, poids: serie.poids });
+    });
+    for (const [exercice, series] of parExercice) {
+      lignes.push({ date: seance.date, exercice, series });
+      if (lignes.length >= limiteLignes) return lignes;
+    }
+  }
+  return lignes;
+}

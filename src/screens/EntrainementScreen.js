@@ -21,7 +21,7 @@ import {
 } from '../data/programmesStandards';
 import {
   groupesMusculaires, groupeDeLExercice, lundiDeLaSemaine,
-  compterSeriesParGroupe, exercicesDeLaPeriode,
+  compterSeriesParGroupe, exercicesDeLaPeriode, dernieresSeriesDuGroupe,
 } from '../data/groupesMusculaires';
 import {
   suggererProchaineSerie, recordPersonnel, bat_le_record,
@@ -420,6 +420,8 @@ export default function EntrainementScreen({
   const [objectifsSeries, setObjectifsSeries] = useState({});
   const [correctionsGroupes, setCorrectionsGroupes] = useState({});
   const [volumeOuvert, setVolumeOuvert] = useState(false);
+  // Quel groupe musculaire montre ses dernières séries (null = aucun).
+  const [groupeDeploye, setGroupeDeploye] = useState(null);
   const [editionObjectifs, setEditionObjectifs] = useState(false);
   const [brouillonObjectifs, setBrouillonObjectifs] = useState({}); // saisie en cours (texte)
   const [exerciceAClasser, setExerciceAClasser] = useState(null);
@@ -2188,15 +2190,18 @@ export default function EntrainementScreen({
             const cible = objectifsSeries[groupe] || 0;
             const atteint = cible > 0 && fait >= cible;
             return (
-              <View
+              // Toucher une puce OUVRE la section sur ce groupe : c'est le
+              // chemin le plus court entre « Pectoraux 3/12 » et « lesquelles ? ».
+              <TouchableOpacity
                 key={groupe}
                 style={[styles.pucheVolume, atteint && { borderColor: colors.vert }]}
+                onPress={() => { setVolumeOuvert(true); setGroupeDeploye(groupe); }}
               >
                 <Text style={styles.pucheGroupe}>{groupe}</Text>
                 <Text style={[styles.pucheCompte, atteint && { color: colors.vert }]}>
                   {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
                 </Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -2220,20 +2225,67 @@ export default function EntrainementScreen({
             const cible = objectifsSeries[groupe] || 0;
             const pourcent = cible > 0 ? Math.min(100, Math.round((fait / cible) * 100)) : 0;
             const atteint = cible > 0 && fait >= cible;
+            const deploye = groupeDeploye === groupe;
             return (
-              <View key={groupe} style={styles.ligneVolume}>
-                <Text style={styles.nomGroupe}>{groupe}</Text>
-                <View style={styles.barreVolumeFond}>
-                  <View
-                    style={[
-                      styles.barreVolumeRemplie,
-                      { width: `${pourcent}%`, backgroundColor: atteint ? colors.vert : colors.accent },
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.compteurVolume, atteint && { color: colors.vert }]}>
-                  {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
-                </Text>
+              <View key={groupe}>
+                {/* TOUCHER UN GROUPE MONTRE SES DERNIÈRES SÉRIES (09/09/2026).
+                    Le compteur disait combien, jamais lesquelles — donc rien
+                    ne permettait de vérifier ce qui avait été compté, ni de
+                    repérer un exercice rangé dans le mauvais groupe. */}
+                <TouchableOpacity
+                  style={styles.ligneVolume}
+                  onPress={() => setGroupeDeploye(deploye ? null : groupe)}
+                >
+                  <Text style={styles.nomGroupe}>
+                    {deploye ? '▲' : '▼'} {groupe}
+                  </Text>
+                  <View style={styles.barreVolumeFond}>
+                    <View
+                      style={[
+                        styles.barreVolumeRemplie,
+                        { width: `${pourcent}%`, backgroundColor: atteint ? colors.vert : colors.accent },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.compteurVolume, atteint && { color: colors.vert }]}>
+                    {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
+                  </Text>
+                </TouchableOpacity>
+                {deploye && (() => {
+                  const lignes = dernieresSeriesDuGroupe(
+                    entrainements, correctionsGroupes, groupe
+                  );
+                  if (lignes.length === 0) {
+                    return (
+                      <Text style={styles.detailGroupeVide}>
+                        Aucune série sur ce groupe pour l'instant.
+                      </Text>
+                    );
+                  }
+                  return (
+                    <View style={styles.detailGroupe}>
+                      {lignes.map((l, i) => (
+                        <View key={`${l.date}-${l.exercice}-${i}`} style={styles.ligneDetailGroupe}>
+                          <Text style={styles.dateDetailGroupe}>
+                            {libelleDate(l.date)} · {l.exercice}
+                          </Text>
+                          <Text style={styles.seriesDetailGroupe}>
+                            {l.series
+                              .map((s) => (s.poids > 0 ? `${s.poids} kg × ${s.reps}` : `${s.reps} reps`))
+                              .join('  ·  ')}
+                          </Text>
+                        </View>
+                      ))}
+                      {/* La liste est volontairement bornée : on veut les
+                          DERNIÈRES séries, pas tout l'historique. */}
+                      <Text style={styles.indice}>
+                        {lignes.length > 1
+                          ? `Les ${lignes.length} dernières entrées de ce groupe`
+                          : 'La dernière entrée de ce groupe'}, toutes semaines confondues.
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
             );
           })}
@@ -3447,6 +3499,21 @@ const styles = StyleSheet.create({
   ligneActionsProgramme: {
     flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center',
     gap: 6, marginTop: espacement.s,
+  },
+  detailGroupe: {
+    backgroundColor: colors.carteClaire,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.bordure,
+    padding: espacement.s,
+    marginBottom: espacement.s,
+  },
+  ligneDetailGroupe: { marginBottom: 6 },
+  dateDetailGroupe: { color: colors.texte, fontSize: 12, fontWeight: '700' },
+  seriesDetailGroupe: { color: colors.texteGris, fontSize: 12, marginTop: 1 },
+  detailGroupeVide: {
+    color: colors.texteGris, fontSize: 12, fontStyle: 'italic',
+    marginBottom: espacement.s, marginLeft: espacement.s,
   },
   groupeExercice: { color: colors.texteGris, fontSize: 11, marginLeft: espacement.s },
   alerteNonClasses: {
