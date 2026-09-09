@@ -1925,11 +1925,15 @@ jour même de son écriture.
 
 ### 5. Renommer un exercice depuis ses records
 
+⚠️ ANNULÉ LE 09/09/2026 sur demande de Hafiz — voir « Les records
+redeviennent en lecture seule » plus bas. Ce qui suit décrit l'état du
+04/09 au 09/09.
+
 Le renommage n'était atteignable que depuis l'éditeur d'un programme. Un
 exercice qui ne vit PLUS que dans l'historique — retiré du programme, ou mal
 tapé une seule fois — était donc IMPOSSIBLE à corriger : il restait à jamais
 dans « 🏆 Mes records » et dans le comptage de séries, sous son nom fautif.
-Toucher un record ouvre maintenant un champ de renommage, qui appelle le même
+Toucher un record ouvrait un champ de renommage, qui appelait le même
 `renommerExercicePartout` que l'éditeur.
 
 Suite complète : **239 tests, tous OK.**
@@ -2438,6 +2442,34 @@ AU PASSAGE : c'est ce jour-là que la section « ⏳ À rattraper cette semaine 
 s'est déclenchée TOUTE SEULE pour la première fois (séance Push prévue lundi et
 mardi, non faite) — elle n'avait pu être vérifiée que par forçage le 07/09,
 faute d'un jour passé dans la semaine.
+
+## Les records redeviennent en lecture seule — 09/09/2026
+
+Demande de Hafiz : « au niveau des records on ne doit pas pouvoir renommer les
+exercices ». Le champ de renommage ajouté le 04/09 (point 5 de l'audit) est
+retiré de « 🏆 Mes records ».
+
+POURQUOI C'ÉTAIT GÊNANT : toucher une ligne de record ouvrait un champ dont
+la validation RÉÉCRIT L'HISTORIQUE PARTOUT — programmes, séries loggées,
+comptage par groupe. Un geste lourd derrière une simple consultation, et
+déclenchable par erreur en faisant défiler la liste. La section ne fait plus
+que montrer.
+
+`renommerExercicePartout` (côté serveur) et `appliquerRenommages` (côté app)
+ne bougent PAS : renommer reste possible depuis l'éditeur d'un programme, où
+l'on est déjà en train de modifier quelque chose et où la carte demande
+explicitement « Renommer partout » ou « Seulement ici ».
+
+⚠️ CE QUE ÇA REMET SUR LA TABLE : le manque que le point 5 de l'audit avait
+justement comblé. Un exercice retiré de tous les programmes, ou mal tapé une
+seule fois, n'est de nouveau plus corrigeable depuis l'app — il reste dans les
+records et dans le comptage de séries sous son nom fautif. C'est un compromis
+accepté (le geste dangereux pesait plus lourd que le cas rare), pas un oubli :
+si le besoin revient, il faudra un chemin explicite, pas un champ caché
+derrière un appui sur une ligne d'affichage.
+
+Vérifié dans le navigateur : la liste des records n'ouvre plus aucun champ, et
+la phrase « Un nom mal tapé ? Touche l'exercice… » a disparu.
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 

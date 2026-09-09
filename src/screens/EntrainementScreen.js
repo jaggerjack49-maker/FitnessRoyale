@@ -512,8 +512,6 @@ export default function EntrainementScreen({
   const [renommages, setRenommages] = useState([]);
   const [renommageEnCours, setRenommageEnCours] = useState(false);
   // Renommage lancé depuis la liste des records (exercice + saisie en cours).
-  const [recordARenommer, setRecordARenommer] = useState(null);
-  const [nomRecordSaisi, setNomRecordSaisi] = useState('');
 
   // ---- Programmes OFFICIELS (publiés par l'admin, voir CLAUDE.md) ----
   // Un joueur ordinaire ne fait que les LIRE et les copier ; l'admin peut en
@@ -1394,34 +1392,14 @@ export default function EntrainementScreen({
     }
   }
 
-  // RENOMMER UN EXERCICE DEPUIS SES RECORDS (04/09/2026, point 5 de l'audit).
-  // Le renommage n'était atteignable que depuis l'éditeur d'un programme :
-  // un exercice qui ne vit PLUS que dans l'historique — parce qu'il a été
-  // retiré du programme, ou parce que son nom a été mal tapé une fois — était
-  // donc impossible à corriger. Il restait à jamais dans « Mes records » et
-  // dans le comptage de séries, sous son nom fautif.
-  async function renommerDepuisRecord(ancien) {
-    const nouveau = nomRecordSaisi.trim();
-    if (!nouveau || nouveau === ancien) {
-      setRecordARenommer(null);
-      return;
-    }
-    if (!estConnecte) {
-      setErreur('Renommage impossible hors-ligne : reconnecte-toi.');
-      return;
-    }
-    setRenommageEnCours(true);
-    try {
-      await api.renommerExercicePartout(moi.id, ancien, nouveau);
-      setRecordARenommer(null);
-      setNomRecordSaisi('');
-      await chargerTout();
-    } catch (err) {
-      setErreur(err.message || 'Renommage impossible.');
-    } finally {
-      setRenommageEnCours(false);
-    }
-  }
+  // ⚠️ IL N'Y A PLUS DE RENOMMAGE DEPUIS « MES RECORDS » (retiré le
+  // 09/09/2026 à la demande de Hafiz). Il y avait été ajouté le 04/09
+  // (point 5 de l'audit) pour rattraper un exercice qui ne vit plus que dans
+  // l'historique. Le renommage reste possible depuis l'éditeur d'un programme
+  // (`appliquerRenommages`) — c'est le seul chemin désormais.
+  // CONSÉQUENCE À CONNAÎTRE : un exercice retiré de tous les programmes, ou
+  // mal tapé une seule fois, n'est plus corrigeable depuis l'app. Il reste
+  // dans les records et dans le comptage de séries sous son nom fautif.
 
   // Applique les renommages en attente PARTOUT, puis recharge tout : les
   // records, la suggestion de charge et le comptage de séries se calculent
@@ -3214,51 +3192,23 @@ export default function EntrainementScreen({
               <Text style={styles.indice}>
                 Ta série la plus lourde sur chaque exercice, toutes séances confondues.
               </Text>
-              <Text style={styles.indice}>
-                Un nom mal tapé ? Touche l'exercice pour le renommer partout —
-                dans tes programmes, ton historique et ton comptage de séries.
-              </Text>
-              {mesRecords.map((r) => {
-                if (recordARenommer !== r.exercice) {
-                  return (
-                    <TouchableOpacity
-                      key={r.exercice}
-                      style={styles.ligneRecord}
-                      onPress={() => { setRecordARenommer(r.exercice); setNomRecordSaisi(r.exercice); }}
-                    >
-                      <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
-                      <Text style={styles.valeurRecord}>
-                        {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
-                      </Text>
-                      <Text style={styles.dateRecord}>{r.date}</Text>
-                    </TouchableOpacity>
-                  );
-                }
-                return (
-                  <View key={r.exercice} style={styles.ligneAjoutSerie}>
-                    <TextInput
-                      style={[styles.champ, { flex: 1 }]}
-                      value={nomRecordSaisi}
-                      onChangeText={setNomRecordSaisi}
-                      placeholder="Nouveau nom"
-                      placeholderTextColor={colors.texteGris}
-                      autoFocus
-                    />
-                    <TouchableOpacity
-                      style={styles.boutonAjouterSerie}
-                      onPress={() => renommerDepuisRecord(r.exercice)}
-                      disabled={renommageEnCours}
-                    >
-                      {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
-                        <Text style={styles.boutonAjouterSerieTexte}>Renommer</Text>
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.boutonRetirer} onPress={() => setRecordARenommer(null)}>
-                      <Text style={styles.boutonRetirerTexte}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+              {/* LECTURE SEULE (09/09/2026, demande de Hafiz : « au niveau des
+                  records on ne doit pas pouvoir renommer les exercices »).
+                  Toucher une ligne ouvrait un champ de renommage qui
+                  réécrivait l'historique PARTOUT — un geste lourd derrière une
+                  simple consultation de records, et déclenchable par erreur en
+                  faisant défiler la liste. Renommer se fait maintenant
+                  uniquement depuis l'éditeur d'un programme, où l'on est déjà
+                  en train de modifier quelque chose. */}
+              {mesRecords.map((r) => (
+                <View key={r.exercice} style={styles.ligneRecord}>
+                  <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
+                  <Text style={styles.valeurRecord}>
+                    {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
+                  </Text>
+                  <Text style={styles.dateRecord}>{r.date}</Text>
+                </View>
+              ))}
             </View>
           )}
         </>
