@@ -20,12 +20,69 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
 import { colors, espacement } from '../theme';
+import { da, monospace } from '../designSystem';
 import { baremes, nomsLigues, couleursLigues } from '../data/clubSP';
 import { STATUTS, estVerifiee } from '../data/statuts';
 import { palierExercice } from '../logic/classement';
 import * as api from '../api';
 
 const DELAI_RAFRAICHISSEMENT_MS = 10000;
+
+// LES TROIS STATUTS DU FORMULAIRE (maquette « NOUVELLE PERF », 09/09/2026).
+// Les libellés et les couleurs viennent de la maquette ; les explications, du
+// fonctionnement RÉEL de l'app (chez le designer, on choisissait son statut
+// à la saisie — impossible ici, voir le commentaire dans le rendu).
+const STATUTS_SAISIE = [
+  {
+    cle: 'non_verifie',
+    libelle: 'DÉCLARÉ',
+    couleur: '#8a8792',
+    explication: 'Auto-reporté : suivi perso uniquement, ne compte pas au classement.',
+  },
+  {
+    cle: 'communaute',
+    libelle: 'VÉRIFIÉ COMMUNAUTÉ',
+    couleur: colors.accent,
+    explication:
+      'Vidéo validée par un autre joueur : compte au classement. '
+      + 'Joins ta vidéo depuis « Enregistrées », après avoir enregistré la perf.',
+  },
+  {
+    cle: 'salle',
+    libelle: 'VÉRIFIÉ SALLE',
+    couleur: da.or,
+    explication:
+      'Un partenaire présent saisit ton code : compte au classement. '
+      + 'Le code se génère depuis « Enregistrées », après avoir enregistré la perf.',
+  },
+];
+
+// Le libellé du champ PORTE l'unité du barème — « CHARGE (KG) POUR 10 REPS »
+// dit tout, là où l'écran affichait avant un libellé vague et une phrase
+// d'explication séparée juste au-dessus.
+function libelleValeur(bareme) {
+  if (!bareme) return 'VALEUR';
+  if (bareme.unite === 'kg') return `CHARGE (KG) POUR ${bareme.reps} REPS`;
+  return 'NOMBRE DE RÉPÉTITIONS';
+}
+
+// L'exemple proposé est le 2e palier du barème (comme dans la maquette) :
+// un ordre de grandeur atteignable, pas un chiffre en l'air.
+function placeholderValeur(bareme) {
+  if (!bareme) return 'Choisis un exercice';
+  return `ex. ${bareme.paliers[1]}`;
+}
+
+// Évite les « Encore 2.5000000000000004 kg » des flottants.
+function arrondi(nombre) {
+  return Math.round(nombre * 100) / 100;
+}
+
+// « 10 × 100 kg » ou « 15 reps » — sert au message de confirmation.
+function uniteLisible(bareme, valeur) {
+  if (!bareme) return String(valeur);
+  return bareme.unite === 'kg' ? `${bareme.reps} × ${valeur} kg` : `${valeur} reps`;
+}
 
 export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, validerPerf, estConnecte }) {
   const [exerciceChoisi, setExerciceChoisi] = useState(null);
@@ -51,12 +108,53 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
   const [messageValidation, setMessageValidation] = useState(null);
 
   const [enregistreesOuvertes, setEnregistreesOuvertes] = useState(false);
+  // Le message sous le bouton d'enregistrement (maquette « NOUVELLE PERF »,
+  // 09/09/2026). Avant, une saisie invalide ne faisait RIEN du tout : le
+  // bouton semblait mort sans qu'on sache pourquoi.
+  const [messageSaisie, setMessageSaisie] = useState(null);
+  // Quel statut est expliqué sous les trois puces (voir plus bas : elles
+  // informent, elles ne choisissent pas).
+  const [statutExplique, setStatutExplique] = useState(null);
 
   const listeExercices = Object.keys(baremes[moi.sexe]);
   // Résumé affiché sans déplier : « 4 vérifiées sur 11 saisies ».
   const nbPerfs = Object.keys(mesPerfs).length;
   const nbVerifiees = Object.values(mesPerfs).filter(estVerifiee).length;
   const bareme = exerciceChoisi ? baremes[moi.sexe][exerciceChoisi] : null;
+
+  // LE STATUT QUI S'APPLIQUERA VRAIMENT à l'enregistrement. C'est la même
+  // règle que `soumettrePerf` — une seule source, pour que la puce allumée ne
+  // puisse pas mentir sur ce qui va être enregistré.
+  const statutALEnregistrement = moi.affilieSalle ? 'salle' : 'non_verifie';
+
+  // APERÇU DU PALIER pendant la frappe (maquette « NOUVELLE PERF ») : ce que
+  // vaut la valeur saisie, et ce qu'il manque pour la marche suivante.
+  // Calculé depuis le barème déjà utilisé partout, donc jamais en désaccord
+  // avec ce qu'affichera la liste une fois la perf enregistrée.
+  const apercu = (() => {
+    if (!bareme) return null;
+    const nombre = parseFloat(String(valeur).replace(',', '.'));
+    if (isNaN(nombre) || nombre <= 0) return null;
+    const palier = palierExercice(moi.sexe, exerciceChoisi, nombre);
+    const seuils = bareme.paliers;
+    if (palier === 0) {
+      const manque = seuils[0] - nombre;
+      return {
+        nom: 'SOUS BRONZE',
+        couleur: colors.texteGris,
+        indice: `Encore ${arrondi(manque)} ${bareme.unite === 'kg' ? 'kg' : 'reps'} pour Bronze`,
+      };
+    }
+    const nom = nomsLigues[palier - 1];
+    const auSommet = palier >= seuils.length;
+    return {
+      nom: `PALIER ${nom.toUpperCase()}`,
+      couleur: couleursLigues[nom],
+      indice: auSommet
+        ? 'Palier maximum atteint sur cet exercice.'
+        : `Prochain palier ${nomsLigues[palier]} : ${uniteLisible(bareme, seuils[palier])}`,
+    };
+  })();
 
   useEffect(() => {
     if (!estConnecte) return;
@@ -82,12 +180,27 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
 
   function soumettrePerf() {
     const nombre = parseFloat(valeur.replace(',', '.'));
-    if (!exerciceChoisi || isNaN(nombre) || nombre <= 0) return;
-    // Affilié à une salle partenaire → validation automatique.
-    ajouterPerf(exerciceChoisi, nombre, moi.affilieSalle ? 'salle' : 'non_verifie');
+    // ON DIT POURQUOI ÇA NE PART PAS (maquette du 09/09/2026) : cette fonction
+    // se contentait d'un `return` muet, donc appuyer sur le bouton sans avoir
+    // choisi d'exercice ne produisait rien — ni perf, ni explication.
+    if (!exerciceChoisi) {
+      setMessageSaisie('Choisis d\'abord un exercice.');
+      return;
+    }
+    if (isNaN(nombre) || nombre <= 0) {
+      setMessageSaisie('Entre une valeur valide d\'abord.');
+      return;
+    }
+    // UNE SEULE DÉFINITION de la règle : `statutALEnregistrement` est aussi ce
+    // qu'annonce la puce allumée juste au-dessus du bouton. Réécrire le
+    // ternaire ici aurait permis aux deux de diverger — le motif que ce projet
+    // a déjà payé trois fois (voir CLAUDE.md, « cycleEnService »).
+    ajouterPerf(exerciceChoisi, nombre, statutALEnregistrement);
+    setMessageSaisie(`Perf enregistrée : ${exerciceChoisi} · ${uniteLisible(bareme, nombre)}`);
     setExerciceChoisi(null);
     setValeur('');
     setListeOuverte(false);
+    setStatutExplique(null);
   }
 
   // Simulation locale (mode hors-ligne uniquement, voir estConnecte plus bas).
@@ -184,17 +297,19 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
         <Image source={require('../../assets/icones/perfs.png')} style={styles.iconeTitre} />
         <Text style={styles.titre}>Mes performances</Text>
       </View>
-      <Text style={styles.sousTitre}>
-        {moi.affilieSalle
-          ? '🏋️ Affilié salle partenaire : tes perfs sont validées automatiquement.'
-          : 'Non affilié : fais vérifier tes perfs par vidéo, par un partenaire (code), ou par un vote de confiance.'}
-      </Text>
-
-      {/* ---- Formulaire d'ajout ---- */}
+      {/* ---- « NOUVELLE PERF » : la maquette du 09/09/2026 ----
+           Elle remplace le formulaire d'origine ET la carte « les 3 paliers »
+           qui le suivait : cette carte listait déjà les trois statuts, en
+           moins lisible et sans dire comment les obtenir. Le bloc « STATUT DE
+           LA PERF » ci-dessous porte la même information, mieux. */}
       <View style={styles.formulaire}>
-        <Text style={styles.libelle}>Exercice</Text>
+        <Text style={styles.titreFormulaire}>
+          NOUVELLE <Text style={{ color: da.or }}>PERF</Text>
+        </Text>
+
+        <Text style={styles.libelleMaquette}>EXERCICE</Text>
         <TouchableOpacity style={styles.selecteurExo} onPress={() => setListeOuverte(!listeOuverte)}>
-          <Text style={{ color: exerciceChoisi ? colors.texte : colors.texteGris }}>
+          <Text style={[styles.texteSelecteur, !exerciceChoisi && { color: colors.texteGris }]}>
             {exerciceChoisi || 'Choisir un exercice…'}
           </Text>
           <Text style={{ color: colors.texteGris }}>{listeOuverte ? '▲' : '▼'}</Text>
@@ -205,44 +320,91 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
             <TouchableOpacity
               key={exo}
               style={styles.choixExo}
-              onPress={() => { setExerciceChoisi(exo); setListeOuverte(false); }}
+              onPress={() => {
+                setExerciceChoisi(exo);
+                setListeOuverte(false);
+                setValeur('');
+                setMessageSaisie(null);
+              }}
             >
               <Text style={{ color: colors.texte }}>{exo}</Text>
             </TouchableOpacity>
           ))}
 
-        {bareme && (
-          <Text style={styles.indice}>
-            {bareme.unite === 'kg'
-              ? `Charge en kg pour ${bareme.reps} répétitions`
-              : 'Nombre de répétitions au poids du corps'}
-          </Text>
-        )}
-
-        <Text style={styles.libelle}>{bareme && bareme.unite === 'reps' ? 'Répétitions' : 'Charge (kg)'}</Text>
+        {/* Le libellé PORTE l'unité et le nombre de reps du barème : plus besoin
+            d'une ligne d'explication séparée sous le sélecteur. */}
+        <Text style={styles.libelleMaquette}>{libelleValeur(bareme)}</Text>
         <TextInput
-          style={styles.champ}
+          style={styles.champValeur}
           value={valeur}
-          onChangeText={setValeur}
+          onChangeText={(v) => { setValeur(v); setMessageSaisie(null); }}
           keyboardType="numeric"
-          placeholder="Ex. : 100"
+          placeholder={placeholderValeur(bareme)}
           placeholderTextColor={colors.texteGris}
         />
 
-        <TouchableOpacity style={styles.boutonAjouter} onPress={soumettrePerf}>
-          <Text style={styles.boutonAjouterTexte}>➕ Ajouter ma performance</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ---- Les 3 paliers de vérification ---- */}
-      <View style={styles.cartePaliers}>
-        {Object.values(STATUTS).map((s) => (
-          <View key={s.libelle} style={styles.lignePalier}>
-            <Text style={{ fontSize: 16 }}>{s.emoji}</Text>
-            <Text style={[styles.palierTexte, { color: s.couleur }]}>{s.libelle}</Text>
+        {/* APERÇU DU PALIER, en direct pendant la frappe. On voit ce que vaut
+            la valeur saisie AVANT d'enregistrer, et ce qu'il manque pour la
+            marche suivante. Rien n'est inventé : c'est le barème
+            (`palierExercice`) déjà utilisé partout ailleurs. */}
+        {apercu && (
+          <View style={[styles.carteApercu, { borderColor: apercu.couleur }]}>
+            <View style={[styles.losangeApercu, { backgroundColor: apercu.couleur }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.nomApercu, { color: apercu.couleur }]}>{apercu.nom}</Text>
+              {!!apercu.indice && <Text style={styles.indiceApercu}>{apercu.indice}</Text>}
+            </View>
           </View>
-        ))}
-        <Text style={styles.indice}>Déclaré = suivi perso. Seules les perfs vérifiées comptent au classement.</Text>
+        )}
+
+        {/* ---- STATUT DE LA PERF ----
+            ⚠️ ÉCART ASSUMÉ AVEC LA MAQUETTE : chez le designer, ces trois
+            boutons CHOISISSENT le statut au moment de la saisie. L'app ne peut
+            pas le permettre — on ne valide pas sa propre perf (le serveur
+            répond 403, voir « Comptes sécurisés » dans CLAUDE.md), et le vote
+            « sans preuve » a justement été retiré le 01/09/2026. Un sélecteur
+            libre serait donc un mensonge : soit il ne ferait rien, soit il
+            ferait échouer l'enregistrement.
+            Ici les puces INFORMENT : celle qui s'appliquera vraiment est
+            allumée, les deux autres disent comment les atteindre APRÈS
+            l'enregistrement (vidéo ou code partenaire, depuis la liste plus
+            bas). Toucher une puce affiche son explication, comme dans la
+            maquette. */}
+        <Text style={styles.libelleMaquette}>STATUT DE LA PERF</Text>
+        <View style={styles.lignePuces}>
+          {STATUTS_SAISIE.map((s) => {
+            const applique = s.cle === statutALEnregistrement;
+            return (
+              <TouchableOpacity
+                key={s.cle}
+                style={[
+                  styles.puceStatut,
+                  applique
+                    ? { backgroundColor: s.couleur, borderColor: s.couleur }
+                    : { borderColor: statutExplique === s.cle ? s.couleur : da.bordureFine },
+                ]}
+                onPress={() => setStatutExplique(statutExplique === s.cle ? null : s.cle)}
+              >
+                <Text
+                  style={[
+                    styles.puceStatutTexte,
+                    { color: applique ? da.orSombre : s.couleur },
+                  ]}
+                >
+                  {s.libelle}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.indiceStatut}>
+          {(STATUTS_SAISIE.find((s) => s.cle === (statutExplique || statutALEnregistrement)) || {}).explication}
+        </Text>
+
+        <TouchableOpacity style={styles.boutonEnregistrer} onPress={soumettrePerf}>
+          <Text style={styles.boutonEnregistrerTexte}>ENREGISTRER LA PERF</Text>
+        </TouchableOpacity>
+        {!!messageSaisie && <Text style={styles.messageSaisie}>{messageSaisie}</Text>}
       </View>
 
       {/* ---- Liste des performances ---- */}
@@ -434,13 +596,108 @@ const styles = StyleSheet.create({
     borderColor: colors.bordure,
     marginBottom: espacement.m,
   },
-  libelle: { color: colors.texte, fontWeight: '600', marginBottom: 6, marginTop: espacement.s },
+  // ---- Maquette « NOUVELLE PERF » (09/09/2026) ----
+  titreFormulaire: {
+    color: colors.texte,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: espacement.s,
+  },
+  // Les libellés de la maquette : petits, très gras, très espacés, en gris.
+  libelleMaquette: {
+    color: colors.texteGris,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginTop: espacement.m,
+    marginBottom: 6,
+  },
+  texteSelecteur: { color: colors.texte, fontSize: 14, fontWeight: '700' },
+  // Le champ de valeur porte une bordure OR : c'est le seul endroit où l'on
+  // tape, la maquette le désigne ainsi. Chiffres en chasse fixe.
+  champValeur: {
+    backgroundColor: colors.carte,
+    borderWidth: 1,
+    borderColor: da.bordureOrDouce,
+    borderRadius: 12,
+    padding: 14,
+    color: colors.texte,
+    fontFamily: monospace,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  carteApercu: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: da.carteBasse,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginTop: espacement.m,
+  },
+  losangeApercu: { width: 14, height: 14, borderRadius: 3, transform: [{ rotate: '45deg' }] },
+  nomApercu: { fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  indiceApercu: { color: colors.texteGris, fontSize: 11.5, marginTop: 2 },
+  lignePuces: { flexDirection: 'row', gap: 8 },
+  puceStatut: {
+    flex: 1,
+    backgroundColor: colors.carte,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  puceStatutTexte: {
+    fontWeight: '800',
+    fontSize: 10.5,
+    letterSpacing: 0.5,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+  indiceStatut: { color: da.texteMuet, fontSize: 10.5, lineHeight: 16, marginTop: 8 },
+  // Le grand bouton or de la maquette. Elle le veut en dégradé
+  // (#f2c95c → #e8b23a) ; on le pose en aplat pour ne pas ajouter
+  // `expo-linear-gradient` à un projet qui tient à ses rares dépendances —
+  // les deux ors sont voisins, l'ombre dorée porte l'essentiel de l'effet.
+  boutonEnregistrer: {
+    backgroundColor: da.or,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: espacement.l,
+    shadowColor: da.or,
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  boutonEnregistrerTexte: {
+    color: da.orSombre,
+    fontWeight: '900',
+    fontSize: 15,
+    letterSpacing: 2,
+  },
+  messageSaisie: {
+    color: da.texteMuet,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: espacement.s,
+  },
+  // ---- fin de la maquette ----
   selecteurExo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: colors.carteClaire,
-    borderRadius: 10,
-    padding: 12,
+    alignItems: 'center',
+    backgroundColor: colors.carte,
+    borderWidth: 1,
+    borderColor: da.bordureFine,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
   },
   choixExo: {
     padding: 12,
@@ -463,16 +720,6 @@ const styles = StyleSheet.create({
     marginTop: espacement.m,
   },
   boutonAjouterTexte: { color: colors.texte, fontWeight: '700' },
-  cartePaliers: {
-    backgroundColor: colors.carte,
-    borderRadius: 16,
-    padding: espacement.m,
-    borderWidth: 1,
-    borderColor: colors.bordure,
-    marginBottom: espacement.m,
-  },
-  lignePalier: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  palierTexte: { fontWeight: '700', marginLeft: 8 },
   sectionTitre: { color: colors.texte, fontSize: 18, fontWeight: '700', marginBottom: espacement.s },
   enteteRepliable: {
     flexDirection: 'row',

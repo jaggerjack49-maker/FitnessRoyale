@@ -2305,6 +2305,97 @@ chercher l'attribut dans le DOM de la version web.
 Vérifié dans le navigateur (format mobile, backend local) : les six icônes se
 lisent, et l'état actif suit bien quand on change d'onglet.
 
+## Onglet Perfs : la maquette « NOUVELLE PERF » — 09/09/2026
+
+Deuxième import depuis le projet Claude Design de Hafiz (le même que la DA du
+12/08 : `Fitness Royale.dc.html`, livré en zip dans `icones/` avec la capture
+de l'écran sélectionné). L'artboard visé est **SAISIE**, le formulaire d'ajout
+de performance en haut de l'onglet Perfs.
+
+### Ce qui a été repris tel quel
+
+- Titre **« NOUVELLE PERF »**, le second mot en or.
+- Libellés en petites capitales très espacées (11 px, gras 800, `letterSpacing`
+  1,5, gris) au lieu des libellés en casse normale d'avant.
+- **Le libellé du champ PORTE l'unité** : « CHARGE (KG) POUR 10 REPS » ou
+  « NOMBRE DE RÉPÉTITIONS ». Il remplace la phrase d'explication séparée qui
+  vivait au-dessus du champ — une ligne de moins pour la même information.
+- Champ de valeur à **bordure OR** (`da.bordureOrDouce`) et chiffres en chasse
+  fixe : c'est le seul endroit où l'on tape, la maquette le désigne ainsi.
+  Placeholder « ex. 85 » = le DEUXIÈME palier du barème de l'exercice choisi,
+  comme dans le prototype — un ordre de grandeur atteignable, pas un chiffre
+  en l'air.
+- Bloc **« STATUT DE LA PERF »** : trois puces sur une ligne + une phrase
+  d'explication dessous.
+- Grand bouton or **« ENREGISTRER LA PERF »**.
+- Le message sous le bouton (« Perf enregistrée : … », « Entre une valeur
+  valide d'abord. »).
+
+### ⚠️ L'ÉCART ASSUMÉ : les trois puces INFORMENT, elles ne choisissent pas
+
+Chez le designer, ces boutons CHOISISSENT le statut au moment de la saisie.
+**L'app ne peut pas le permettre** — un joueur ne valide pas sa propre perf (le
+serveur répond 403, voir « Comptes sécurisés »), et le vote « sans preuve » a
+justement été retiré le 01/09/2026. Un sélecteur libre serait donc un mensonge :
+soit il ne changerait rien, soit il ferait échouer l'enregistrement.
+
+Ici, la puce ALLUMÉE est celle qui s'appliquera vraiment (« VÉRIFIÉ SALLE » si
+`moi.affilieSalle`, « DÉCLARÉ` sinon) ; les deux autres disent comment les
+ATTEINDRE après coup — vidéo, ou code partenaire, depuis « Enregistrées ».
+Toucher une puce affiche son explication, exactement comme dans la maquette.
+
+UNE SEULE DÉFINITION de cette règle : `statutALEnregistrement` sert à la fois à
+allumer la puce et à `soumettrePerf`. Réécrire le ternaire aux deux endroits
+aurait permis à l'affichage de mentir sur ce qui est enregistré — le motif que
+ce projet a déjà payé (voir `cycleEnService`, bug du 28/08).
+
+### Ce qui a été AJOUTÉ par la maquette : l'aperçu de palier
+
+Pendant la frappe, une carte annonce ce que vaut la valeur saisie et ce qu'il
+manque pour la marche suivante : « PALIER SILVER · Prochain palier Gold :
+10 × 100 kg », ou « SOUS BRONZE · Encore 5 kg pour Bronze », ou « Palier
+maximum atteint sur cet exercice. »
+Aucun calcul nouveau : c'est `palierExercice` et le barème de `clubSP.js`, déjà
+utilisés partout — donc impossible que l'aperçu contredise ce qu'affichera la
+liste une fois la perf enregistrée.
+C'est ici l'EXCEPTION connue au vocabulaire « arènes, jamais ligues » (voir
+20/08/2026) : le palier d'UN exercice garde son nom de ligue.
+
+### Deux autres changements de comportement
+
+- **Le bouton ne reste plus muet.** `soumettrePerf` faisait un `return` sans
+  rien dire si l'exercice ou la valeur manquait : on appuyait, rien ne se
+  passait, aucune explication. Il dit maintenant lequel des deux manque.
+- **La carte « les 3 paliers de vérification » a disparu.** Elle listait déjà
+  les trois statuts sous le formulaire, en moins lisible et sans dire comment
+  les obtenir. Le bloc « STATUT DE LA PERF » porte la même information, mieux.
+  La phrase d'introduction de l'écran (« Non affilié : fais vérifier tes
+  perfs… ») a sauté pour la même raison — les explications sont maintenant
+  attachées aux puces.
+
+### Deux écarts mineurs, volontaires
+
+1. **Le bouton or est un APLAT, pas un dégradé** (`#f2c95c` → `#e8b23a` dans la
+   maquette). React Native ne fait pas de dégradé CSS et `expo-linear-gradient`
+   serait une dépendance de plus dans un projet qui tient à en avoir peu — les
+   deux ors sont voisins, et l'ombre dorée porte l'essentiel de l'effet.
+2. **Le titre d'écran « Mes performances » et son badge restent.** La maquette
+   n'a que le formulaire sur cette page ; notre onglet porte aussi la liste des
+   perfs enregistrées, les vidéos à valider et le code partenaire. Le badge est
+   par ailleurs une image fournie par Hafiz (26/08). « NOUVELLE PERF » titre
+   donc la CARTE du formulaire, pas l'écran.
+
+⚠️ NON REPRIS : la barre de navigation de la maquette (5 onglets + un « + »
+central) — l'app en a 6 et sa barre vient d'être refaite le 08/09 sur une autre
+maquette du même projet (voir « Barre d'onglets : la piste Arène »). Rien à
+changer là.
+
+Vérifié dans le navigateur (format mobile, backend local) : « Développé
+couché » + 88 kg → libellé « CHARGE (KG) POUR 10 REPS », aperçu « PALIER
+SILVER · Prochain palier Gold : 10 × 100 kg », enregistrement confirmé par le
+message et par le serveur (`statut: declare`), et un appui à vide affiche
+« Choisis d'abord un exercice. »
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
