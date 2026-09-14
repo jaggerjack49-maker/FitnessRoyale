@@ -2579,6 +2579,50 @@ natif. À CONFIRMER SUR L'APK : toucher un onglet éloigné doit faire glisser l
 page jusqu'à lui.
 Suite complète : 260 tests, tous OK.
 
+## Entraînement : on garde sa place en revenant de l'historique — 14/09/2026
+
+Signalé par Hafiz : ouvrir une séance de l'« Historique » (tout en bas de
+l'onglet Entraînement) puis en sortir ramenait l'affichage TOUT EN HAUT.
+
+POURQUOI : chaque vue de l'onglet (détail d'une séance passée, nouveau
+programme, séance en cours) est un écran À PART, renvoyé à la place de
+l'accueil. Revenir recrée donc la page d'accueil, qui repart en haut. Ce n'est
+pas le même mécanisme que « Glisser entre les onglets » (qui garde les ONGLETS
+en place) : ici, c'est l'intérieur d'un seul onglet qui change de vue.
+
+LE CORRECTIF (`EntrainementScreen.js`) : la position de défilement de l'accueil
+est retenue (`positionAccueil`, mise à jour par `onScroll`) et remise quand on
+revient sur l'accueil. Ça vaut pour TOUS les retours, pas seulement
+l'historique : sortir d'une séance ou annuler un nouveau programme ramène aussi
+là où on était.
+
+DEUX PIÈGES, trouvés en vérifiant — le premier jet ne marchait pas du tout :
+- **Sans `key`, React RÉUTILISE le même `<ScrollView>`** d'une vue à l'autre
+  (elles en renvoient toutes un, au même endroit de l'arbre). Le contenu court
+  du détail ramène le défilement à 0 sur CET élément, et comme il n'est pas
+  neuf, rien ne signale qu'il faut remettre la place. D'où `key="accueil"`,
+  indispensable.
+- **`onContentSizeChange` ne suffit pas** : sur web, il repose sur un
+  `ResizeObserver`, qui peut ne jamais se déclencher (c'est le cas dans le
+  volet navigateur masqué, comme `requestAnimationFrame`). La place est donc
+  remise par un `useEffect` au retour sur l'accueil ; `onContentSizeChange`
+  reste en renfort pour le téléphone, si le contenu finit de s'afficher un peu
+  plus tard. Pendant la remise en place (`aRestaurer`, 400 ms), les évènements
+  de défilement sont ignorés : sinon la page neuve, à 0, écraserait la position
+  qu'on cherche justement à retrouver.
+
+⚠️ LEÇON DE MÉTHODE : deux premiers essais ont semblé RÉUSSIR alors que le code
+ne faisait rien. L'élément réutilisé gardait son `scrollTop` tant que le
+navigateur ne recalculait pas la page — et le script de test ne lisait rien
+pendant l'affichage du détail. C'est un ESPION sur `Element.prototype.scroll`
+(zéro appel de l'app) qui a démasqué ces faux positifs. Vérifier que le code
+AGIT, pas seulement que le résultat a l'air bon.
+
+Vérifié dans le navigateur (backend local, sans aucune cale) : en bas de page
+(759 px) → détail d'une séance → retour : l'app appelle `scroll` à 759 et la
+page y revient ; idem à 400 px ; un défilement manuel ensuite n'est pas ramené
+en arrière. Suite complète : 260 tests, tous OK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
