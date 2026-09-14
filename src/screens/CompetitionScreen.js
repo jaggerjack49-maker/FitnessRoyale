@@ -13,6 +13,7 @@ import CarteDuel from '../components/CarteDuel';
 import DuelDirect from '../components/DuelDirect';
 import DuelEnLigne from '../components/DuelEnLigne';
 import AvatarJoueur from '../components/AvatarJoueur';
+import usePlaceDefilement from '../usePlaceDefilement';
 
 // Une ligne de classement de joueurs.
 function LigneJoueur({ joueur, index }) {
@@ -92,6 +93,16 @@ export default function CompetitionScreen({
   const [selecteurExoOuvert, setSelecteurExoOuvert] = useState(false);
   const [duelDirectActif, setDuelDirectActif] = useState(false);
   const [duelEnLigneActif, setDuelEnLigneActif] = useState(false);
+
+  // Garder sa place (14/09/2026) : chaque vue de la liste — un mode de
+  // classement, les défis — retrouve son défilement quand on y revient. Avant,
+  // fermer un duel ou revenir de « Défis » remettait la liste en haut.
+  // Un duel ouvert, lui, repart toujours en haut (`memoriser: false`).
+  const duelOuvert = onglet === 'defis' && (duelDirectActif || duelEnLigneActif);
+  const vueListe = onglet === 'classement'
+    ? `classement-${mode}`
+    : duelDirectActif ? 'duelDirect' : duelEnLigneActif ? 'duelEnLigne' : 'defis';
+  const placeListe = usePlaceDefilement(vueListe, { memoriser: !duelOuvert });
 
   // La touche VS du Profil amène ICI et doit proposer un duel tout de suite,
   // pas le classement (demande de Hafiz du 01/09/2026). `demandeDuel` est un
@@ -200,7 +211,7 @@ export default function CompetitionScreen({
         </>
       )}
 
-      <ScrollView contentContainerStyle={{ paddingBottom: espacement.xl }}>
+      <ScrollView key={vueListe} {...placeListe} contentContainerStyle={{ paddingBottom: espacement.xl }}>
         {/* ----- DÉFIS ----- */}
         {onglet === 'defis' && duelDirectActif && (
           <DuelDirect

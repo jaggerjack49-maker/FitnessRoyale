@@ -9,7 +9,7 @@
 // Mode hors-ligne : programmes et séances vivent d'abord en état local
 // (fonctionne sans serveur) ; si connecté, chaque création est synchronisée
 // au serveur en tâche de fond (comme le reste de l'app).
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
@@ -29,6 +29,7 @@ import {
 } from '../logic/surchargeProgressive';
 import * as notifications from '../notifications';
 import * as stockageSeance from '../stockageSeance';
+import usePlaceDefilement from '../usePlaceDefilement';
 import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
 } from '../logic/rattrapage';
@@ -384,58 +385,10 @@ export default function EntrainementScreen({
 
   // ---- Garder sa place dans l'accueil (14/09/2026, demande de Hafiz) ----
   // Chaque vue (détail d'une séance passée, nouveau programme, séance) est un
-  // écran À PART : ouvrir l'une d'elles DÉTRUIT la page d'accueil, et y revenir
-  // en recrée une neuve… qui repart tout en haut. Ouvrir une séance de
-  // l'historique, tout en bas, obligeait donc à tout redescendre en sortant.
-  // On retient la position de défilement de l'accueil, et on la remet quand la
-  // page est recréée.
-  const scrollAccueil = useRef(null);
-  const derniereInstanceAccueil = useRef(null);
-  const positionAccueil = useRef(0);
-  const hauteurAccueil = useRef(0);
-  const aRestaurer = useRef(false);
-
-  function brancherScrollAccueil(instance) {
-    if (!instance) return;
-    scrollAccueil.current = instance;
-    // Une NOUVELLE instance = la page vient d'être recréée : place à remettre.
-    // (React rappelle cette fonction à chaque rendu avec la même instance,
-    // d'où la comparaison — sinon on ramènerait l'utilisateur en arrière à
-    // chaque dépliage de section.)
-    if (instance !== derniereInstanceAccueil.current) {
-      derniereInstanceAccueil.current = instance;
-      aRestaurer.current = positionAccueil.current > 0;
-    }
-  }
-
-  function surDefilementAccueil(e) {
-    // Tant que la place n'est pas remise, un évènement de défilement à 0
-    // (la page neuve) écraserait la position qu'on veut justement retrouver.
-    if (aRestaurer.current) return;
-    positionAccueil.current = e.nativeEvent.contentOffset.y;
-  }
-
-  // Retour sur l'accueil : on remet la place tout de suite. Les données sont
-  // déjà chargées, le contenu est donc complet dès ce rendu. On ne compte pas
-  // uniquement sur `onContentSizeChange` : sur web, il dépend d'un observateur
-  // de taille qui peut ne jamais se déclencher.
-  useEffect(() => {
-    if (vue !== 'accueil' || !aRestaurer.current) return;
-    scrollAccueil.current?.scrollTo({ y: positionAccueil.current, animated: false });
-    // Petit délai avant de relâcher : laisse `onContentSizeChange` corriger si
-    // le contenu finit de se mettre en place un peu après (téléphone).
-    const minuterie = setTimeout(() => { aRestaurer.current = false; }, 400);
-    return () => clearTimeout(minuterie);
-  }, [vue]);
-
-  function surTailleContenuAccueil(_largeur, hauteur) {
-    if (!aRestaurer.current) return;
-    const y = positionAccueil.current;
-    scrollAccueil.current?.scrollTo({ y, animated: false });
-    // On ne lâche la main qu'une fois le contenu assez haut pour atteindre
-    // cette position : avant, le défilement serait bloqué plus haut.
-    if (hauteur - hauteurAccueil.current >= y) aRestaurer.current = false;
-  }
+  // écran À PART : y aller DÉTRUIT la page d'accueil, et revenir en recrée une
+  // neuve… qui repartait tout en haut. Ouvrir une séance de l'historique, tout
+  // en bas, obligeait à tout redescendre en sortant. Voir usePlaceDefilement.
+  const placeAccueil = usePlaceDefilement('accueil');
   const [programmes, setProgrammes] = useState([]);
   const [entrainements, setEntrainements] = useState([]);
   const [chargement, setChargement] = useState(false);
@@ -2187,19 +2140,11 @@ export default function EntrainementScreen({
 
   return (
     <ScrollView
-      // ⚠️ La `key` est INDISPENSABLE. Les autres vues renvoient elles aussi un
-      // <ScrollView> au même endroit : sans clé, React RÉUTILISE le même
-      // élément d'une vue à l'autre. Le contenu court du détail ramène alors
-      // le défilement à 0, et comme l'élément n'est pas neuf, rien ne signale
-      // qu'il faut remettre la place. Avec la clé, l'accueil est recréé.
+      // La `key` est indispensable pour garder sa place (voir usePlaceDefilement).
       key="accueil"
-      ref={brancherScrollAccueil}
+      {...placeAccueil}
       style={styles.conteneur}
       contentContainerStyle={{ padding: espacement.m }}
-      scrollEventThrottle={16}
-      onScroll={surDefilementAccueil}
-      onLayout={(e) => { hauteurAccueil.current = e.nativeEvent.layout.height; }}
-      onContentSizeChange={surTailleContenuAccueil}
     >
       <Text style={styles.titre}>💪 Entraînement</Text>
       <Text style={styles.sousTitre}>

@@ -17,6 +17,7 @@ import { classer, ligueJoueur, cleSalle, nomSalleAffiche } from '../logic/classe
 import { couleursLigues } from '../data/clubSP';
 import { areneDeLaLigue } from '../data/arenes';
 import AvatarJoueur from '../components/AvatarJoueur';
+import usePlaceDefilement from '../usePlaceDefilement';
 import * as api from '../api';
 
 const DELAI_POLLING_MS = 4000;
@@ -25,6 +26,10 @@ const DELAI_POLLING_MS = 4000;
 // onglets restent en place pour qu'on puisse glisser entre eux).
 export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte, actif = true }) {
   const [vue, setVue] = useState('membres'); // 'membres' | 'chat'
+  // Garder sa place dans la liste des membres quand on revient du chat
+  // (14/09/2026, voir usePlaceDefilement). Le chat, lui, descend déjà tout
+  // seul au dernier message.
+  const placeMembres = usePlaceDefilement('membres');
   const [salleSaisie, setSalleSaisie] = useState(salle || '');
   const [enregistrementSalle, setEnregistrementSalle] = useState(false);
   const [messageSalle, setMessageSalle] = useState(null);
@@ -219,7 +224,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte,
       </View>
 
       {vue === 'membres' && (
-        <ScrollView contentContainerStyle={{ paddingBottom: espacement.l }}>
+        <ScrollView key="membres" {...placeMembres} contentContainerStyle={{ paddingBottom: espacement.l }}>
           <Text style={styles.explicationGauche}>
             Les membres de ta salle, classés sur leurs performances vérifiées —
             mêmes règles que le classement global.

@@ -2579,49 +2579,73 @@ natif. À CONFIRMER SUR L'APK : toucher un onglet éloigné doit faire glisser l
 page jusqu'à lui.
 Suite complète : 260 tests, tous OK.
 
-## Entraînement : on garde sa place en revenant de l'historique — 14/09/2026
+## Garder sa place quand une vue change (Entraînement, Compétition, Clan) — 14/09/2026
 
 Signalé par Hafiz : ouvrir une séance de l'« Historique » (tout en bas de
-l'onglet Entraînement) puis en sortir ramenait l'affichage TOUT EN HAUT.
+l'onglet Entraînement) puis en sortir ramenait l'affichage TOUT EN HAUT. Puis
+« et les autres onglets ? » — le même défaut existait ailleurs :
+- **Compétition** : revenir de « Défis » au classement, changer de mode
+  (Global / Par poids / Par exercice / Salles) ou fermer un duel remettait la
+  liste en haut ;
+- **Clan** : revenir du Chat à la liste des Membres aussi.
+Profil, Perfs et Paliers ne sont PAS concernés : une seule page chacun, qui se
+déplie sans jamais changer de vue (et depuis « Glisser entre les onglets », les
+onglets eux-mêmes restent en place).
 
-POURQUOI : chaque vue de l'onglet (détail d'une séance passée, nouveau
-programme, séance en cours) est un écran À PART, renvoyé à la place de
-l'accueil. Revenir recrée donc la page d'accueil, qui repart en haut. Ce n'est
-pas le même mécanisme que « Glisser entre les onglets » (qui garde les ONGLETS
-en place) : ici, c'est l'intérieur d'un seul onglet qui change de vue.
+POURQUOI : quand une vue en remplace une autre à l'intérieur d'un onglet, sa
+page est recréée (ou vidée puis re-remplie) et repart en haut. Ce n'est pas le
+même mécanisme que le glissement entre onglets, qui garde les ONGLETS en place.
 
-LE CORRECTIF (`EntrainementScreen.js`) : la position de défilement de l'accueil
-est retenue (`positionAccueil`, mise à jour par `onScroll`) et remise quand on
-revient sur l'accueil. Ça vaut pour TOUS les retours, pas seulement
-l'historique : sortir d'une séance ou annuler un nouveau programme ramène aussi
-là où on était.
+UN SEUL OUTIL, `src/usePlaceDefilement.js` (hook), plutôt que trois copies :
+il retient la position de défilement DE CHAQUE VUE, rangée par une clé, et la
+remet quand on revient sur cette vue. On étale ce qu'il renvoie sur le
+`<ScrollView>` et on lui donne la MÊME clé en `key` :
+- Entraînement : `usePlaceDefilement('accueil')` ; tous les retours à l'accueil
+  en profitent (historique, séance terminée ou quittée, nouveau programme
+  annulé).
+- Compétition : une clé par vue de la liste (`classement-global`,
+  `classement-salles`… et `defis`) — chaque mode de classement garde sa propre
+  position. Un duel ouvert, lui, repart toujours en haut
+  (`memoriser: false`) : le rouvrir au milieu n'aurait aucun sens.
+- Clan : `usePlaceDefilement('membres')`. Le chat n'en a pas besoin, il descend
+  déjà tout seul au dernier message.
+La première version, écrite directement dans l'Entraînement, a été remplacée
+par ce hook dans la foulée — même règle, un seul endroit.
 
-DEUX PIÈGES, trouvés en vérifiant — le premier jet ne marchait pas du tout :
-- **Sans `key`, React RÉUTILISE le même `<ScrollView>`** d'une vue à l'autre
-  (elles en renvoient toutes un, au même endroit de l'arbre). Le contenu court
-  du détail ramène le défilement à 0 sur CET élément, et comme il n'est pas
-  neuf, rien ne signale qu'il faut remettre la place. D'où `key="accueil"`,
-  indispensable.
+TROIS PIÈGES, trouvés en vérifiant — le premier jet ne marchait pas du tout :
+- **Sans `key`, React RÉUTILISE le même `<ScrollView>`** d'une vue à l'autre.
+  Le contenu plus court de l'autre vue ramène le défilement à 0 sur CET élément,
+  et comme il n'est pas neuf, rien ne signale qu'il faut remettre la place.
+  La `key` est donc indispensable. Elle n'est PAS renvoyée par le hook : React
+  19 avertit quand une `key` arrive par un `{...}` — c'est l'écran qui la pose.
 - **`onContentSizeChange` ne suffit pas** : sur web, il repose sur un
   `ResizeObserver`, qui peut ne jamais se déclencher (c'est le cas dans le
-  volet navigateur masqué, comme `requestAnimationFrame`). La place est donc
-  remise par un `useEffect` au retour sur l'accueil ; `onContentSizeChange`
-  reste en renfort pour le téléphone, si le contenu finit de s'afficher un peu
-  plus tard. Pendant la remise en place (`aRestaurer`, 400 ms), les évènements
-  de défilement sont ignorés : sinon la page neuve, à 0, écraserait la position
-  qu'on cherche justement à retrouver.
+  volet navigateur masqué, comme `requestAnimationFrame`). La place est remise
+  dès le MONTAGE du ScrollView, dans sa `ref` ; `onContentSizeChange` reste en
+  renfort pour le téléphone, si le contenu finit de s'afficher un peu après.
+- **La `ref` doit être une fonction STABLE** (`useCallback` sans dépendance).
+  Une fonction recréée à chaque rendu est rappelée à chaque rendu : on
+  ramènerait l'utilisateur en arrière à chaque dépliage de section. Stable,
+  elle n'est appelée qu'au montage — exactement quand une vue est recréée.
+Pendant 400 ms après la remise en place, les évènements de défilement sont
+ignorés : la page neuve, encore à 0, écraserait sinon la position cherchée.
 
 ⚠️ LEÇON DE MÉTHODE : deux premiers essais ont semblé RÉUSSIR alors que le code
 ne faisait rien. L'élément réutilisé gardait son `scrollTop` tant que le
 navigateur ne recalculait pas la page — et le script de test ne lisait rien
-pendant l'affichage du détail. C'est un ESPION sur `Element.prototype.scroll`
-(zéro appel de l'app) qui a démasqué ces faux positifs. Vérifier que le code
-AGIT, pas seulement que le résultat a l'air bon.
+pendant l'affichage de l'autre vue. C'est un ESPION sur
+`Element.prototype.scroll` (zéro appel de l'app) qui a démasqué ces faux
+positifs. Vérifier que le code AGIT, pas seulement que le résultat a l'air bon.
 
-Vérifié dans le navigateur (backend local, sans aucune cale) : en bas de page
-(759 px) → détail d'une séance → retour : l'app appelle `scroll` à 759 et la
-page y revient ; idem à 400 px ; un défilement manuel ensuite n'est pas ramené
-en arrière. Suite complète : 260 tests, tous OK.
+Vérifié dans le navigateur (backend local, format 420 × 520, sans aucune cale,
+page recalculée à chaque étape, espion sur `scroll`) :
+- Entraînement : bas de page (1049 px) → séance de l'historique → retour :
+  l'app remet 1049 ;
+- Compétition : classement global à 907 px → Défis → Classement : 907 ;
+  → Salles (repart en haut, 0) → Global : 907 ; défis à 146 px → duel en
+  direct (ouvert en haut) → « Annuler » : 146 ;
+- Clan : « ⚙️ Changer de salle » déplié pour allonger la liste (trop peu de membres en local sinon), membres à 131 px → Chat → Membres : 131.
+Suite complète : 260 tests, tous OK.
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 
