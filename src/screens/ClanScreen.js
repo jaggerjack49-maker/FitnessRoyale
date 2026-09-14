@@ -21,7 +21,9 @@ import * as api from '../api';
 
 const DELAI_POLLING_MS = 4000;
 
-export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte }) {
+// `actif` : vrai quand cet onglet est celui qu'on regarde (voir App.js, les
+// onglets restent en place pour qu'on puisse glisser entre eux).
+export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte, actif = true }) {
   const [vue, setVue] = useState('membres'); // 'membres' | 'chat'
   const [salleSaisie, setSalleSaisie] = useState(salle || '');
   const [enregistrementSalle, setEnregistrementSalle] = useState(false);
@@ -54,10 +56,15 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte 
       setChargement(false);
       return;
     }
+    // PAUSE quand l'onglet n'est pas à l'écran : l'écran reste en place pour
+    // le glissement entre onglets, mais interroger le serveur toutes les
+    // 4 secondes pour un chat que personne ne regarde ne sert à rien. En
+    // revenant, `actif` repasse à vrai et on recharge tout de suite.
+    if (!actif) return;
     charger();
     intervalleRef.current = setInterval(charger, DELAI_POLLING_MS);
     return () => clearInterval(intervalleRef.current);
-  }, [peutDiscuter, moi.salle]);
+  }, [peutDiscuter, moi.salle, actif]);
 
   // Enregistre ma salle. En ligne, on l'envoie au serveur : le chat et le
   // classement des membres s'appuient sur la salle enregistrée LÀ-BAS.

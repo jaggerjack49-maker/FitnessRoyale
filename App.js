@@ -11,9 +11,9 @@
 // les données locales de mockData.js — MODE HORS-LIGNE, rien ne casse.
 // Les duels et défis restent simulés localement pour l'instant (voir
 // CLAUDE.md : "duels en ligne" est une prochaine étape de la roadmap).
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform,
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, ScrollView, Dimensions,
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -70,6 +70,42 @@ export default function App() {
 
 function AppInterne() {
   const [ongletActif, setOngletActif] = useState('profil');
+
+  // ---- Glisser entre les onglets (14/09/2026) ----
+  // Les onglets déjà ouverts au moins une fois : leur écran reste en place pour
+  // qu'on puisse glisser vers lui et retrouver son état.
+  const [ongletsVisites, setOngletsVisites] = useState(['profil']);
+  const [largeurPage, setLargeurPage] = useState(Dimensions.get('window').width);
+  // La hauteur est mesurée elle aussi : sur web, une page posée dans un
+  // défilement horizontal ne prend PAS d'elle-même toute la hauteur — elle se
+  // tasserait à la taille de son contenu et son propre défilement vertical
+  // cesserait de fonctionner.
+  const [hauteurPage, setHauteurPage] = useState(0);
+  const pagerRef = useRef(null);
+  const minuterieDefilement = useRef(null);
+  const indexActif = Math.max(0, ONGLETS.findIndex((o) => o.cle === ongletActif));
+
+  // L'onglet actif change — par la barre, par `allerA`, ou par la reprise
+  // d'une séance au démarrage : on amène la page correspondante à l'écran.
+  useEffect(() => {
+    setOngletsVisites((v) => (v.includes(ongletActif) ? v : [...v, ongletActif]));
+    pagerRef.current?.scrollTo({ x: indexActif * largeurPage, animated: true });
+  }, [indexActif, largeurPage]);
+
+  // Le doigt a fait glisser les pages : on attend que le défilement se POSE
+  // avant de changer d'onglet. Sans ce petit délai, chaque pixel parcouru
+  // pendant le glissement ferait basculer l'onglet actif (et clignoter la
+  // barre). Le même mécanisme couvre le téléphone et le web, où l'évènement
+  // « fin d'élan » du défilement n'est pas fiable.
+  function surDefilementPages(e) {
+    const x = e.nativeEvent.contentOffset.x;
+    clearTimeout(minuterieDefilement.current);
+    minuterieDefilement.current = setTimeout(() => {
+      const index = Math.round(x / largeurPage);
+      const cle = ONGLETS[index]?.cle;
+      if (cle) setOngletActif(cle);
+    }, 120);
+  }
   // Quand on arrive sur Compétition depuis la touche VS du Profil, on ne veut
   // pas atterrir sur le classement mais DIRECTEMENT sur le choix du duel
   // (demande de Hafiz du 01/09/2026). Ce compteur sert de « top départ » :
@@ -343,6 +379,79 @@ function AppInterne() {
     : autresJoueurs;
   const joueurs = [{ ...moi, id: monId, moi: true }, ...autresJoueursAffiches];
 
+  // L'écran d'un onglet, rangé par sa CLÉ (celle du tableau ONGLETS).
+  // `actif` dit à l'écran s'il est celui qu'on regarde : ceux qui interrogent
+  // le serveur en boucle s'en servent pour se mettre en pause.
+  function renduEcran(cle) {
+    const actif = cle === ongletActif;
+    switch (cle) {
+      case 'profil':
+        return (
+          <ProfilScreen
+            moi={moi}
+            joueurs={joueurs}
+            seances={mesSeances}
+            salle={maSalle}
+            estConnecte={!!moiServeur}
+            seDeconnecter={seDeconnecter}
+            allerA={allerA}
+            rafraichir={rechargerDepuisServeur}
+          />
+        );
+      case 'perfs':
+        return (
+          <PerformancesScreen
+            moi={moi}
+            mesPerfs={mesPerfs}
+            ajouterPerf={ajouterPerf}
+            validerPerf={validerPerf}
+            estConnecte={!!moiServeur}
+            actif={actif}
+          />
+        );
+      case 'entrainement':
+        return (
+          <EntrainementScreen
+            moi={moi}
+            estConnecte={!!moiServeur}
+            ajouterSeanceLocale={ajouterSeanceLocale}
+            idStockage={idStockage ?? moi.id}
+          />
+        );
+      case 'paliers':
+        return <PaliersScreen moi={moi} />;
+      case 'competition':
+        return (
+          <CompetitionScreen
+            joueurs={joueurs}
+            moi={moi}
+            duels={mesDuels}
+            terminerDuelDirect={terminerDuelDirect}
+            jouerDepartage={jouerDepartage}
+            defisRecurrents={[defiJournalier, defiHebdo]}
+            defisFaits={defisFaits}
+            validerDefi={validerDefi}
+            estConnecte={!!moiServeur}
+            rafraichirMonProfil={rafraichirMonProfil}
+            demandeDuel={demandeDuel}
+          />
+        );
+      case 'clan':
+        return (
+          <ClanScreen
+            moi={moi}
+            joueurs={joueurs}
+            salle={maSalle}
+            setSalle={setMaSalle}
+            estConnecte={!!moiServeur}
+            actif={actif}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
   // Écran de chargement pendant la vérification initiale (serveur + session).
   // Si le premier essai rapide échoue, on suppose que le serveur (hébergement
   // gratuit, voir CLAUDE.md) est simplement endormi plutôt que hors service —
@@ -384,61 +493,47 @@ function AppInterne() {
           </Text>
         </View>
       )}
-      <View style={{ flex: 1 }}>
-        {ongletActif === 'profil' && (
-          <ProfilScreen
-            moi={moi}
-            joueurs={joueurs}
-            seances={mesSeances}
-            salle={maSalle}
-            estConnecte={!!moiServeur}
-            seDeconnecter={seDeconnecter}
-            allerA={allerA}
-            rafraichir={rechargerDepuisServeur}
-          />
-        )}
-        {ongletActif === 'perfs' && (
-          <PerformancesScreen
-            moi={moi}
-            mesPerfs={mesPerfs}
-            ajouterPerf={ajouterPerf}
-            validerPerf={validerPerf}
-            estConnecte={!!moiServeur}
-          />
-        )}
-        {ongletActif === 'entrainement' && (
-          <EntrainementScreen
-            moi={moi}
-            estConnecte={!!moiServeur}
-            ajouterSeanceLocale={ajouterSeanceLocale}
-            idStockage={idStockage ?? moi.id}
-          />
-        )}
-        {ongletActif === 'paliers' && <PaliersScreen moi={moi} />}
-        {ongletActif === 'competition' && (
-          <CompetitionScreen
-            joueurs={joueurs}
-            moi={moi}
-            duels={mesDuels}
-            terminerDuelDirect={terminerDuelDirect}
-            jouerDepartage={jouerDepartage}
-            defisRecurrents={[defiJournalier, defiHebdo]}
-            defisFaits={defisFaits}
-            validerDefi={validerDefi}
-            estConnecte={!!moiServeur}
-            rafraichirMonProfil={rafraichirMonProfil}
-            demandeDuel={demandeDuel}
-          />
-        )}
-        {ongletActif === 'clan' && (
-          <ClanScreen
-            moi={moi}
-            joueurs={joueurs}
-            salle={maSalle}
-            setSalle={setMaSalle}
-            estConnecte={!!moiServeur}
-          />
-        )}
+      {/* LES ONGLETS SE PARCOURENT EN GLISSANT LE DOIGT (14/09/2026, demande de
+          Hafiz : « pouvoir scroller horizontalement entre les onglets au lieu
+          d'être obligé de cliquer »).
+          Une page par onglet, côte à côte, dans un défilement horizontal « page
+          par page » : la page suit le doigt, comme dans Clash Royale. Aucune
+          dépendance ajoutée (un ScrollView natif), et ça marche aussi sur web.
+
+          ⚠️ CHANGEMENT DE FOND : avant, SEUL l'onglet affiché existait — les
+          autres étaient détruits à chaque changement. Pour pouvoir glisser vers
+          une page, elle doit exister à côté. Donc :
+          - un écran n'est créé qu'à sa PREMIÈRE visite (`ongletsVisites`), pour
+            ne pas tout charger au démarrage ;
+          - une fois visité, il RESTE en place : on retrouve son état (scroll,
+            dépliages, saisie en cours) en revenant ;
+          - les écrans qui interrogent le serveur en boucle (chat du Clan,
+            vidéos des Perfs) reçoivent `actif` et se METTENT EN PAUSE quand on
+            ne les regarde pas — sinon ils tourneraient tous en même temps. */}
+      <View style={{ flex: 1 }} onLayout={(e) => {
+        const { width: largeur, height: hauteur } = e.nativeEvent.layout;
+        if (largeur > 0 && largeur !== largeurPage) setLargeurPage(largeur);
+        if (hauteur > 0 && hauteur !== hauteurPage) setHauteurPage(hauteur);
+      }}>
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={surDefilementPages}
+        keyboardShouldPersistTaps="handled"
+        style={{ flex: 1 }}
+      >
+        {ONGLETS.map((o) => (
+          <View
+            key={o.cle}
+            style={hauteurPage > 0 ? { width: largeurPage, height: hauteurPage } : { width: largeurPage, flex: 1 }}
+          >
+            {ongletsVisites.includes(o.cle) && renduEcran(o.cle)}
+          </View>
+        ))}
+      </ScrollView>
       </View>
 
       {/* Barre d'onglets en bas — piste « Arène » : icône pleine ligne, et sur

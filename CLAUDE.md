@@ -2523,6 +2523,62 @@ impossible à piloter depuis le volet navigateur ; il s'agit du même
 `choisirEtEnvoyerVideo` que le bouton existant de la liste.
 Suite complète : 260 tests, tous OK.
 
+## Glisser entre les onglets — 14/09/2026
+
+Demande de Hafiz : « pouvoir scroller horizontalement entre les onglets au lieu
+d'être obligé de cliquer sur les onglets ».
+
+- App.js pose les six écrans CÔTE À CÔTE dans un `ScrollView` horizontal
+  `pagingEnabled` : la page suit le doigt et se cale sur l'onglet voisin, comme
+  dans Clash Royale. AUCUNE dépendance ajoutée (pas de `react-native-pager-view`,
+  module natif qui aurait exigé un build et ne marche pas sur web).
+- DEUX SENS DE SYNCHRONISATION, un seul état (`ongletActif`) :
+  - toucher un onglet, `allerA(...)` ou la reprise d'une séance au démarrage
+    changent `ongletActif` → un effet fait défiler jusqu'à la page ;
+  - glisser fait défiler → `surDefilementPages` attend que le défilement se
+    POSE (120 ms sans nouvel évènement) avant de changer d'onglet. Sans ce
+    délai, chaque pixel du glissement ferait basculer l'onglet actif et
+    clignoter la barre. Le même mécanisme sert au téléphone et au web, où
+    l'évènement « fin d'élan » n'est pas fiable.
+- `renduEcran(cle)` remplace les six `{ongletActif === '…' && …}` : le rendu
+  d'un écran est rangé par la clé du tableau `ONGLETS`.
+
+⚠️ CHANGEMENT DE FOND — LES ÉCRANS RESTENT EN PLACE. Avant, seul l'onglet
+affiché existait ; les autres étaient DÉTRUITS à chaque changement. Pour pouvoir
+glisser vers une page, elle doit exister à côté. Conséquences :
+- un écran n'est créé qu'à sa PREMIÈRE visite (`ongletsVisites`), pour ne pas
+  tout charger au démarrage ; ensuite il reste — on retrouve son défilement,
+  ses dépliages et sa saisie en revenant ;
+- les écrans qui interrogent le serveur en boucle reçoivent `actif` et se
+  METTENT EN PAUSE hors écran : `ClanScreen` (chat, 4 s) et
+  `PerformancesScreen` (vidéos à valider, 10 s). En revenant, `actif` repasse
+  à vrai et ils rechargent tout de suite. Sans ça, tous tourneraient en même
+  temps contre le serveur gratuit.
+- `EntrainementScreen` ne recharge plus ses données à chaque retour sur l'onglet
+  (il ne les charge qu'à la connexion). Sans conséquence aujourd'hui : ce sont
+  les données du joueur, modifiées uniquement depuis cet écran. À surveiller si
+  un jour elles peuvent changer ailleurs.
+- La perte de séance au changement d'onglet, corrigée le 07/09 par la mémoire
+  locale, ne peut de toute façon plus se produire par ce chemin.
+
+PIÈGE WEB TRAITÉ : une page posée dans un défilement horizontal ne prend PAS
+d'elle-même toute la hauteur sur web — elle se tasserait à la taille de son
+contenu et son défilement vertical cesserait de marcher. La hauteur est donc
+MESURÉE (`onLayout` du conteneur) et imposée à chaque page, comme la largeur.
+Vérifié : page à 658 px pour un conteneur de 658 px.
+
+Vérifié dans le navigateur (backend local) : 6 pages côte à côte ; un
+glissement vers la page 2 fait passer l'onglet actif de Profil à Perfs et
+affiche « NOUVELLE PERF » ; toucher « Clan » allume bien l'onglet Clan.
+⚠️ NON VÉRIFIÉ : le défilement ANIMÉ déclenché par le toucher d'un onglet. Dans
+le volet navigateur masqué, un `scrollTo` — même lancé à la main sur l'élément
+DOM, hors de l'app — ne bouge pas, alors qu'une affectation directe de
+`scrollLeft` marche : c'est l'environnement d'observation (même famille que le
+piège de l'animation du 06/09), pas le code. Sur téléphone, `scrollTo` est
+natif. À CONFIRMER SUR L'APK : toucher un onglet éloigné doit faire glisser la
+page jusqu'à lui.
+Suite complète : 260 tests, tous OK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

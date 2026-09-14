@@ -84,7 +84,10 @@ function uniteLisible(bareme, valeur) {
   return bareme.unite === 'kg' ? `${bareme.reps} × ${valeur} kg` : `${valeur} reps`;
 }
 
-export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, validerPerf, estConnecte }) {
+// `actif` : vrai quand cet onglet est celui qu'on regarde (voir App.js).
+export default function PerformancesScreen({
+  moi, mesPerfs, ajouterPerf, validerPerf, estConnecte, actif = true,
+}) {
   const [exerciceChoisi, setExerciceChoisi] = useState(null);
   const [valeur, setValeur] = useState('');
   const [listeOuverte, setListeOuverte] = useState(false);
@@ -166,14 +169,15 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
   })();
 
   useEffect(() => {
-    if (!estConnecte) return;
+    // En pause hors écran (voir App.js) ; on recharge en revenant sur l'onglet.
+    if (!estConnecte || !actif) return;
     chargerVideosAValider();
     // Pas de WebSocket (voir CLAUDE.md) : on re-consulte le serveur
     // régulièrement pour voir apparaître les nouvelles vidéos/perfs des autres
     // (silencieux = pas de spinner, pour ne pas faire clignoter la liste).
     const id = setInterval(() => chargerVideosAValider(true), DELAI_RAFRAICHISSEMENT_MS);
     return () => clearInterval(id);
-  }, [estConnecte]);
+  }, [estConnecte, actif]);
 
   async function chargerVideosAValider(silencieux) {
     if (!silencieux) setChargementVideos(true);
