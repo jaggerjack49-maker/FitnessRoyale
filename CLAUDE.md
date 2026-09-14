@@ -2337,6 +2337,9 @@ de performance en haut de l'onglet Perfs.
 
 ### ⚠️ L'ÉCART ASSUMÉ : les trois puces INFORMENT, elles ne choisissent pas
 
+⚠️ REFUSÉ PAR HAFIZ LE 14/09/2026 — voir « Perfs : le statut se choisit
+vraiment » plus bas. Ce qui suit décrit l'état du 09/09 au 14/09.
+
 Chez le designer, ces boutons CHOISISSENT le statut au moment de la saisie.
 **L'app ne peut pas le permettre** — un joueur ne valide pas sa propre perf (le
 serveur répond 403, voir « Comptes sécurisés »), et le vote « sans preuve » a
@@ -2470,6 +2473,55 @@ derrière un appui sur une ligne d'affichage.
 
 Vérifié dans le navigateur : la liste des records n'ouvre plus aucun champ, et
 la phrase « Un nom mal tapé ? Touche l'exercice… » a disparu.
+
+## Perfs : le statut se choisit vraiment — 14/09/2026
+
+Retour de Hafiz sur la version du 09/09 (puces purement informatives) : « non,
+on doit pouvoir choisir, mais bien sûr on ne peut pas valider sa propre perf ».
+
+LA RÉCONCILIATION : choisir un statut à la saisie = choisir son CHEMIN DE
+PREUVE, pas s'attribuer le résultat. La perf part TOUJOURS en « déclaré »
+(ou « salle » pour un `affilieSalle`, règle inchangée) ; le choix DÉCLENCHE la
+suite, juste après l'enregistrement :
+- **DÉCLARÉ** → rien de plus.
+- **VÉRIFIÉ COMMUNAUTÉ** → le sélecteur de vidéo s'ouvre ; la vidéo part en
+  attente du vote d'un AUTRE joueur (même `choisirEtEnvoyerVideo` que le bouton
+  de « Enregistrées »).
+- **VÉRIFIÉ SALLE** → un code partenaire s'affiche ; le partenaire le saisit
+  sur SON téléphone (même `genererCode` que dans la liste).
+La validation reste donc faite par quelqu'un d'autre, exactement comme avant —
+seul le point de départ a changé : le formulaire au lieu de la liste.
+
+TROIS POINTS NON ÉVIDENTS :
+- **On ATTEND le serveur** (`await ajouterPerf(...)`) avant de générer le code
+  ou de joindre la vidéo : les deux endpoints refusent une perf qu'il ne
+  connaît pas encore. `ajouterPerf` (App.js) était déjà asynchrone, il suffisait
+  de l'attendre.
+- **Le code s'affiche DANS le formulaire**, sous le bouton qui l'a déclenché
+  (`derniereSaisie` borne ce retour à la perf qu'on vient d'enregistrer).
+  Affiché seulement dans « Enregistrées », il serait resté invisible : cette
+  liste est REPLIÉE par défaut depuis le 01/09.
+- **Hors-ligne**, pas de serveur pour recevoir une vidéo ni émettre un code :
+  « communauté » garde la simulation locale qui existait déjà dans ce mode, et
+  « salle » enregistre en « déclaré » en disant que le code demande une
+  connexion — un code sans second téléphone connecté n'a aucun sens.
+
+`parcoursEffectif` (affilié → « salle », sinon la puce touchée) est la SEULE
+définition du choix : elle allume la puce ET pilote `soumettrePerf`. Le choix
+revient à « déclaré » après chaque enregistrement, pour qu'une deuxième perf
+saisie dans la foulée n'ouvre pas le sélecteur de vidéo par surprise.
+`choisirEtEnvoyerVideo` renvoie désormais `true`/`false` : le message dit si la
+vidéo est vraiment partie, ou si l'utilisateur a refermé le sélecteur.
+
+Vérifié dans le navigateur (backend local) : Squat 120 kg + « VÉRIFIÉ SALLE » →
+code `W6VFMJ` affiché sous le bouton, perf stockée côté serveur en
+`statut: declare` ; tentative de valider cette perf avec son PROPRE code →
+**403**, statut toujours `declare`. Choisir « VÉRIFIÉ COMMUNAUTÉ » allume bien
+cette puce seule (fond `#55c8f0`) et affiche son explication. NON JOUÉ : le
+sélecteur de vidéo lui-même — c'est une boîte de dialogue du système,
+impossible à piloter depuis le volet navigateur ; il s'agit du même
+`choisirEtEnvoyerVideo` que le bouton existant de la liste.
+Suite complète : 260 tests, tous OK.
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 

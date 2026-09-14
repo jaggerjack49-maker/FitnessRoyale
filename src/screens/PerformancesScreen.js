@@ -44,16 +44,16 @@ const STATUTS_SAISIE = [
     libelle: 'VÉRIFIÉ COMMUNAUTÉ',
     couleur: colors.accent,
     explication:
-      'Vidéo validée par un autre joueur : compte au classement. '
-      + 'Joins ta vidéo depuis « Enregistrées », après avoir enregistré la perf.',
+      'Juste après l\'enregistrement, tu choisis ta vidéo. Un AUTRE joueur la '
+      + 'valide — tu ne peux pas valider ta propre perf. Compte au classement une fois validée.',
   },
   {
     cle: 'salle',
     libelle: 'VÉRIFIÉ SALLE',
     couleur: da.or,
     explication:
-      'Un partenaire présent saisit ton code : compte au classement. '
-      + 'Le code se génère depuis « Enregistrées », après avoir enregistré la perf.',
+      'Juste après l\'enregistrement, un code s\'affiche : ton partenaire présent le '
+      + 'saisit sur SON téléphone — tu ne peux pas valider ta propre perf. Compte au classement une fois saisi.',
   },
 ];
 
@@ -112,9 +112,15 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
   // 09/09/2026). Avant, une saisie invalide ne faisait RIEN du tout : le
   // bouton semblait mort sans qu'on sache pourquoi.
   const [messageSaisie, setMessageSaisie] = useState(null);
-  // Quel statut est expliqué sous les trois puces (voir plus bas : elles
-  // informent, elles ne choisissent pas).
-  const [statutExplique, setStatutExplique] = useState(null);
+  // LE PARCOURS DE VÉRIFICATION CHOISI à la saisie (14/09/2026, Hafiz : « on
+  // doit pouvoir choisir, mais bien sûr on ne peut pas valider sa propre
+  // perf »). Ce n'est PAS le statut enregistré : la perf part toujours en
+  // « déclaré », et le choix DÉCLENCHE la suite — l'envoi de la vidéo ou la
+  // génération du code partenaire. C'est quelqu'un d'autre qui valide.
+  const [parcoursChoisi, setParcoursChoisi] = useState('non_verifie');
+  // La perf qu'on vient d'enregistrer : le retour du formulaire (code,
+  // envoi de vidéo, erreur) ne concerne qu'elle.
+  const [derniereSaisie, setDerniereSaisie] = useState(null);
 
   const listeExercices = Object.keys(baremes[moi.sexe]);
   // Résumé affiché sans déplier : « 4 vérifiées sur 11 saisies ».
@@ -126,6 +132,9 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
   // règle que `soumettrePerf` — une seule source, pour que la puce allumée ne
   // puisse pas mentir sur ce qui va être enregistré.
   const statutALEnregistrement = moi.affilieSalle ? 'salle' : 'non_verifie';
+  // Un affilié à une salle partenaire est validé d'office : son choix ne peut
+  // être que « salle ». Pour tous les autres, c'est la puce touchée.
+  const parcoursEffectif = moi.affilieSalle ? 'salle' : parcoursChoisi;
 
   // APERÇU DU PALIER pendant la frappe (maquette « NOUVELLE PERF ») : ce que
   // vaut la valeur saisie, et ce qu'il manque pour la marche suivante.
@@ -178,7 +187,7 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
     }
   }
 
-  function soumettrePerf() {
+  async function soumettrePerf() {
     const nombre = parseFloat(valeur.replace(',', '.'));
     // ON DIT POURQUOI ÇA NE PART PAS (maquette du 09/09/2026) : cette fonction
     // se contentait d'un `return` muet, donc appuyer sur le bouton sans avoir
@@ -191,16 +200,56 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
       setMessageSaisie('Entre une valeur valide d\'abord.');
       return;
     }
-    // UNE SEULE DÉFINITION de la règle : `statutALEnregistrement` est aussi ce
-    // qu'annonce la puce allumée juste au-dessus du bouton. Réécrire le
-    // ternaire ici aurait permis aux deux de diverger — le motif que ce projet
-    // a déjà payé trois fois (voir CLAUDE.md, « cycleEnService »).
-    ajouterPerf(exerciceChoisi, nombre, statutALEnregistrement);
-    setMessageSaisie(`Perf enregistrée : ${exerciceChoisi} · ${uniteLisible(bareme, nombre)}`);
+    const exo = exerciceChoisi;
+    const resume = `${exo} · ${uniteLisible(bareme, nombre)}`;
+    const parcours = parcoursEffectif;
     setExerciceChoisi(null);
     setValeur('');
     setListeOuverte(false);
-    setStatutExplique(null);
+    setParcoursChoisi('non_verifie');
+    setDerniereSaisie(exo);
+    setCodeGenere(null);
+    setErreurVideo(null);
+
+    // La perf part TOUJOURS en « déclaré » (ou « salle » pour un affilié, règle
+    // inchangée) : le parcours choisi ne s'enregistre pas, il déclenche la
+    // suite. On ATTEND le serveur avant d'aller plus loin — générer un code ou
+    // joindre une vidéo à une perf qu'il ne connaît pas encore échouerait.
+    await ajouterPerf(exo, nombre, statutALEnregistrement);
+
+    if (moi.affilieSalle || parcours === 'non_verifie') {
+      setMessageSaisie(`Perf enregistrée : ${resume}`);
+      return;
+    }
+
+    // HORS-LIGNE, pas de serveur pour recevoir une vidéo ou émettre un code.
+    // La communauté garde la simulation locale qui existait déjà dans ce mode ;
+    // le code partenaire, lui, n'a aucun sens sans un second téléphone connecté.
+    if (!estConnecte) {
+      if (parcours === 'communaute') {
+        validerPerf(exo);
+        setMessageSaisie(`Perf enregistrée : ${resume} — validation simulée (mode hors-ligne).`);
+      } else {
+        setMessageSaisie(
+          `Perf enregistrée en « déclaré » : le code partenaire demande une connexion.`
+        );
+      }
+      return;
+    }
+
+    if (parcours === 'communaute') {
+      setMessageSaisie(`Perf enregistrée : ${resume}. Choisis ta vidéo…`);
+      const envoyee = await choisirEtEnvoyerVideo(exo);
+      setMessageSaisie(
+        envoyee
+          ? `Vidéo envoyée pour ${resume}. Elle attend le vote d'un autre joueur.`
+          : `Perf enregistrée : ${resume}. Vidéo non envoyée — tu peux la joindre depuis « Enregistrées ».`
+      );
+      return;
+    }
+
+    setMessageSaisie(`Perf enregistrée : ${resume}. Donne ce code à ton partenaire :`);
+    await genererCode(exo);
   }
 
   // Simulation locale (mode hors-ligne uniquement, voir estConnecte plus bas).
@@ -220,13 +269,15 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       quality: 0.7,
     });
-    if (resultat.canceled || !resultat.assets?.[0]) return;
+    if (resultat.canceled || !resultat.assets?.[0]) return false;
     setEnvoiEnCours(exercice);
     try {
       await api.joindreVideo(moi.id, exercice, resultat.assets[0].uri);
       setVideosEnvoyees((v) => ({ ...v, [exercice]: true }));
+      return true;
     } catch (e) {
       setErreurVideo(e.message || "Impossible d'envoyer la vidéo.");
+      return false;
     } finally {
       setEnvoiEnCours(null);
     }
@@ -357,23 +408,20 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
           </View>
         )}
 
-        {/* ---- STATUT DE LA PERF ----
-            ⚠️ ÉCART ASSUMÉ AVEC LA MAQUETTE : chez le designer, ces trois
-            boutons CHOISISSENT le statut au moment de la saisie. L'app ne peut
-            pas le permettre — on ne valide pas sa propre perf (le serveur
-            répond 403, voir « Comptes sécurisés » dans CLAUDE.md), et le vote
-            « sans preuve » a justement été retiré le 01/09/2026. Un sélecteur
-            libre serait donc un mensonge : soit il ne ferait rien, soit il
-            ferait échouer l'enregistrement.
-            Ici les puces INFORMENT : celle qui s'appliquera vraiment est
-            allumée, les deux autres disent comment les atteindre APRÈS
-            l'enregistrement (vidéo ou code partenaire, depuis la liste plus
-            bas). Toucher une puce affiche son explication, comme dans la
-            maquette. */}
+        {/* ---- STATUT DE LA PERF : un VRAI choix (14/09/2026) ----
+            Comme dans la maquette, la puce touchée est la puce choisie. Mais
+            choisir « vérifié » ne VALIDE rien : on ne valide pas sa propre perf
+            (le serveur répond 403, voir « Comptes sécurisés »). Le choix
+            déclenche le chemin de preuve correspondant, juste après
+            l'enregistrement :
+              - COMMUNAUTÉ → le sélecteur de vidéo s'ouvre, un autre joueur vote ;
+              - SALLE      → un code s'affiche, le partenaire le saisit chez lui.
+            Une première version (09/09) rendait ces puces purement
+            informatives ; refusée par Hafiz : « on doit pouvoir choisir ». */}
         <Text style={styles.libelleMaquette}>STATUT DE LA PERF</Text>
         <View style={styles.lignePuces}>
           {STATUTS_SAISIE.map((s) => {
-            const applique = s.cle === statutALEnregistrement;
+            const applique = s.cle === parcoursEffectif;
             return (
               <TouchableOpacity
                 key={s.cle}
@@ -381,9 +429,11 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
                   styles.puceStatut,
                   applique
                     ? { backgroundColor: s.couleur, borderColor: s.couleur }
-                    : { borderColor: statutExplique === s.cle ? s.couleur : da.bordureFine },
+                    : { borderColor: da.bordureFine },
                 ]}
-                onPress={() => setStatutExplique(statutExplique === s.cle ? null : s.cle)}
+                // Un affilié est validé d'office en « salle » : rien à choisir.
+                disabled={moi.affilieSalle}
+                onPress={() => setParcoursChoisi(s.cle)}
               >
                 <Text
                   style={[
@@ -398,13 +448,32 @@ export default function PerformancesScreen({ moi, mesPerfs, ajouterPerf, valider
           })}
         </View>
         <Text style={styles.indiceStatut}>
-          {(STATUTS_SAISIE.find((s) => s.cle === (statutExplique || statutALEnregistrement)) || {}).explication}
+          {moi.affilieSalle
+            ? 'Affilié à une salle partenaire : tes perfs sont validées automatiquement.'
+            : (STATUTS_SAISIE.find((s) => s.cle === parcoursEffectif) || {}).explication}
         </Text>
 
         <TouchableOpacity style={styles.boutonEnregistrer} onPress={soumettrePerf}>
           <Text style={styles.boutonEnregistrerTexte}>ENREGISTRER LA PERF</Text>
         </TouchableOpacity>
         {!!messageSaisie && <Text style={styles.messageSaisie}>{messageSaisie}</Text>}
+        {/* La suite du parcours choisi s'affiche ICI, sous le bouton qui l'a
+            déclenchée — et non dans « Enregistrées », qui est replié par défaut
+            et où le code serait resté invisible. */}
+        {!!derniereSaisie && (envoiEnCours === derniereSaisie || genererCodeEnCours === derniereSaisie) && (
+          <ActivityIndicator color={da.or} style={{ marginTop: espacement.s }} />
+        )}
+        {!!derniereSaisie && codeGenere?.exercice === derniereSaisie && (
+          <View style={styles.codeFormulaire}>
+            <Text style={styles.codeTexte}>{codeGenere.code}</Text>
+            <Text style={styles.indiceStatut}>
+              Ton partenaire le saisit dans « Valider la perf d'un partenaire », sur son téléphone.
+            </Text>
+          </View>
+        )}
+        {!!derniereSaisie && !!erreurVideo && (
+          <Text style={styles.messageErreur}>⚠️ {erreurVideo}</Text>
+        )}
       </View>
 
       {/* ---- Liste des performances ---- */}
@@ -680,6 +749,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 15,
     letterSpacing: 2,
+  },
+  codeFormulaire: {
+    alignItems: 'center',
+    backgroundColor: da.carteBasse,
+    borderWidth: 1,
+    borderColor: da.bordureOrDouce,
+    borderRadius: 12,
+    padding: espacement.m,
+    marginTop: espacement.s,
+    gap: 6,
   },
   messageSaisie: {
     color: da.texteMuet,
