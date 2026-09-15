@@ -138,6 +138,37 @@ function LigneExercicePrevu({ exo, entrainements }) {
   );
 }
 
+// CE QUI A ÉTÉ FAIT CE JOUR-LÀ (15/09/2026, bug signalé par Hafiz : « même
+// quand on termine une séance, il affiche les perfs attendues sur ce jour
+// alors que la séance est bouclée »).
+// Un jour bouclé montre le RÉALISÉ — les séries vraiment faites, regroupées
+// par exercice — au lieu de l'attendu : après coup, « 🎯 Attendu : 102,5 kg »
+// n'a plus rien à dire, c'est ce qu'on a soulevé qui compte.
+function ResumeSeanceFaite({ entrainement, programmes }) {
+  const programme = programmes.find((p) => p.id === entrainement.programme_id);
+  const parExercice = [];
+  (entrainement.series || []).forEach((s) => {
+    if (!s) return;
+    let groupe = parExercice.find((g) => g.exercice === s.exercice);
+    if (!groupe) { groupe = { exercice: s.exercice, series: [] }; parExercice.push(groupe); }
+    groupe.series.push(s);
+  });
+  return (
+    <View style={styles.detailJour}>
+      <Text style={[styles.nomProgrammeTexte, { color: colors.vert }]}>
+        ✅ {programme ? programme.nom : 'Séance libre'} <Text style={styles.indice}>(faite)</Text>
+      </Text>
+      {parExercice.map((g) => (
+        <Text key={g.exercice} style={styles.exerciceDetailJour}>
+          • {g.exercice} — {g.series
+            .map((s) => (s.poids > 0 ? `${s.poids} kg × ${s.reps}` : `${s.reps} reps`))
+            .join(' · ')}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 // LES JOURS D'UNE SÉANCE, MODIFIABLES D'UNE TOUCHE (07/09/2026).
 // Demande de Hafiz : « on doit pouvoir configurer les jours du programme sur
 // une semaine, et ceux-ci seront projetés sur le mois ».
@@ -477,6 +508,13 @@ export default function EntrainementScreen({
   // Le choix d'une séance à FAIRE ce jour-là (à ne pas confondre avec le
   // choix ci-dessus, qui PLANIFIE une séance pour plus tard).
   const [choixSeanceAFaire, setChoixSeanceAFaire] = useState(false);
+  // Date (ISO) dont on a demandé à revoir le PRÉVU alors qu'elle est déjà
+  // bouclée — pour une 2e séance le même jour.
+  const [prevuAfficheLe, setPrevuAfficheLe] = useState(null);
+  // Changer de jour referme ce « prévu » : revenir plus tard sur le jour
+  // bouclé doit remontrer le réalisé, pas l'attendu. (Ranger la date ne
+  // suffisait pas : aller sur un autre jour puis revenir le rouvrait.)
+  useEffect(() => { setPrevuAfficheLe(null); }, [jourOuvert]);
   // Séance en cours de retouche DANS le calendrier (id du programme) — permet
   // de corriger exercices/séries/reps sans repasser par la semaine type.
   const [programmeEnEdition, setProgrammeEnEdition] = useState(null);
@@ -2568,6 +2606,13 @@ export default function EntrainementScreen({
             cle: `p-${planif.id}`, programme, planif, etiquette: 'ce jour uniquement',
           })),
         ];
+        // JOUR BOUCLÉ = au moins une séance enregistrée ce jour-là. C'est
+        // EXACTEMENT la règle du ✅ de la case du calendrier et du rattrapage
+        // (src/logic/rattrapage.js) : si le calendrier dit « fait », le détail
+        // ne doit pas réclamer la séance en affichant attendu et « Démarrer ».
+        const seancesFaites = entrainements.filter((e) => e && e.date === jourOuvert);
+        const jourBoucle = seancesFaites.length > 0;
+        const montrerPrevu = !jourBoucle || prevuAfficheLe === jourOuvert;
         return (
           <View style={styles.carteModele}>
             <Text style={styles.nomProgrammeTexte}>
@@ -2586,9 +2631,24 @@ export default function EntrainementScreen({
                 Ce choix n'apparaît QUE si le jour n'a rien de prévu : quand une
                 séance est déjà fixée, elle porte déjà son propre bouton
                 « Démarrer » juste au-dessus. */}
-            {blocs.length === 0 && (
+            {seancesFaites.map((e, i) => (
+              <ResumeSeanceFaite key={e.id ?? `faite-${i}`} entrainement={e} programmes={programmes} />
+            ))}
+            {/* Le prévu reste accessible, derrière un lien : on peut vouloir
+                faire une 2e séance le même jour. Mais il ne s'affiche plus de
+                lui-même sur une journée bouclée. */}
+            {jourBoucle && !montrerPrevu && (
+              <TouchableOpacity onPress={() => setPrevuAfficheLe(jourOuvert)}>
+                <Text style={styles.lienAnnuler}>
+                  {blocs.length > 0 ? 'Voir ce qui était prévu' : 'Faire une autre séance ce jour'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {montrerPrevu && blocs.length === 0 && (
               <>
-                <Text style={[styles.indice, { marginTop: 4 }]}>Rien de prévu ce jour-là.</Text>
+                {!jourBoucle && (
+                  <Text style={[styles.indice, { marginTop: 4 }]}>Rien de prévu ce jour-là.</Text>
+                )}
                 {!choixSeanceAFaire ? (
                   <TouchableOpacity
                     style={styles.boutonUtiliserModele}
@@ -2639,7 +2699,7 @@ export default function EntrainementScreen({
                 demande de Hafiz). Modifier une séance se fait désormais dans
                 « Mes programmes » — une seule place pour éditer, au lieu de
                 deux éditeurs identiques qui se marchaient dessus. */}
-            {blocs.map(({ cle, programme, planif, etiquette }) => (
+            {montrerPrevu && blocs.map(({ cle, programme, planif, etiquette }) => (
               <View key={cle} style={styles.detailJour}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>

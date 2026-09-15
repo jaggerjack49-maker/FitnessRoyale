@@ -2647,6 +2647,41 @@ page recalculée à chaque étape, espion sur `scroll`) :
 - Clan : « ⚙️ Changer de salle » déplié pour allonger la liste (trop peu de membres en local sinon), membres à 131 px → Chat → Membres : 131.
 Suite complète : 260 tests, tous OK.
 
+## Calendrier : un jour bouclé montre ce qui a été FAIT — 15/09/2026
+
+Bug signalé par Hafiz : « même quand on termine une séance, il affiche les
+perfs attendues sur ce jour alors que la séance est bouclée ».
+
+LA CAUSE : deux parties du calendrier ne suivaient pas la même règle. La CASE
+passait bien à ✅ (au moins une séance enregistrée ce jour-là — la règle du
+rattrapage, `src/logic/rattrapage.js`), mais le DÉTAIL du jour ne regardait que
+le PRÉVU : il continuait d'afficher la séance avec ses « 🎯 Attendu » (calculés
+à partir de l'historique, donc déjà décalés vers la PROCHAINE séance) et
+« 🏋️ Démarrer cette séance ». Le calendrier disait « fait » et réclamait la
+séance juste en dessous.
+
+LE CORRECTIF (`EntrainementScreen.js`) : le détail applique la MÊME règle que
+la case (`jourBoucle` = une séance enregistrée à cette date).
+- Un jour bouclé affiche le RÉALISÉ (`ResumeSeanceFaite`) : « ✅ Push (faite) »
+  puis, par exercice, les séries vraiment faites (« 102.5 kg × 8 · 102.5 kg × 7 »).
+  Une séance sans programme s'affiche « Séance libre ».
+- L'attendu et le bouton « Démarrer » ne s'affichent plus d'eux-mêmes. Ils
+  restent accessibles derrière un lien discret (« Voir ce qui était prévu », ou
+  « Faire une autre séance ce jour » si rien n'était prévu), pour une 2e séance
+  le même jour.
+- Ce « prévu » rouvert se REFERME dès qu'on touche un autre jour
+  (`useEffect` sur `jourOuvert`). PIÈGE trouvé en vérifiant : une première
+  version rangeait seulement la date rouverte, en affirmant que ça suffisait —
+  mais aller sur un autre jour puis revenir rouvrait le prévu.
+- Un jour PAS encore fait (futur, ou manqué) est inchangé : attendu + Démarrer.
+
+Vérifié dans le navigateur (backend local) : mardi 15, Push prévue et rien
+d'enregistré → attendu + « Démarrer » (normal) ; séance Push enregistrée ce
+jour-là → la case passe à ✅ et le détail affiche « ✅ Push (faite) » avec les
+séries réelles, sans attendu ni « Démarrer » ; le lien réaffiche le prévu ;
+jeudi 17 (non fait) garde attendu + « Démarrer maintenant » ; revenir sur le 15
+remontre le réalisé. Suite complète : 260 tests, tous OK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
