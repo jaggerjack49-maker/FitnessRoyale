@@ -17,7 +17,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#060708"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -33,7 +36,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Fitness Royale a besoin d'accéder à tes vidéos pour prouver tes performances."
+          "photosPermission": "Fitness Royale a besoin d'accéder à tes vidéos pour prouver tes performances.",
+          "cameraPermission": "Fitness Royale utilise ta caméra pour compter tes pompes et filmer tes performances."
         }
       ]
     ]

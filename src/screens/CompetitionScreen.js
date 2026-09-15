@@ -12,6 +12,7 @@ import { areneDeLaLigue } from '../data/arenes';
 import CarteDuel from '../components/CarteDuel';
 import DuelDirect from '../components/DuelDirect';
 import DuelEnLigne from '../components/DuelEnLigne';
+import TestPompes from '../components/TestPompes';
 import AvatarJoueur from '../components/AvatarJoueur';
 import usePlaceDefilement from '../usePlaceDefilement';
 
@@ -85,7 +86,7 @@ function CarteDefiRecurrent({ defi, fait, onValider }) {
 
 export default function CompetitionScreen({
   joueurs, moi, duels, jouerDepartage, terminerDuelDirect, defisRecurrents, defisFaits, validerDefi,
-  estConnecte, rafraichirMonProfil, demandeDuel,
+  estConnecte, rafraichirMonProfil, demandeDuel, actif = true,
 }) {
   const [onglet, setOnglet] = useState('classement'); // 'classement' ou 'defis'
   const [mode, setMode] = useState('global'); // 'global' | 'relatif' | 'exercice' | 'salles'
@@ -93,15 +94,18 @@ export default function CompetitionScreen({
   const [selecteurExoOuvert, setSelecteurExoOuvert] = useState(false);
   const [duelDirectActif, setDuelDirectActif] = useState(false);
   const [duelEnLigneActif, setDuelEnLigneActif] = useState(false);
+  // Prototype du compteur de pompes (15/09/2026) — étape 1 du duel de pompes.
+  const [testPompesActif, setTestPompesActif] = useState(false);
 
   // Garder sa place (14/09/2026) : chaque vue de la liste — un mode de
   // classement, les défis — retrouve son défilement quand on y revient. Avant,
   // fermer un duel ou revenir de « Défis » remettait la liste en haut.
   // Un duel ouvert, lui, repart toujours en haut (`memoriser: false`).
-  const duelOuvert = onglet === 'defis' && (duelDirectActif || duelEnLigneActif);
+  const duelOuvert = onglet === 'defis' && (duelDirectActif || duelEnLigneActif || testPompesActif);
   const vueListe = onglet === 'classement'
     ? `classement-${mode}`
-    : duelDirectActif ? 'duelDirect' : duelEnLigneActif ? 'duelEnLigne' : 'defis';
+    : duelDirectActif ? 'duelDirect' : duelEnLigneActif ? 'duelEnLigne'
+      : testPompesActif ? 'testPompes' : 'defis';
   const placeListe = usePlaceDefilement(vueListe, { memoriser: !duelOuvert });
 
   // La touche VS du Profil amène ICI et doit proposer un duel tout de suite,
@@ -227,7 +231,15 @@ export default function CompetitionScreen({
             onDuelTermine={rafraichirMonProfil}
           />
         )}
-        {onglet === 'defis' && !duelDirectActif && !duelEnLigneActif && (
+        {onglet === 'defis' && !duelDirectActif && !duelEnLigneActif && testPompesActif && (
+          // La caméra ne tourne QUE si l'onglet est à l'écran : les onglets
+          // restent en place pour le glissement (voir App.js), et une caméra
+          // allumée hors écran viderait la batterie pour rien.
+          actif
+            ? <TestPompes onFermer={() => setTestPompesActif(false)} />
+            : <Text style={styles.explication}>⏸ Caméra en pause — reviens sur cet onglet pour reprendre.</Text>
+        )}
+        {onglet === 'defis' && !duelDirectActif && !duelEnLigneActif && !testPompesActif && (
           <>
             <TouchableOpacity style={styles.boutonDuelDirect} onPress={() => setDuelDirectActif(true)}>
               <Text style={styles.boutonDuelDirectTexte}>⚡ Lancer un duel en direct</Text>
@@ -243,6 +255,12 @@ export default function CompetitionScreen({
                 </Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setTestPompesActif(true)}>
+              <Text style={styles.boutonDuelDirectTexte}>🧪 Tester le compteur de pompes</Text>
+              <Text style={styles.boutonDuelDirectSousTexte}>
+                Prototype du duel de pompes : la caméra compte tes pompes, face au téléphone.
+              </Text>
+            </TouchableOpacity>
             {defisRecurrents.map((defi) => (
               <CarteDefiRecurrent
                 key={defi.id}

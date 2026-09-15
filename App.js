@@ -434,6 +434,7 @@ function AppInterne() {
             estConnecte={!!moiServeur}
             rafraichirMonProfil={rafraichirMonProfil}
             demandeDuel={demandeDuel}
+            actif={actif}
           />
         );
       case 'clan':

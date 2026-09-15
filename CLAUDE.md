@@ -2682,6 +2682,110 @@ séries réelles, sans attendu ni « Démarrer » ; le lien réaffiche le prévu
 jeudi 17 (non fait) garde attendu + « Démarrer maintenant » ; revenir sur le 15
 remontre le réalisé. Suite complète : 260 tests, tous OK.
 
+## Duel de pompes, étape 1 : le prototype du compteur — 15/09/2026
+
+Demande de Hafiz : un duel EN LIGNE de pompes (« celui qui en fait le plus en
+1 minute »), chacun face à sa caméra, avec une barre de progression par joueur
+« comme dans les jeux de combat (Street Fighter) », et à terme un appel vidéo
+en direct façon FaceTime.
+
+DÉCISIONS PRISES AVEC HAFIZ (dans cet ordre) :
+- **Comptage de face par la caméra** (« un détecteur de mouvement »), pas le
+  nez sur l'écran ni l'adversaire qui compte. Raison de fond : les deux joueurs
+  font leurs pompes EN MÊME TEMPS, mains au sol — personne ne peut taper « +1 »,
+  même objection que pour le développé couché (voir « Statut en direct des
+  duels »).
+- **D'abord sans vidéo** : le duel et ses barres, puis l'appel vidéo en étape 2.
+- **Prototype du compteur AVANT le duel** : tout le jeu repose sur un comptage
+  fiable ; autant le savoir avant de construire le reste.
+
+### Comment ça marche
+
+- **Détection** : MediaPipe Pose Landmarker (Google), modèle « lite », qui
+  repère 33 points du corps. On en garde 6 : épaules, coudes, poignets.
+- **Dans une PAGE WEB intégrée à l'app** (`src/pompes/pageDetection.js`) :
+  sur téléphone dans un `WebView` (`src/components/CameraPompes.js`), sur la
+  version web dans un `<iframe>` (`CameraPompes.web.js` — Expo choisit le bon
+  fichier et n'embarque jamais `react-native-webview` sur le web).
+  POURQUOI pas un module natif (Vision Camera + MediaPipe natif) : plusieurs
+  dépendances natives lourdes, pas de version web, rien de testable ici. Et
+  surtout, l'appel vidéo de l'étape 2 pourra vivre dans CETTE MÊME page
+  (la caméra y est déjà ouverte).
+  Dépendance ajoutée : `react-native-webview` (13.15.0, via `npx expo install`).
+- MediaPipe (1.0.1) et le modèle sont téléchargés AU LANCEMENT (CDN jsDelivr +
+  stockage Google), versions FIGÉES dans `pageDetection.js` pour que la
+  détection ne change pas toute seule. Il faut donc Internet — le cas de toute
+  façon pour un duel en ligne.
+- **La page ne compte pas** : elle envoie les 6 points de chaque image à l'app
+  (`postMessage`). Le COMPTAGE vit dans `src/logic/compteurPompes.js`, en
+  JavaScript ordinaire, donc TESTABLE. (Réinjecter ce code dans la page aurait
+  été impossible de toute façon : le moteur JS d'Android, Hermes, ne garde pas
+  le texte source des fonctions.)
+- **La règle** : angle du coude épaule-coude-poignet, mesuré en **3D**
+  (coordonnées « monde » de MediaPipe — de face, un angle mesuré à plat sur
+  l'image serait écrasé par la perspective). ~170° bras tendus, ~80° pliés.
+  Une pompe = un cycle HAUT → BAS → HAUT, comptée en remontant.
+- **Quatre garde-fous**, réglables dans `REGLAGES_POMPES` :
+  1. deux seuils (bas ≤ 100°, haut ≥ 150°) : entre les deux, rien ne bouge ;
+  2. une phase n'est acquise qu'après 150 ms ;
+  3. une pompe dure au moins 500 ms (d'un « haut » au suivant) ;
+  4. il faut être passé par le haut avant de descendre.
+  Perdre la personne un instant (visage trop près de l'objectif, tout en bas)
+  ne fait pas perdre la phase acquise.
+
+### L'écran de test (`src/components/TestPompes.js`)
+
+Compétition → Défis → « 🧪 Tester le compteur de pompes ». Compteur géant sur
+l'image, bras dessinés en or quand ils sont bien vus, et des informations de
+RÉGLAGE en direct (angle des coudes, phase haut/bas) : si le compteur se
+trompe, elles disent pourquoi. Bouton « Test 1 minute » (score figé à la fin)
+et remise à zéro.
+- La caméra ne tourne QUE si l'onglet Compétition est à l'écran : App.js lui
+  passe maintenant `actif` (les onglets restent en place pour le glissement,
+  une caméra allumée hors écran viderait la batterie).
+- Permission `android.permission.CAMERA` ajoutée à `app.json`, demandée avant
+  d'afficher la page ; texte iOS via `cameraPermission` du plugin
+  `expo-image-picker`.
+
+### ⚠️ LEÇON : des tests qui passaient pour de MAUVAISES raisons
+
+Premier jet du harnais : 17 cas sur 17 au vert. Puis vérification en
+DÉSACTIVANT chaque garde-fou — et deux tests passaient TOUJOURS :
+- « une image mal détectée » : une image isolée ne peut jamais confirmer une
+  phase (il en faut au moins deux), quel que soit le réglage des 150 ms ;
+- « cycles trop rapides » : leurs « bas » de 132 ms étaient bloqués par la
+  règle des 150 ms, pas par celle des 500 ms qu'on voulait vérifier ;
+- et « un angle qui tremble » oscillait si vite que c'était la règle des
+  500 ms, et non la double limite, qui l'arrêtait.
+Les mouvements ont été refaits pour isoler UN garde-fou à la fois, et chacun
+fait maintenant échouer son test quand on le retire : bruit de 3 images (0 → 1
+sans la règle des 150 ms), cycles de 460 ms (1 → 4 sans la règle des 500 ms),
+tremblement lent (0 → 6 avec un seuil unique). Un test vert ne prouve rien
+tant qu'on ne l'a pas vu ÉCHOUER pour la bonne raison.
+
+Tests : `backend/tests/test_compteur_pompes.py` +
+`harnais/harnais_compteur_pompes.mjs` (mouvements simulés image par image,
+géométrie, données abîmées). Suite complète : 261 tests, tous OK.
+
+### Ce qui est vérifié, et ce qui ne l'est PAS
+
+Vérifié dans le navigateur (backend local) : l'écran s'ouvre depuis Défis,
+MediaPipe et le modèle se chargent (la page passe à « Ouverture de la
+caméra »), et l'absence de caméra dans le volet de test donne un message clair
+(« Accès à la caméra refusé… ») au lieu de planter.
+⚠️ NON VÉRIFIÉ : la détection sur une VRAIE personne en train de faire des
+pompes — le volet navigateur n'a pas de caméra. C'est justement le but de ce
+prototype : Hafiz l'essaie sur son téléphone (nouvel APK : `react-native-webview`
+est un module natif), et on ajuste `REGLAGES_POMPES` d'après ce que montrent
+l'angle et la phase affichés. Le projet open source qui a inspiré cette
+approche avertit lui-même que sa détection n'avait pas été validée sur une
+vraie personne.
+
+ÉTAPES SUIVANTES prévues : (2) le duel — créer/rejoindre par code, compte à
+rebours commun, une minute, deux barres de combat synchronisées (compteur
+envoyé en continu au serveur, lu par l'autre téléphone chaque seconde) ;
+(3) l'appel vidéo en direct, dans la même page web.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -2694,7 +2798,7 @@ remontre le réalisé. Suite complète : 260 tests, tous OK.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (260 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (261 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
