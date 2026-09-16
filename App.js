@@ -416,6 +416,7 @@ function AppInterne() {
             estConnecte={!!moiServeur}
             ajouterSeanceLocale={ajouterSeanceLocale}
             idStockage={idStockage ?? moi.id}
+            actif={actif}
           />
         );
       case 'paliers':

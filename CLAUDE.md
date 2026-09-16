@@ -2786,6 +2786,65 @@ rebours commun, une minute, deux barres de combat synchronisées (compteur
 envoyé en continu au serveur, lu par l'autre téléphone chaque seconde) ;
 (3) l'appel vidéo en direct, dans la même page web.
 
+## BUG « toutes mes séances ont disparu » : un chargement raté qui se cachait — 16/09/2026
+
+Signalé par Hafiz juste après l'APK du 15/09 : « toutes les séances que j'avais
+faites ont disparu, ainsi que le programme que j'avais créé ».
+
+**RIEN N'AVAIT DISPARU DU SERVEUR.** Vérifié avant de toucher au code : aucun
+commit ne modifiait `backend/app` depuis le 12/09, le serveur en ligne répondait,
+et le compte de Hafiz (Jaggerjack, id 10) était intact avec ses 15 perfs.
+Installer un APK par-dessus l'ancien ne touche pas non plus au serveur (même
+clé de signature, le stockage du téléphone est conservé). C'est l'ÉCRAN qui
+n'avait pas réussi à charger les données — et qui le cachait.
+
+TROIS DÉFAUTS CUMULÉS dans `EntrainementScreen.js`, le premier introduit par
+« Glisser entre les onglets » (14/09) :
+1. **Le chargement n'était plus jamais retenté.** L'effet ne dépendait que de
+   `[estConnecte]` : un seul chargement, à la connexion. Tant que l'écran était
+   RECRÉÉ à chaque visite de l'onglet, chaque visite réessayait sans qu'on le
+   sache. Depuis que les écrans restent en place, un premier chargement raté
+   (serveur Render ou base Neon qui se réveillent, délai de 12 s dépassé)
+   restait raté jusqu'à ce qu'on relance complètement l'app.
+   ⚠️ LEÇON : garder les écrans en place a supprimé un comportement sur lequel
+   le code comptait SANS LE DIRE. La section du 14/09 avait bien noté « ne
+   recharge plus ses données à chaque retour sur l'onglet… à surveiller » — en
+   le jugeant sans conséquence, sans penser au cas où ce PREMIER chargement
+   échoue.
+2. **Une seule demande en échec jetait tout.** Six demandes partaient ensemble
+   (`Promise.all`) : si UNE échouait — les objectifs de séries, par exemple —
+   les séances et programmes pourtant bien reçus étaient jetés aussi.
+3. **L'écran mentait.** L'erreur s'affichait tout en BAS de la page, et en haut
+   on lisait « Aucune séance loggée pour l'instant » et « Aucun programme pour
+   l'instant » — exactement ce qu'on verrait si tout avait été effacé.
+
+LE CORRECTIF :
+- App.js passe `actif` à l'Entraînement ; les données sont rechargées à CHAQUE
+  retour sur l'onglet (`[estConnecte, actif, moi.id]`), comme avant le 14/09.
+- Après un échec, nouvel essai AUTOMATIQUE : 5 s, 15 s, puis toutes les 30 s,
+  tant que l'onglet est à l'écran (`etatChargement`, `tentativesChargement`).
+  Un verrou (`chargementEnCours`) empêche deux chargements simultanés.
+- `Promise.allSettled` : chaque demande réussie est gardée, même si une autre
+  échoue ; seul un chargement COMPLET compte comme réussi.
+- Un bandeau EN HAUT de l'écran dit la vérité : « ⏳ Chargement de tes séances
+  et programmes… », ou « ⚠️ … n'ont pas pu être chargés — ils ne sont PAS
+  perdus : l'app réessaie toute seule » avec « ↻ Réessayer maintenant ».
+- Tant que le chargement n'a pas RÉUSSI (`donneesIncertaines`), plus de
+  « Aucune séance » ni « Aucun programme » : un écran vide ne prouve rien.
+  RESTE PERFECTIBLE : le compteur de volume affiche encore « 0 série cette
+  semaine » pendant un échec (le bandeau juste au-dessus l'explique).
+
+Vérifié dans le navigateur, en REPRODUISANT le scénario (backend local, compte
+de test) : app connectée sur le Profil ; serveur COUPÉ ; ouverture de
+l'Entraînement → bandeau d'échec en haut + bouton « Réessayer », plus aucun
+« Aucune séance / Aucun programme » ; serveur RALLUMÉ, sans rien toucher →
+l'essai automatique ramène le programme Push et les 3 séances de l'historique.
+
+SI ÇA SE REPRODUIT : relancer complètement l'app refait un premier chargement
+(c'était déjà le contournement avec l'APK du 15/09). Si le bandeau reste en
+échec alors que le serveur répond (`/sante`), regarder les demandes une par
+une : l'une d'elles échoue pour une autre raison qu'un délai.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

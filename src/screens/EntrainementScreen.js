@@ -9,7 +9,7 @@
 // Mode hors-ligne : programmes et séances vivent d'abord en état local
 // (fonctionne sans serveur) ; si connecté, chaque création est synchronisée
 // au serveur en tâche de fond (comme le reste de l'app).
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
@@ -409,7 +409,7 @@ const stylesConfirmation = StyleSheet.create({
 // rester rattachée au vrai compte (voir src/stockageSeance.js).
 // Les appels au SERVEUR, eux, continuent d'utiliser `moi.id`.
 export default function EntrainementScreen({
-  moi, estConnecte, ajouterSeanceLocale, idStockage,
+  moi, estConnecte, ajouterSeanceLocale, idStockage, actif = true,
 }) {
   const idLocal = idStockage ?? moi.id;
   const [vue, setVue] = useState('accueil'); // 'accueil' | 'nouveauProgramme' | 'seance'
@@ -424,6 +424,12 @@ export default function EntrainementScreen({
   const [entrainements, setEntrainements] = useState([]);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState(null);
+  // Où en est le chargement des données du serveur (16/09/2026) :
+  // 'jamais' | 'en_cours' | 'ok' | 'echec'. Séparé de `erreur`, qui sert aussi
+  // aux messages des autres actions (enregistrer, supprimer…).
+  const [etatChargement, setEtatChargement] = useState('jamais');
+  const tentativesChargement = useRef(0);
+  const chargementEnCours = useRef(false);
 
   // ---- Formulaire NOUVEAU PROGRAMME (= un CYCLE complet sur la semaine) ----
   // On choisit obligatoirement les JOURS travaillés, puis pour CHAQUE jour sa
@@ -585,10 +591,43 @@ export default function EntrainementScreen({
   // Combien de séances terminées attendent encore d'être envoyées au serveur.
   const [nbEnAttente, setNbEnAttente] = useState(0);
 
+  // CHARGEMENT DES DONNÉES DU SERVEUR — BUG DU 16/09/2026.
+  // Hafiz, après la mise à jour : « toutes les séances que j'avais faites ont
+  // disparu ainsi que le programme ». Rien n'avait disparu du serveur : c'est
+  // l'ÉCRAN qui n'avait pas réussi à les charger, et il le cachait.
+  // - Le chargement ne se faisait qu'UNE FOIS, à la connexion. Depuis le
+  //   glissement entre onglets (14/09), les écrans restent en place : un
+  //   premier chargement raté (serveur ou base qui se réveillent, délai
+  //   dépassé) n'était donc plus JAMAIS retenté avant de relancer l'app.
+  //   Avant, l'écran était recréé à chaque visite et réessayait tout seul.
+  // - L'échec s'affichait tout en bas de la page, et l'écran annonçait
+  //   « Aucune séance loggée » et « Aucun programme » : exactement ce qu'on
+  //   verrait si tout avait été effacé.
+  // Désormais : on recharge à CHAQUE retour sur l'onglet (comme avant le 14/09),
+  // on réessaie tout seul après un échec, et l'état est dit EN HAUT de l'écran.
   useEffect(() => {
-    if (!estConnecte) return;
+    if (!estConnecte || !actif) return;
+    tentativesChargement.current = 0;
     chargerTout();
-  }, [estConnecte]);
+  }, [estConnecte, actif, moi.id]);
+
+  // Après un échec : nouvel essai dans 5 s, puis 15 s, puis toutes les 30 s,
+  // tant que l'onglet est à l'écran. Chaque échec relance cet effet (l'état
+  // passe par 'en_cours' puis revient à 'echec').
+  useEffect(() => {
+    if (etatChargement !== 'echec' || !estConnecte || !actif) return undefined;
+    const delais = [5000, 15000, 30000];
+    const n = tentativesChargement.current;
+    const minuterie = setTimeout(() => {
+      tentativesChargement.current = n + 1;
+      chargerTout();
+    }, delais[Math.min(n, delais.length - 1)]);
+    return () => clearTimeout(minuterie);
+  }, [etatChargement, estConnecte, actif]);
+
+  // Tant que le chargement n'a pas RÉUSSI, un écran vide ne prouve rien :
+  // on ne dit pas « aucune séance » (voir le bug du 16/09 ci-dessus).
+  const donneesIncertaines = estConnecte && etatChargement !== 'ok';
 
   // AU DÉMARRAGE : REPRENDRE LA SÉANCE INTERROMPUE (demande de Hafiz du
   // 07/09/2026 : « on doit pouvoir rattraper une séance en cours même si on
@@ -642,9 +681,17 @@ export default function EntrainementScreen({
       champsSaisie, rattrapageDe, idLocal]);
 
   async function chargerTout() {
+    if (chargementEnCours.current) return; // un chargement tourne déjà
+    chargementEnCours.current = true;
     setChargement(true);
+    setEtatChargement('en_cours');
+    let toutReussi = false;
     try {
-      const [p, e, pl, c, obj, grp] = await Promise.all([
+      // `allSettled` et non `all` : si UNE des six demandes échoue, on garde
+      // quand même les autres. Avant, une seule demande en retard (les
+      // objectifs de séries, par exemple) faisait jeter les séances ET les
+      // programmes pourtant bien reçus.
+      const resultats = await Promise.allSettled([
         api.programmesDuJoueur(moi.id),
         api.entrainementsDuJoueur(moi.id),
         api.planningDuJoueur(moi.id),
@@ -652,19 +699,22 @@ export default function EntrainementScreen({
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
       ]);
-      setProgrammes(p);
-      // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
-      // dont l'envoi a échoué) n'existent que sur ce téléphone. Écraser la
-      // liste par celle du serveur les effaçait — au moment PRÉCIS où l'on
-      // se reconnectait, c'est-à-dire là où l'on croyait justement qu'elles
-      // étaient enfin sauvegardées (correctif du 07/09/2026).
-      const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
-      setNbEnAttente(enAttente.length);
-      setEntrainements([...enAttente, ...e]);
-      setPlanning(pl);
-      setCycles(c);
-      setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
-      setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+      toutReussi = resultats.every((r) => r.status === 'fulfilled');
+      const [p, e, pl, c, obj, grp] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
+      if (p) setProgrammes(p);
+      if (e) {
+        // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
+        // dont l'envoi a échoué) n'existent que sur ce téléphone. Écraser la
+        // liste par celle du serveur les effaçait — au moment PRÉCIS où l'on
+        // se reconnectait (correctif du 07/09/2026).
+        const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
+        setNbEnAttente(enAttente.length);
+        setEntrainements([...enAttente, ...e]);
+      }
+      if (pl) setPlanning(pl);
+      if (c) setCycles(c);
+      if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
+      if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
       // Seul l'admin a une liste à voir : celle de SES propres partages, avec
       // leurs codes. Personne d'autre ne peut lister quoi que ce soit.
       if (moi.admin) {
@@ -674,12 +724,15 @@ export default function EntrainementScreen({
           // Pas bloquant : le reste de l'écran fonctionne sans.
         }
       }
-    } catch (err) {
-      setErreur(err.message || 'Impossible de charger tes données.');
+    } catch {
+      toutReussi = false;
     } finally {
+      chargementEnCours.current = false;
       setChargement(false);
     }
-    // Le serveur répond : on lui remet les séances qu'il n'a jamais reçues.
+    setEtatChargement(toutReussi ? 'ok' : 'echec');
+    // On remet au serveur les séances qu'il n'a jamais reçues (sans effet
+    // s'il ne répond toujours pas : elles restent dans la file).
     viderLaFileDAttente();
   }
 
@@ -2193,6 +2246,22 @@ export default function EntrainementScreen({
           📡 Mode hors-ligne : tes programmes et séances restent sur ce téléphone tant que tu n'es pas connecté.
         </Text>
       )}
+      {/* L'état du chargement, dit EN HAUT (bug du 16/09/2026) : un écran vide
+          sans explication faisait croire que tout avait été effacé. */}
+      {donneesIncertaines && (
+        <View style={[styles.bandeauChargement, etatChargement === 'echec' && styles.bandeauEchec]}>
+          <Text style={styles.texteBandeau}>
+            {etatChargement === 'echec'
+              ? "⚠️ Tes séances et programmes n'ont pas pu être chargés — le serveur met parfois du temps à se réveiller. Ils ne sont PAS perdus : l'app réessaie toute seule."
+              : '⏳ Chargement de tes séances et programmes…'}
+          </Text>
+          {etatChargement === 'echec' && (
+            <TouchableOpacity onPress={() => { tentativesChargement.current = 0; chargerTout(); }}>
+              <Text style={styles.lienReessayer}>↻ Réessayer maintenant</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
       <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>
@@ -2840,7 +2909,7 @@ export default function EntrainementScreen({
       )}
 
       <Text style={styles.sectionTitre}>Mes programmes</Text>
-      {cycles.length === 0 && programmesSeuls.length === 0 && (
+      {!donneesIncertaines && cycles.length === 0 && programmesSeuls.length === 0 && (
         <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
       )}
 
@@ -3289,7 +3358,7 @@ export default function EntrainementScreen({
       )}
 
       <Text style={styles.sectionTitre}>Historique</Text>
-      {entrainements.length === 0 && (
+      {!donneesIncertaines && entrainements.length === 0 && (
         <Text style={styles.indice}>Aucune séance loggée pour l'instant.</Text>
       )}
       {entrainements.slice(0, 10).map((e) => {
@@ -3319,6 +3388,13 @@ const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   titre: { color: colors.texte, fontSize: 24, fontWeight: '800' },
   sousTitre: { color: colors.texteGris, fontSize: 13, marginTop: 4, marginBottom: espacement.m },
+  bandeauChargement: {
+    backgroundColor: colors.carteClaire, padding: espacement.s, borderRadius: 10,
+    marginBottom: espacement.m,
+  },
+  bandeauEchec: { borderWidth: 1, borderColor: colors.rouge },
+  texteBandeau: { color: colors.texte, fontSize: 13, lineHeight: 18 },
+  lienReessayer: { color: colors.or, fontWeight: '800', marginTop: 6 },
   indiceHorsLigne: {
     color: colors.texteGris, fontSize: 12, backgroundColor: colors.carteClaire,
     padding: espacement.s, borderRadius: 10, marginBottom: espacement.m,
