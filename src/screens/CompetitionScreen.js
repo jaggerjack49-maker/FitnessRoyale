@@ -13,6 +13,7 @@ import CarteDuel from '../components/CarteDuel';
 import DuelDirect from '../components/DuelDirect';
 import DuelEnLigne from '../components/DuelEnLigne';
 import TestPompes from '../components/TestPompes';
+import useRetour from '../useRetour';
 import AvatarJoueur from '../components/AvatarJoueur';
 import usePlaceDefilement from '../usePlaceDefilement';
 
@@ -96,6 +97,13 @@ export default function CompetitionScreen({
   const [duelEnLigneActif, setDuelEnLigneActif] = useState(false);
   // Prototype du compteur de pompes (15/09/2026) — étape 1 du duel de pompes.
   const [testPompesActif, setTestPompesActif] = useState(false);
+  // Retour Android (16/09/2026) : ferme le test de pompes. Les DUELS, eux, ne
+  // se ferment pas au retour — on perdrait une partie en cours ; le retour
+  // passe alors à App.js (Profil), et le duel reste ouvert dans cet onglet.
+  useRetour(actif && onglet === 'defis' && testPompesActif, () => {
+    setTestPompesActif(false);
+    return true;
+  });
 
   // Garder sa place (14/09/2026) : chaque vue de la liste — un mode de
   // classement, les défis — retrouve son défilement quand on y revient. Avant,

@@ -2845,6 +2845,83 @@ SI ÇA SE REPRODUIT : relancer complètement l'app refait un premier chargement
 échec alors que le serveur répond (`/sante`), regarder les demandes une par
 une : l'une d'elles échoue pour une autre raison qu'un délai.
 
+## Retour Android + diagnostic du compteur de pompes — 16/09/2026
+
+### Le geste « retour » ne ferme plus l'app
+
+Signalé par Hafiz : « quand on glisse retour arrière sur l'écran, il sort de
+l'app complètement ». Rien n'était branché sur le retour d'Android : il
+appliquait son comportement par défaut, fermer l'app, depuis N'IMPORTE QUEL
+écran. D'autant plus gênant depuis qu'on glisse pour changer d'onglet : le
+geste retour part du bord de l'écran et se déclenche facilement sans le vouloir.
+
+- `src/useRetour.js` : un petit hook `useRetour(condition, gerer)`. Actif
+  uniquement tant que `condition` est vraie ; `gerer` renvoie `true` s'il a
+  traité le retour. Ne fait RIEN hors Android — sur le web, `BackHandler`
+  n'existe pas et affiche une erreur dès qu'on s'y abonne (vérifié dans le
+  code de react-native-web).
+- ORDRE : Android appelle d'abord le DERNIER abonné. Une sous-vue qui s'ouvre
+  s'abonne après App.js et passe donc en premier. Le gestionnaire est gardé
+  dans une ref pour ne PAS se réabonner à chaque rendu, ce qui bouleverserait
+  cet ordre.
+- LES SOUS-VUES d'abord :
+  - Entraînement : ferme le détail d'une séance passée ou le formulaire de
+    nouveau programme (sa saisie est GARDÉE, contrairement à « Annuler »).
+    ⚠️ JAMAIS la séance en cours : le retour passe alors à App.js, qui ramène
+    au Profil — la séance reste intacte dans son onglet.
+  - Compétition : ferme le test de pompes. Pas les DUELS (on perdrait une
+    partie en cours) : même principe que la séance.
+  - Clan : du chat, on revient aux membres.
+- PUIS App.js, selon `src/logic/retour.js` (`decisionRetour`, logique pure) :
+  hors Profil → retour au Profil ; sur le Profil → un premier retour affiche
+  « Appuie encore une fois pour quitter », seul un second dans les 2 s quitte.
+- Tests : `backend/tests/test_retour.py` + `harnais/harnais_retour.mjs`
+  (8 cas, dont une horloge incohérente et des données manquantes).
+- ⚠️ NON TESTÉ SUR TÉLÉPHONE : le geste retour n'existe pas dans le navigateur
+  de vérification. Seule la règle (harnais) et l'absence d'erreur sur le web
+  sont vérifiées.
+
+### Le compteur de pompes : « tout apparaissait mais le compteur ne marchait pas »
+
+Premier retour de Hafiz sur le prototype du 15/09 : caméra, bras dessinés en
+or et angle affiché — donc la DÉTECTION marche ; c'est la RÈGLE de comptage qui
+ne se déclenche pas. Cause la plus probable : de face, la perspective écrase
+l'angle, et le mouvement réel n'atteint jamais « bras pliés ≤ 100° » ou
+« bras tendus ≥ 150° » — la phase ne bascule alors jamais et le compteur reste
+à 0. PAS ENCORE CORRIGÉ À L'AVEUGLE : on ne règle pas des seuils sans connaître
+les vrais angles.
+
+- DIAGNOSTIC AJOUTÉ à l'écran de test : « Depuis la remise à zéro — Plus petit
+  angle · Plus grand ». Impossible de lire un angle qui bouge en pleine pompe ;
+  ces deux nombres se lisent APRÈS quelques pompes et disent directement quel
+  seuil n'est pas atteint.
+- Vérifié dans le navigateur en SIMULANT 3 pompes (168 relevés de bras envoyés
+  depuis la page de détection elle-même, le même chemin que la vraie caméra) :
+  compteur à 3, « Plus petit angle : 80° · Plus grand : 170° ». La chaîne
+  page → app → compteur → affichage est donc bonne : il ne reste que le
+  réglage des seuils sur un vrai mouvement.
+- PISTE si les angles réels sont trop écrasés : des seuils RELATIFS au
+  mouvement observé (auto-calibration sur le min/max récents), ou un second
+  signal plus fiable de face — la distance verticale épaule-poignet rapportée à
+  la longueur du bras. À décider sur données réelles.
+
+### ⚠️ Plus de build APK gratuit jusqu'au 01/10/2026
+
+Le 16/09/2026, EAS a refusé le build : « This account has used its Android
+builds from the Free plan this month », remise à zéro le **1er octobre 2026**.
+Les correctifs du 16/09 (chargement de l'Entraînement, retour Android,
+diagnostic des pompes) sont commités mais PAS dans un APK.
+- Pour tester SANS build : **Expo Go** (Play Store) + `npx expo start --tunnel`
+  sur le PC. `react-native-webview` fait partie des modules intégrés à Expo Go
+  pour le SDK 54 (`node_modules/expo/bundledNativeModules.json`), donc le
+  compteur de pompes y tourne a priori — NON VÉRIFIÉ sur téléphone. L'app y
+  parle au serveur Render comme l'APK (`extra.apiUrl`).
+- Autres options, à décider par Hafiz : attendre le 1er octobre, ou prendre
+  l'abonnement Expo « Starter » (payant). Un build LOCAL sur le PC est possible
+  mais lourd (outils Android), et un APK signé avec une AUTRE clé ne s'installe
+  pas par-dessus l'actuel : il faudrait désinstaller, ce qui effacerait les
+  séances pas encore envoyées au serveur.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -2857,7 +2934,7 @@ une : l'une d'elles échoue pour une autre raison qu'un délai.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (261 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (262 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

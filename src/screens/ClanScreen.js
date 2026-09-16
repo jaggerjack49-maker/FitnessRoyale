@@ -18,6 +18,7 @@ import { couleursLigues } from '../data/clubSP';
 import { areneDeLaLigue } from '../data/arenes';
 import AvatarJoueur from '../components/AvatarJoueur';
 import usePlaceDefilement from '../usePlaceDefilement';
+import useRetour from '../useRetour';
 import * as api from '../api';
 
 const DELAI_POLLING_MS = 4000;
@@ -26,6 +27,11 @@ const DELAI_POLLING_MS = 4000;
 // onglets restent en place pour qu'on puisse glisser entre eux).
 export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte, actif = true }) {
   const [vue, setVue] = useState('membres'); // 'membres' | 'chat'
+  // Retour Android (16/09/2026) : du chat, on revient aux membres.
+  useRetour(actif && vue === 'chat', () => {
+    setVue('membres');
+    return true;
+  });
   // Garder sa place dans la liste des membres quand on revient du chat
   // (14/09/2026, voir usePlaceDefilement). Le chat, lui, descend déjà tout
   // seul au dernier message.

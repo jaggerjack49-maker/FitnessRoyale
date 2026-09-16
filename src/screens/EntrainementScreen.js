@@ -30,6 +30,7 @@ import {
 import * as notifications from '../notifications';
 import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
+import useRetour from '../useRetour';
 import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
 } from '../logic/rattrapage';
@@ -590,6 +591,16 @@ export default function EntrainementScreen({
   const [rattrapageDe, setRattrapageDe] = useState(null);
   // Combien de séances terminées attendent encore d'être envoyées au serveur.
   const [nbEnAttente, setNbEnAttente] = useState(0);
+
+  // RETOUR ANDROID (16/09/2026) : ferme le détail d'une séance passée ou le
+  // formulaire de nouveau programme (sa saisie est gardée, contrairement à
+  // « Annuler »). JAMAIS la séance en cours : le retour passe alors à App.js,
+  // qui ramène au Profil — la séance reste intacte dans cet onglet.
+  useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'), () => {
+    if (vue === 'historiqueDetail') setEntrainementSelectionne(null);
+    setVue('accueil');
+    return true;
+  });
 
   // CHARGEMENT DES DONNÉES DU SERVEUR — BUG DU 16/09/2026.
   // Hafiz, après la mise à jour : « toutes les séances que j'avais faites ont

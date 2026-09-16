@@ -29,6 +29,13 @@ export default function TestPompes({ onFermer }) {
   // ref, et seul ce qui s'affiche passe par l'état React (moins de rendus).
   const compteur = useRef(nouvelEtatCompteur());
   const derniereMajAngle = useRef(0);
+  // Le plus petit et le plus grand angle vus depuis la remise à zéro
+  // (16/09/2026). Retour de Hafiz : « tout apparaissait mais le compteur ne
+  // marchait pas ». On ne peut pas lire un angle qui bouge en pleine pompe :
+  // ces deux nombres, lus APRÈS quelques pompes, disent si les seuils
+  // (bras tendus / bras pliés) sont atteints par son mouvement réel.
+  const extremes = useRef({ min: null, max: null });
+  const [extremesAffiches, setExtremesAffiches] = useState({ min: null, max: null });
   const [reps, setReps] = useState(0);
   const [angle, setAngle] = useState(null);
   const [phase, setPhase] = useState('inconnue');
@@ -50,6 +57,8 @@ export default function TestPompes({ onFermer }) {
   function remettreAZero() {
     compteur.current = nouvelEtatCompteur();
     setReps(0);
+    extremes.current = { min: null, max: null };
+    setExtremesAffiches({ min: null, max: null });
   }
 
   function lancerTestMinute() {
@@ -69,12 +78,20 @@ export default function TestPompes({ onFermer }) {
       const a = angleCoudes(m.points, REGLAGES_POMPES);
       const suivant = avancerCompteur(compteur.current, { angle: a, t: m.t }, REGLAGES_POMPES);
       compteur.current = suivant;
+      if (a !== null) {
+        const { min, max } = extremes.current;
+        extremes.current = {
+          min: min === null ? a : Math.min(min, a),
+          max: max === null ? a : Math.max(max, a),
+        };
+      }
       setReps(suivant.reps);
       // L'affichage de l'angle est limité à ~8 mises à jour par seconde.
       if (m.t - derniereMajAngle.current > 120) {
         derniereMajAngle.current = m.t;
         setAngle(a);
         setPhase(suivant.phase);
+        setExtremesAffiches({ ...extremes.current });
       }
     }
   }
@@ -118,6 +135,19 @@ export default function TestPompes({ onFermer }) {
         Bras tendus : au-dessus de {REGLAGES_POMPES.angleHaut}° · bras pliés : en dessous de{' '}
         {REGLAGES_POMPES.angleBas}°. Une pompe compte quand tu remontes.
       </Text>
+      <View style={styles.carteExtremes}>
+        <Text style={styles.titreExtremes}>Depuis la remise à zéro</Text>
+        <Text style={styles.valeursExtremes}>
+          Plus petit angle : {extremesAffiches.min === null ? '—' : `${Math.round(extremesAffiches.min)}°`}
+          {'   ·   '}
+          Plus grand : {extremesAffiches.max === null ? '—' : `${Math.round(extremesAffiches.max)}°`}
+        </Text>
+        <Text style={styles.aide}>
+          Remets à zéro, fais 5 pompes, puis lis ces deux nombres : le plus petit doit
+          passer sous {REGLAGES_POMPES.angleBas}°, le plus grand au-dessus de{' '}
+          {REGLAGES_POMPES.angleHaut}°.
+        </Text>
+      </View>
 
       {testFini && (
         <Text style={styles.resultat}>🏁 Temps écoulé : {reps} {reps > 1 ? 'pompes' : 'pompe'} en 1 minute</Text>
@@ -164,6 +194,12 @@ const styles = StyleSheet.create({
   ligneReglage: { flexDirection: 'row', justifyContent: 'space-between', marginTop: espacement.m },
   reglage: { color: colors.texte, fontWeight: '700' },
   aide: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
+  carteExtremes: {
+    marginTop: espacement.m, padding: espacement.s, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.or,
+  },
+  titreExtremes: { color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  valeursExtremes: { color: colors.or, fontSize: 16, fontWeight: '800', marginTop: 4 },
   resultat: { color: colors.or, fontSize: 16, fontWeight: '800', marginTop: espacement.m, textAlign: 'center' },
   ligneBoutons: { flexDirection: 'row', gap: espacement.s, marginTop: espacement.m },
   bouton: {

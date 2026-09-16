@@ -23,6 +23,8 @@ import { utilisateur, autresJoueurs, duels, defiJournalier, defiHebdo } from './
 import { jouerRoundIA } from './src/logic/duels';
 import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
+import useRetour from './src/useRetour';
+import { decisionRetour, DELAI_DOUBLE_RETOUR_MS } from './src/logic/retour';
 import ConnexionScreen from './src/screens/ConnexionScreen';
 import ProfilScreen from './src/screens/ProfilScreen';
 import CompetitionScreen from './src/screens/CompetitionScreen';
@@ -70,6 +72,30 @@ export default function App() {
 
 function AppInterne() {
   const [ongletActif, setOngletActif] = useState('profil');
+
+  // ---- Le « retour » Android (16/09/2026) ----
+  // Signalé par Hafiz : « quand on glisse retour arrière, il sort de l'app
+  // complètement ». Rien n'était branché : Android fermait donc l'app depuis
+  // n'importe quel écran. Les SOUS-VUES (détail d'historique, test de pompes,
+  // chat…) prennent le retour en premier dans leur écran ; ce qui arrive
+  // jusqu'ici suit `decisionRetour` (src/logic/retour.js) : Profil d'abord,
+  // puis « appuie encore une fois pour quitter ».
+  const dernierRetour = useRef(null);
+  const [avertissementQuitter, setAvertissementQuitter] = useState(false);
+  useRetour(true, () => {
+    const decision = decisionRetour({
+      ongletActif, dernierRetourMs: dernierRetour.current, maintenantMs: Date.now(),
+    });
+    if (decision === 'profil') {
+      setOngletActif('profil');
+      return true;
+    }
+    if (decision === 'quitter') return false; // Android ferme l'app
+    dernierRetour.current = Date.now();
+    setAvertissementQuitter(true);
+    setTimeout(() => setAvertissementQuitter(false), DELAI_DOUBLE_RETOUR_MS);
+    return true;
+  });
 
   // ---- Glisser entre les onglets (14/09/2026) ----
   // Les onglets déjà ouverts au moins une fois : leur écran reste en place pour
@@ -540,6 +566,11 @@ function AppInterne() {
 
       {/* Barre d'onglets en bas — piste « Arène » : icône pleine ligne, et sur
           l'onglet actif un liseré or au-dessus + une pastille voilée d'or. */}
+      {avertissementQuitter && (
+        <View style={styles.avertissementQuitter} pointerEvents="none">
+          <Text style={styles.avertissementQuitterTexte}>Appuie encore une fois pour quitter</Text>
+        </View>
+      )}
       <View style={styles.barreOnglets}>
         {ONGLETS.map((o) => {
           const actif = o.cle === ongletActif;
@@ -574,6 +605,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.fond,
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
+  avertissementQuitter: {
+    position: 'absolute', left: 0, right: 0, bottom: 90, alignItems: 'center',
+  },
+  avertissementQuitterTexte: {
+    color: colors.texte, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 18,
+    paddingHorizontal: 16, paddingVertical: 8, fontWeight: '700', overflow: 'hidden',
   },
   barreOnglets: {
     flexDirection: 'row',
