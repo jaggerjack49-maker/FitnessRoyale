@@ -616,3 +616,34 @@ export async function dernieresSeriesPourExercice(joueurId, exercice, avant) {
   const requete = avant ? `?avant=${encodeURIComponent(avant)}` : '';
   return get(`/joueurs/${joueurId}/exercices/${encodeURIComponent(exercice)}/dernier${requete}`);
 }
+
+// ----- Nutrition : photo d'un repas, journal, objectif du jour (18/09/2026) -----
+// L'analyse est faite par le serveur (Claude Opus 5, voir backend/app/nutrition.py).
+// Elle prend en général 10 à 30 s : délai d'attente dédié, bien au-delà de
+// DELAI_MAX_MS (12 s), qui la couperait en plein travail.
+const DELAI_ANALYSE_REPAS_MS = 100000;
+
+export async function analyserRepas(joueurId, imageBase64, mediaType) {
+  return appel(`/joueurs/${joueurId}/nutrition/analyser`, {
+    method: 'POST', body: JSON.stringify({ image_base64: imageBase64, media_type: mediaType }),
+  }, DELAI_ANALYSE_REPAS_MS);
+}
+
+export async function ajouterRepas(joueurId, repas) {
+  return post(`/joueurs/${joueurId}/repas`, repas);
+}
+
+// { date, repas: [...], totaux: {kcal, proteines_g, glucides_g, lipides_g}, objectifs: {kcal, proteines} }
+export async function journalNutrition(joueurId, jour) {
+  return get(`/joueurs/${joueurId}/repas?date=${encodeURIComponent(jour)}`);
+}
+
+export async function supprimerRepas(repasId) {
+  return appel(`/repas/${repasId}`, { method: 'DELETE' });
+}
+
+export async function changerObjectifsNutrition(joueurId, objectifs) {
+  return appel(`/joueurs/${joueurId}/objectifs-nutrition`, {
+    method: 'PUT', body: JSON.stringify(objectifs),
+  });
+}

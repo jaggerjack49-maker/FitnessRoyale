@@ -31,6 +31,7 @@ import * as notifications from '../notifications';
 import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
 import useRetour from '../useRetour';
+import CarteNutrition from '../components/CarteNutrition';
 import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
 } from '../logic/rattrapage';
@@ -2273,6 +2274,10 @@ export default function EntrainementScreen({
           )}
         </View>
       )}
+
+      {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
+          (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
+      <CarteNutrition moi={moi} estConnecte={estConnecte} actif={actif} />
 
       {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
       <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>

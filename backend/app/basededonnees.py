@@ -569,6 +569,123 @@ def initialiser():
             )
         """)
 
+        # ---- Nutrition (18/09/2026) : journal des repas, objectif du jour,
+        # et compteur d'analyses photo (voir app/nutrition.py). La PHOTO n'est
+        # jamais gardée : seul le résultat chiffré l'est, dans `repas`.
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS repas (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
+                date      TEXT NOT NULL,   -- 'AAAA-MM-JJ', le jour du joueur
+                cree_le   TEXT NOT NULL,
+                nom       TEXT NOT NULL,
+                source    TEXT NOT NULL CHECK (source IN ('photo', 'manuel')),
+                aliments  TEXT NOT NULL,   -- liste JSON [{nom, portion, grammes, kcal, ...}]
+                kcal      INTEGER NOT NULL,
+                proteines REAL NOT NULL,
+                glucides  REAL NOT NULL,
+                lipides   REAL NOT NULL
+            )
+        """)
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS objectifs_nutrition (
+                joueur_id INTEGER PRIMARY KEY REFERENCES joueurs(id) ON DELETE CASCADE,
+                kcal      INTEGER,
+                proteines INTEGER
+            )
+        """)
+        # Une ligne par photo ENVOYÉE à l'IA (qu'elle aboutisse ou non) : c'est
+        # ce qui coûte de l'argent, donc ce qui est plafonné par jour.
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS analyses_nutrition (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
+                date      TEXT NOT NULL,
+                cree_le   TEXT NOT NULL
+            )
+        """)
+
+
+# ----- Nutrition : journal des repas + objectif du jour (18/09/2026) -----
+
+def _repas_depuis_ligne(ligne) -> dict:
+    repas = dict(ligne)
+    repas["aliments"] = json.loads(repas["aliments"]) if repas.get("aliments") else []
+    return repas
+
+
+def creer_repas(joueur_id: int, jour: str, cree_le: str, nom: str, source: str,
+                aliments: list, totaux: dict) -> int:
+    with connexion() as conn:
+        curseur = conn.execute(
+            "INSERT INTO repas (joueur_id, date, cree_le, nom, source, aliments, "
+            "kcal, proteines, glucides, lipides) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (joueur_id, jour, cree_le, nom, source, json.dumps(aliments, ensure_ascii=False),
+             totaux["kcal"], totaux["proteines_g"], totaux["glucides_g"], totaux["lipides_g"]),
+        )
+        return curseur.lastrowid
+
+
+def lire_repas(repas_id: int) -> dict | None:
+    with connexion() as conn:
+        ligne = conn.execute("SELECT * FROM repas WHERE id = ?", (repas_id,)).fetchone()
+        return _repas_depuis_ligne(ligne) if ligne else None
+
+
+def repas_du_jour(joueur_id: int, jour: str) -> list:
+    """Les repas d'une journée, dans l'ordre où ils ont été ajoutés."""
+    with connexion() as conn:
+        return [
+            _repas_depuis_ligne(ligne)
+            for ligne in conn.execute(
+                "SELECT * FROM repas WHERE joueur_id = ? AND date = ? ORDER BY cree_le, id",
+                (joueur_id, jour),
+            )
+        ]
+
+
+def supprimer_repas(repas_id: int) -> None:
+    with connexion() as conn:
+        conn.execute("DELETE FROM repas WHERE id = ?", (repas_id,))
+
+
+def objectifs_nutrition(joueur_id: int) -> dict:
+    """{kcal, proteines} — None pour un objectif pas encore fixé."""
+    with connexion() as conn:
+        ligne = conn.execute(
+            "SELECT kcal, proteines FROM objectifs_nutrition WHERE joueur_id = ?", (joueur_id,)
+        ).fetchone()
+        return dict(ligne) if ligne else {"kcal": None, "proteines": None}
+
+
+def definir_objectifs_nutrition(joueur_id: int, kcal, proteines) -> None:
+    """Remplace l'objectif du jour (ON CONFLICT … DO UPDATE : portable
+    SQLite 3.24+ et Postgres)."""
+    with connexion() as conn:
+        conn.execute(
+            "INSERT INTO objectifs_nutrition (joueur_id, kcal, proteines) VALUES (?, ?, ?) "
+            "ON CONFLICT (joueur_id) DO UPDATE SET kcal = excluded.kcal, proteines = excluded.proteines",
+            (joueur_id, kcal, proteines),
+        )
+
+
+def nb_analyses_du_jour(joueur_id: int, jour: str) -> int:
+    with connexion() as conn:
+        ligne = conn.execute(
+            "SELECT COUNT(*) AS n FROM analyses_nutrition WHERE joueur_id = ? AND date = ?",
+            (joueur_id, jour),
+        ).fetchone()
+        return ligne["n"]
+
+
+def enregistrer_analyse(joueur_id: int, jour: str, cree_le: str) -> None:
+    with connexion() as conn:
+        conn.execute(
+            "INSERT INTO analyses_nutrition (joueur_id, date, cree_le) VALUES (?, ?, ?)",
+            (joueur_id, jour, cree_le),
+        )
+
 
 # ----- Programmes officiels (publiés par l'admin) -----
 

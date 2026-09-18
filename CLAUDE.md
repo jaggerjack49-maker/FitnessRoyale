@@ -2922,6 +2922,102 @@ diagnostic des pompes) sont commités mais PAS dans un APK.
   pas par-dessus l'actuel : il faudrait désinstaller, ce qui effacerait les
   séances pas encore envoyées au serveur.
 
+## Nutrition : journal alimentaire + calories estimées par l'IA en photo — 18/09/2026
+
+Demande de Hafiz : « intégrer une IA qui pourra estimer les calories des
+aliments avec la caméra ». DÉCISIONS PRISES AVEC LUI : un JOURNAL alimentaire
+avec un OBJECTIF du jour (kcal + protéines), dans une SECTION de l'onglet
+Entraînement (pas de 7e onglet), analysé par **Claude Opus 5** (le plus précis,
+~3 centimes par photo ; Sonnet 5 à ~1 centime lui a été proposé et écarté).
+
+### Le parcours
+
+📷 photo (ou galerie, ou saisie ✍️ à la main) → la photo est RÉDUITE à 1024 px
+sur le téléphone (`expo-image-manipulator`, NOUVELLE dépendance native :
+quelques centaines de Ko au lieu de 3 à 5 Mo) → envoyée au SERVEUR → Claude
+l'analyse avec un FORMAT DE RÉPONSE IMPOSÉ (sorties structurées : liste
+d'aliments, portion, grammes, kcal, protéines, glucides, lipides, confiance,
+remarque) → un BROUILLON s'affiche : on relit, on corrige les grammes
+(calories et macros suivent), on retire ce qui est faux, PUIS on l'ajoute au
+journal. Rien n'est enregistré sans cette relecture : c'est une ESTIMATION
+(huile, sauces et poids exact ne se voient pas), et l'écran le dit.
+
+### ⚠️ La clé d'API : UNIQUEMENT sur Render
+
+L'accès à Claude se fait avec une clé SECRÈTE et PAYANTE (compte sur
+console.anthropic.com, crédits prépayés — à créer par Hafiz, impossible à
+faire à sa place). Comme `DATABASE_URL`, elle vit UNIQUEMENT dans les variables
+d'environnement du service Render (`ANTHROPIC_API_KEY`) : jamais dans le code,
+jamais dans le dépôt, jamais dans l'app, jamais collée dans une conversation.
+L'app n'appelle JAMAIS l'IA directement : elle passe par le serveur.
+SANS CLÉ, tout le reste marche : l'analyse répond 503 « L'analyse des repas
+n'est pas encore configurée sur le serveur », et le journal (saisie à la main,
+objectif) fonctionne.
+
+### Côté serveur
+
+- `backend/app/nutrition.py` : l'appel à Claude (`client.beta.messages.create`,
+  modèle `claude-opus-5`, `output_config` = effort « medium » + schéma JSON
+  imposé). Client créé au PREMIER besoin (le serveur et les tests démarrent
+  sans clé). Paquet `anthropic` 1.x ajouté à `requirements.txt` — il utilise
+  `httpx2`, qui cohabite sans problème avec le `httpx` des tests.
+  - REPRISE EN CAS DE REFUS activée (`betas=["server-side-fallback-2026-07-01"]`,
+    `fallbacks="default"`), recommandée pour Opus 5 : si le modèle décline une
+    photo, l'API relance la demande sur un autre modèle dans le même appel.
+  - Refus final, réponse coupée, JSON illisible, erreurs de l'API (clé refusée,
+    trop de demandes, panne, délai) → messages en FRANÇAIS lisibles tels quels.
+  - `normaliser_analyse` : textes nettoyés, nombres positifs et bornés, aliments
+    sans nom écartés, TOTAUX TOUJOURS RECALCULÉS (jamais l'addition de l'IA).
+  - VÉRIFIÉ dans le paquet installé (et pas seulement dans la doc) que
+    `fallbacks` accepte `"default"`, que `output_config` accepte `effort` +
+    `format`, et que l'en-tête bêta est connu : le faux client des tests
+    accepte n'importe quel paramètre, il n'aurait rien détecté.
+- Tables `repas` (aliments en JSON + totaux), `objectifs_nutrition` (une ligne
+  par joueur, `ON CONFLICT … DO UPDATE`), `analyses_nutrition` (une ligne par
+  photo ENVOYÉE à l'IA). Toutes via `_executer_creation_table`.
+- Routes (toutes réservées au propriétaire) : `POST /joueurs/{id}/nutrition/analyser`
+  (analyse SANS enregistrer), `POST /joueurs/{id}/repas` (totaux recalculés
+  côté serveur), `GET /joueurs/{id}/repas?date=` (repas + totaux + objectifs
+  du jour), `DELETE /repas/{id}`, `GET/PUT /joueurs/{id}/objectifs-nutrition`.
+- GARDE-FOUS CONTRE LA FACTURE : **15 analyses par jour et par joueur**
+  (`QUOTA_ANALYSES_PAR_JOUR`), comptées AVANT l'appel (un appel raté peut
+  coûter) ; format et base64 vérifiés AVANT l'IA ; sans clé, rien n'est compté.
+- LA PHOTO N'EST GARDÉE NULLE PART (même principe que les vidéos de perfs) :
+  seul le résultat chiffré est enregistré, et seulement après relecture.
+- Le « jour » du journal est celui du TÉLÉPHONE (`enISO`, date locale, comme le
+  calendrier) ; le compteur d'analyses, lui, suit le jour du serveur.
+
+### Côté app
+
+- `src/components/CarteNutrition.js` : bilan du jour (kcal / protéines avec
+  barres, « il te reste … »), objectif, boutons 📷 / 🖼 / ✍️, brouillon à relire,
+  journal avec suppression en deux temps. Rechargée à chaque retour sur
+  l'onglet (leçon du bug du 16/09).
+- `src/logic/nutrition.js` : les calculs du brouillon, testés par
+  `test_nutrition_front.py` + `harnais/harnais_nutrition.mjs`. PIÈGE TRAITÉ :
+  ajuster une portion repart TOUJOURS des valeurs d'origine de l'IA (`base`),
+  sinon 150 g → 333 g → 77 g → 150 g accumulait des erreurs d'arrondi.
+- `src/api.js` : délai d'attente DÉDIÉ de 100 s pour l'analyse (Opus 5 réfléchit
+  10 à 30 s) ; les 12 s habituels l'auraient coupée en plein travail.
+
+### Vérifié / NON vérifié
+
+Tests : `test_nutrition.py` (faux client : réponse normale, refus, réponse
+coupée, JSON illisible, erreurs de l'API, sans clé), `test_api_nutrition.py`
+(droits, quota, 503 sans clé non compté, photo sans nourriture → 422, journal,
+totaux recalculés, suppression privée, objectifs), `test_nutrition_front.py`.
+Suite complète : **284 tests, tous OK.**
+Navigateur (backend local, sans clé) : objectif 2400 kcal / 160 g enregistré ;
+repas à la main 250 kcal / 20 g → « 250 / 2400 kcal · 20 / 160 g », barres à
+10,4 % et 12,5 %, « Il te reste 2150 kcal » ; suppression en deux temps ;
+l'analyse sans clé répond bien 503 avec le message prévu. Aucune erreur console.
+⚠️ NON VÉRIFIÉ : un VRAI appel à Claude (aucune clé sur le PC de dev — chaque
+appel coûte) et la prise de photo elle-même (boîte de dialogue du système,
+impossible à piloter depuis le navigateur de vérification). Premier essai réel
+= quand Hafiz aura posé `ANTHROPIC_API_KEY` sur Render. Et comme toutes les
+nouveautés depuis le 16/09, pas d'APK avant le 01/10/2026 (quota EAS) : Expo Go
+ou la version web en attendant.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -2934,7 +3030,7 @@ diagnostic des pompes) sont commités mais PAS dans un APK.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (262 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (284 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

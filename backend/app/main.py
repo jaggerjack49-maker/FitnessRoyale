@@ -8,6 +8,7 @@ Documentation interactive automatique : http://localhost:8000/docs
 (FastAPI génère une page où tu peux tester chaque endpoint à la main !)
 """
 
+import base64
 import json
 from datetime import date, datetime
 
@@ -23,6 +24,7 @@ from . import duels as regles_duels
 from . import videos as regles_videos
 from . import xp as regles_xp
 from . import modetest
+from . import nutrition
 from .baremes import BAREMES, NOMS_LIGUES
 from .logique import (
     classer_global,
@@ -1488,3 +1490,139 @@ def dernieres_series(joueur_id: int, exercice: str, avant: str | None = None,
     avant_date = avant or date.today().isoformat()
     resultat = db.dernieres_series_pour_exercice(joueur_id, exercice, avant_date)
     return resultat or {"date": None, "series": []}
+
+
+# ----- Nutrition : photo d'un repas, journal, objectif du jour (18/09/2026) -----
+# Voir app/nutrition.py pour l'analyse par l'IA (Claude Opus 5).
+
+class PhotoRepas(BaseModel):
+    image_base64: str = Field(min_length=100, max_length=nutrition.TAILLE_MAX_BASE64)
+    media_type: str
+
+
+class AlimentRepas(BaseModel):
+    nom: str = Field(min_length=1, max_length=80)
+    portion: str = Field(default="", max_length=40)
+    grammes: float = Field(default=0, ge=0, le=5000)
+    kcal: float = Field(ge=0, le=10000)
+    proteines_g: float = Field(default=0, ge=0, le=1000)
+    glucides_g: float = Field(default=0, ge=0, le=1000)
+    lipides_g: float = Field(default=0, ge=0, le=1000)
+
+
+class NouveauRepas(BaseModel):
+    nom: str = Field(min_length=1, max_length=80)
+    date: str | None = None
+    source: str = "photo"
+    aliments: list[AlimentRepas] = Field(min_length=1, max_length=30)
+
+
+class ObjectifsNutrition(BaseModel):
+    kcal: int | None = Field(default=None, ge=800, le=8000)
+    proteines: int | None = Field(default=None, ge=0, le=500)
+
+
+def _jour_valide(jour: str | None) -> str:
+    """Le jour transmis par l'app (SA date locale), ou aujourd'hui côté serveur."""
+    jour = jour or date.today().isoformat()
+    try:
+        date.fromisoformat(jour)
+    except ValueError:
+        raise HTTPException(400, "Date invalide : utilise le format AAAA-MM-JJ.")
+    return jour
+
+
+@app.post("/joueurs/{joueur_id}/nutrition/analyser")
+def analyser_repas(joueur_id: int, photo: PhotoRepas,
+                   courant: dict = Depends(auth.utilisateur_courant)):
+    """Analyse la photo d'un repas. Ne l'enregistre PAS : le joueur relit,
+    corrige les portions, puis l'ajoute à son journal (POST /repas)."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    if photo.media_type not in nutrition.TYPES_IMAGE:
+        raise HTTPException(400, "Format de photo non pris en charge (JPEG, PNG ou WebP).")
+    try:
+        base64.b64decode(photo.image_base64, validate=True)
+    except ValueError:
+        raise HTTPException(400, "Photo illisible.")
+    # Pas de clé sur le serveur : on le dit AVANT de compter une analyse.
+    if not nutrition.est_configuree():
+        raise HTTPException(503, "L'analyse des repas n'est pas encore configurée sur le serveur.")
+    jour = date.today().isoformat()
+    deja = db.nb_analyses_du_jour(joueur_id, jour)
+    if deja >= nutrition.QUOTA_ANALYSES_PAR_JOUR:
+        raise HTTPException(
+            429, f"Limite de {nutrition.QUOTA_ANALYSES_PAR_JOUR} analyses par jour atteinte. "
+                 "Tu peux encore ajouter un repas à la main.")
+    # Comptée AVANT l'appel : un appel qui échoue peut quand même coûter.
+    db.enregistrer_analyse(joueur_id, jour, datetime.now().isoformat(timespec="milliseconds"))
+    try:
+        analyse = nutrition.analyser_photo(photo.image_base64, photo.media_type)
+    except nutrition.AnalyseNonConfiguree as erreur:
+        raise HTTPException(503, str(erreur))
+    except nutrition.AnalyseImpossible as erreur:
+        raise HTTPException(502, str(erreur))
+    if not analyse["est_de_la_nourriture"]:
+        raise HTTPException(422, analyse["remarque"] or "Aucun aliment reconnu sur cette photo.")
+    analyse["analyses_restantes"] = max(0, nutrition.QUOTA_ANALYSES_PAR_JOUR - deja - 1)
+    return analyse
+
+
+@app.post("/joueurs/{joueur_id}/repas", status_code=201)
+def ajouter_repas(joueur_id: int, repas: NouveauRepas,
+                  courant: dict = Depends(auth.utilisateur_courant)):
+    """Ajoute un repas au journal. Les TOTAUX sont recalculés ici à partir des
+    aliments : on ne fait jamais confiance à une addition envoyée par l'app."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    if repas.source not in ("photo", "manuel"):
+        raise HTTPException(400, "Source inconnue.")
+    jour = _jour_valide(repas.date)
+    aliments = [a.model_dump() for a in repas.aliments]
+    repas_id = db.creer_repas(
+        joueur_id, jour, datetime.now().isoformat(timespec="milliseconds"),
+        repas.nom.strip(), repas.source, aliments, nutrition.totaux(aliments),
+    )
+    return db.lire_repas(repas_id)
+
+
+@app.get("/joueurs/{joueur_id}/repas")
+def journal_du_jour(joueur_id: int, date: str | None = None,
+                    courant: dict = Depends(auth.utilisateur_courant)):
+    """Le journal d'une journée : ses repas, leurs totaux et l'objectif."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    jour = _jour_valide(date)
+    repas = db.repas_du_jour(joueur_id, jour)
+    return {
+        "date": jour,
+        "repas": repas,
+        "totaux": {
+            "kcal": sum(r["kcal"] for r in repas),
+            "proteines_g": round(sum(r["proteines"] for r in repas), 1),
+            "glucides_g": round(sum(r["glucides"] for r in repas), 1),
+            "lipides_g": round(sum(r["lipides"] for r in repas), 1),
+        },
+        "objectifs": db.objectifs_nutrition(joueur_id),
+    }
+
+
+@app.delete("/repas/{repas_id}", status_code=204)
+def retirer_repas(repas_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    repas = db.lire_repas(repas_id)
+    if repas is None:
+        raise HTTPException(404, "Repas introuvable.")
+    auth.verifier_proprietaire(courant, repas["joueur_id"])
+    db.supprimer_repas(repas_id)
+
+
+@app.get("/joueurs/{joueur_id}/objectifs-nutrition")
+def lire_objectifs_nutrition(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    auth.verifier_proprietaire(courant, joueur_id)
+    return db.objectifs_nutrition(joueur_id)
+
+
+@app.put("/joueurs/{joueur_id}/objectifs-nutrition")
+def changer_objectifs_nutrition(joueur_id: int, objectifs: ObjectifsNutrition,
+                                courant: dict = Depends(auth.utilisateur_courant)):
+    """L'objectif du jour (kcal et protéines). Un champ vide = pas d'objectif."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    db.definir_objectifs_nutrition(joueur_id, objectifs.kcal, objectifs.proteines)
+    return db.objectifs_nutrition(joueur_id)
