@@ -27,6 +27,9 @@ import {
   suggererProchaineSerie, recordPersonnel, bat_le_record,
   detecterStagnation, tousLesRecords,
 } from '../logic/surchargeProgressive';
+import {
+  jourDeLaSeance, seriesSansJour, joursTravailles,
+} from '../logic/dateSeance';
 import * as notifications from '../notifications';
 import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
@@ -590,6 +593,12 @@ export default function EntrainementScreen({
   // La date de la séance qu'on est en train de RATTRAPER (null sinon) —
   // purement informatif : la séance reste enregistrée au jour où on la fait.
   const [rattrapageDe, setRattrapageDe] = useState(null);
+  // LE JOUR AUQUEL LA SÉANCE SERA ENREGISTRÉE (21/09/2026, voir
+  // src/logic/dateSeance.js). `dateDebutSeance` = le jour où on l'a lancée
+  // (repli quand aucune série n'est estampillée) ; `daterAujourdhui` = on a
+  // demandé explicitement à la dater d'aujourd'hui.
+  const [dateDebutSeance, setDateDebutSeance] = useState(null);
+  const [daterAujourdhui, setDaterAujourdhui] = useState(false);
   // Combien de séances terminées attendent encore d'être envoyées au serveur.
   const [nbEnAttente, setNbEnAttente] = useState(0);
 
@@ -674,6 +683,8 @@ export default function EntrainementScreen({
         setSeriesLoggees(seance.seriesLoggees || {});
         setChampsSaisie(seance.champsSaisie || {});
         setRattrapageDe(seance.rattrapageDe || null);
+        setDateDebutSeance(seance.dateDebut || null);
+        setDaterAujourdhui(!!seance.daterAujourdhui);
         setVue('seance');
       }
       setSeanceRestauree(true);
@@ -688,9 +699,10 @@ export default function EntrainementScreen({
     if (!seanceRestauree || vue !== 'seance') return;
     stockageSeance.ecrireSeanceEnCours(idLocal, {
       programmeActif, exercicesSession, seriesLoggees, champsSaisie, rattrapageDe,
+      dateDebut: dateDebutSeance, daterAujourdhui,
     });
   }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
-      champsSaisie, rattrapageDe, idLocal]);
+      champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, idLocal]);
 
   async function chargerTout() {
     if (chargementEnCours.current) return; // un chargement tourne déjà
@@ -1546,6 +1558,10 @@ export default function EntrainementScreen({
     setChampsSaisie({});
     setNouvelExerciceLibre('');
     setRattrapageDe(dateRattrapee);
+    // Le jour où la séance commence : il sert de repli si elle est
+    // enregistrée sans qu'aucune série ne porte de jour.
+    setDateDebutSeance(aujourdhui());
+    setDaterAujourdhui(false);
     setErreur(null);
     setVue('seance');
   }
@@ -1556,6 +1572,8 @@ export default function EntrainementScreen({
   async function abandonnerSeance() {
     await stockageSeance.effacerSeanceEnCours();
     setRattrapageDe(null);
+    setDateDebutSeance(null);
+    setDaterAujourdhui(false);
     setSeriesLoggees({});
     setChampsSaisie({});
     setVue('accueil');
@@ -1631,7 +1649,13 @@ export default function EntrainementScreen({
       const existantes = s[exercice] || [];
       return {
         ...s,
-        [exercice]: [...existantes, { numero_serie: existantes.length + 1, reps, poids }],
+        // `jour` : le jour où CETTE série a été faite (21/09/2026). Il ne
+        // part jamais au serveur (`seriesSansJour`) — il sert uniquement à
+        // dater la séance au bon jour si on l'enregistre plus tard.
+        [exercice]: [
+          ...existantes,
+          { numero_serie: existantes.length + 1, reps, poids, jour: aujourdhui() },
+        ],
       };
     });
     // ON GARDE LA SAISIE au lieu de vider les champs (demande de Hafiz du
@@ -1687,16 +1711,34 @@ export default function EntrainementScreen({
     setSerieEnEdition(null);
   }
 
+  // Les séries de la séance en cours, à plat. UNE SEULE DÉFINITION, utilisée
+  // par l'affichage ET par l'enregistrement : c'est ce qui garantit que
+  // l'écran ne peut pas annoncer un jour différent de celui qui sera
+  // vraiment enregistré (le projet a déjà payé une seconde définition
+  // divergente, voir `cycleEnService`, bug du 28/08/2026).
+  const seriesDeLaSeance = Object.entries(seriesLoggees).flatMap(([exercice, series]) =>
+    series.map((s) => ({ exercice, ...s }))
+  );
+  // Le jour auquel la séance sera enregistrée : celui où le travail a
+  // vraiment été fait (voir src/logic/dateSeance.js), sauf si on a demandé
+  // explicitement à la dater d'aujourd'hui.
+  const jourEnregistrement = daterAujourdhui
+    ? aujourdhui()
+    : (jourDeLaSeance(seriesDeLaSeance, {
+        dateDebut: dateDebutSeance, jourJ: aujourdhui(),
+      }) || aujourdhui());
+
   async function terminerSeance() {
-    const toutesLesSeries = Object.entries(seriesLoggees).flatMap(([exercice, series]) =>
-      series.map((s) => ({ exercice, ...s }))
-    );
+    // On retire le `jour` de chaque série : il est propre à l'app (il a
+    // servi à choisir la date ci-dessus), le serveur reçoit exactement les
+    // mêmes champs qu'avant.
+    const toutesLesSeries = seriesSansJour(seriesDeLaSeance);
     if (toutesLesSeries.length === 0) {
       setErreur('Ajoute au moins une série avant de terminer.');
       return;
     }
     setEnregistrementEnCours(true);
-    const jour = aujourdhui();
+    const jour = jourEnregistrement;
     const local = {
       id: `local-${Date.now()}`,
       programme_id: programmeActif?.id ?? null,
@@ -1741,6 +1783,8 @@ export default function EntrainementScreen({
     rafraichirRappelSuivi([local, ...entrainements]);
     setEnregistrementEnCours(false);
     setRattrapageDe(null);
+    setDateDebutSeance(null);
+    setDaterAujourdhui(false);
     setVue('accueil');
   }
 
@@ -1931,6 +1975,7 @@ export default function EntrainementScreen({
   // ---- Vue : logger une séance ----
   if (vue === 'seance') {
     const jour = aujourdhui();
+    const joursAvecDuTravail = joursTravailles(seriesDeLaSeance);
     return (
       // LE CLAVIER CACHAIT LES CHAMPS DU BAS (retour de Hafiz du 02/09/2026,
       // capture à l'appui) : on saisit ses reps sans voir ce qu'on tape.
@@ -1953,11 +1998,46 @@ export default function EntrainementScreen({
         <Text style={styles.titre}>
           💪 {programmeActif ? programmeActif.nom : 'Séance libre'}
         </Text>
-        <Text style={styles.sousTitre}>{jour}</Text>
+        <Text style={styles.sousTitre}>
+          {jourEnregistrement === jour
+            ? jour
+            : `Sera enregistrée au ${libelleDate(jourEnregistrement)}`}
+        </Text>
+        {/* SÉANCE COMMENCÉE UN AUTRE JOUR (21/09/2026) : on le DIT, et on
+            laisse le choix — l'app ne décide pas dans le dos de personne. */}
+        {jourEnregistrement !== jour && (
+          <View style={styles.bandeauJourSeance}>
+            <Text style={styles.texteJourSeance}>
+              📅 Cette séance a été faite le {libelleDate(jourEnregistrement)} :
+              c'est à ce jour-là qu'elle sera enregistrée, pas aujourd'hui.
+              {joursAvecDuTravail.length > 1
+                ? ' (Des séries ont été saisies sur plusieurs jours : on garde'
+                  + ' celui où tu en as fait le plus.)'
+                : ''}
+            </Text>
+            <TouchableOpacity onPress={() => setDaterAujourdhui(true)}>
+              <Text style={styles.lienJourSeance}>
+                L'enregistrer au {libelleDate(jour)} (aujourd'hui) ›
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {daterAujourdhui && joursAvecDuTravail.some((j) => j !== jour) && (
+          <View style={styles.bandeauJourSeance}>
+            <Text style={styles.texteJourSeance}>
+              📅 Enregistrement forcé au {libelleDate(jour)} (aujourd'hui).
+            </Text>
+            <TouchableOpacity onPress={() => setDaterAujourdhui(false)}>
+              <Text style={styles.lienJourSeance}>
+                Revenir au jour où la séance a été faite ›
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {rattrapageDe && (
           <Text style={styles.bandeauRattrapage}>
             ⏳ Rattrapage de la séance du {libelleDate(rattrapageDe)} — elle sera
-            enregistrée aujourd'hui.
+            enregistrée au jour où tu la fais, pas à cette date-là.
           </Text>
         )}
         {nbEnAttente > 0 && (
@@ -3400,6 +3480,19 @@ export default function EntrainementScreen({
 }
 
 const styles = StyleSheet.create({
+  // Bandeau « cette séance sera enregistrée au … » (21/09/2026).
+  bandeauJourSeance: {
+    backgroundColor: '#1d1a12',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.or,
+    borderRadius: 8,
+    padding: espacement.s,
+    marginBottom: espacement.s,
+  },
+  texteJourSeance: { color: colors.texte, fontSize: 13, lineHeight: 18 },
+  lienJourSeance: {
+    color: colors.or, fontSize: 13, fontWeight: '700', marginTop: 6,
+  },
   conteneur: { flex: 1, backgroundColor: colors.fond },
   centre: { alignItems: 'center', justifyContent: 'center' },
   titre: { color: colors.texte, fontSize: 24, fontWeight: '800' },

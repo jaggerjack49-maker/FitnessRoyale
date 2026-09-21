@@ -3018,6 +3018,80 @@ impossible à piloter depuis le navigateur de vérification). Premier essai rée
 nouveautés depuis le 16/09, pas d'APK avant le 01/10/2026 (quota EAS) : Expo Go
 ou la version web en attendant.
 
+## Une séance est datée du jour où elle a été FAITE — 21/09/2026
+
+Bug signalé par Hafiz : « quand on lance une séance et qu'on oublie de
+l'enregistrer le jour même et qu'on l'enregistre le jour suivant, elle est
+enregistrée comme séance du jour suivant, ce qui n'est pas correct ».
+
+LA CAUSE, en une ligne : `terminerSeance` datait la séance avec `aujourdhui()`,
+c'est-à-dire la date AU MOMENT D'APPUYER SUR « TERMINER ». Rien, nulle part, ne
+retenait le jour où le travail avait été fait — ni l'état de l'écran, ni la
+mémoire locale (`ecrireSeanceEnCours` gardait le programme, les exercices, les
+séries et les champs de saisie, mais aucune date).
+
+⚠️ CE QUE ÇA FAUSSAIT EN CHAÎNE, toujours en silence : le ✅ du calendrier se
+posait sur le mauvais jour, le jour réel passait pour MANQUÉ (« ⏳ À rattraper
+cette semaine », voir `src/logic/rattrapage.js`), et une séance du dimanche
+enregistrée le lundi basculait dans le volume de la SEMAINE SUIVANTE
+(`compterSeriesParGroupe` va du lundi au dimanche).
+
+### La règle : le jour où l'on a fait le PLUS DE SÉRIES
+
+`src/logic/dateSeance.js` — logique pure, donc testable sur des dates choisies
+(on ne peut pas mentir à l'horloge depuis l'écran). Chaque série retient le jour
+(local) où elle a été SAISIE, et `jourDeLaSeance` garde le jour le plus fourni ;
+à égalité, le plus ANCIEN (celui où la séance a commencé).
+- séries faites lundi, « Terminer » touché mardi → **lundi** (le cas signalé) ;
+- séance ouverte lundi mais réellement faite mardi → **mardi**.
+
+POURQUOI PAS SIMPLEMENT LA DATE DE DÉBUT (c'était le premier réflexe) : une
+séance laissée ouverte par oubli, avec zéro ou une série d'essai, serait alors
+datée d'un jour où l'on n'a rien fait — on remplacerait un faux jour par un
+autre. `dateDebutSeance` reste gardé, mais comme simple REPLI (séance commencée
+avant ce correctif : aucune de ses séries ne porte de jour).
+
+### Trois points non évidents
+
+- **Le serveur ne voit RIEN de nouveau.** Le `jour` d'une série est une
+  information locale à l'app ; `seriesSansJour()` la retire avant l'envoi.
+  Aucune migration, aucun champ ajouté à `series_journal` — vérifié en base
+  après coup (mêmes colonnes qu'avant).
+- **UNE SEULE DÉFINITION du jour d'enregistrement** (`jourEnregistrement` dans
+  `EntrainementScreen`) : elle sert à l'AFFICHAGE et à `terminerSeance`.
+  L'écran ne peut donc pas annoncer un jour et en enregistrer un autre — le
+  projet a déjà payé une seconde définition divergente (voir `cycleEnService`,
+  bug du 28/08/2026).
+- **ON PRÉVIENT, ON N'IMPOSE PAS.** Quand le jour retenu n'est pas aujourd'hui,
+  un bandeau le dit en clair (« 📅 Cette séance a été faite le dimanche
+  20 septembre : c'est à ce jour-là qu'elle sera enregistrée ») et propose
+  « L'enregistrer au lundi 21 septembre (aujourd'hui) ›`, réversible
+  (`daterAujourdhui`, mémorisé avec la séance). Une séance à cheval sur
+  plusieurs jours le dit aussi (`joursTravailles`).
+- Le bandeau de RATTRAPAGE promettait « elle sera enregistrée aujourd'hui » : il
+  dit maintenant « au jour où tu la fais », sinon les deux bandeaux se
+  contredisaient.
+
+### Vérifié
+
+Tests : `backend/tests/test_date_seance.py` + `harnais/harnais_date_seance.mjs`
+(19 cas : le cas signalé, la séance travaillée le lendemain, les égalités, les
+replis, et des données abîmées — un jour mal formé, une série nulle, autre
+chose qu'une liste : la règle se rabat, elle ne plante jamais, leçon de l'audit
+du 06/09). **Chaque règle a été vue ÉCHOUER pour la bonne raison** : dater du
+jour de l'enregistrement casse le cas de Hafiz, départager à l'égalité vers le
+plus récent casse le cas d'égalité, prendre la date de début casse le cas
+« travaillée le lendemain ». Suite complète : **285 tests, tous OK.**
+
+Navigateur (backend LOCAL, compte de test local) : séance libre démarrée, 3
+séries saisies → la mémoire locale porte bien `dateDebut` et un `jour` par
+série ; la séance est ensuite remise dans l'état « faite le 20, laissée
+ouverte » et l'app relancée → elle rouvre la séance avec « Sera enregistrée au
+dimanche 20 septembre » ; « Terminer » → le serveur enregistre bien
+`date = 2026-09-20`, le ✅ du calendrier se pose sur le 20 et le 21 garde son
+simple « • » (prévu, pas fait). Chemin inverse : séance du 19 + « L'enregistrer
+au lundi 21 septembre » → enregistrée au 21. Aucune erreur console.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3030,7 +3104,7 @@ ou la version web en attendant.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (284 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (285 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
