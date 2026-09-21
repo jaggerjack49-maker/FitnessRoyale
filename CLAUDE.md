@@ -3092,6 +3092,73 @@ dimanche 20 septembre » ; « Terminer » → le serveur enregistre bien
 simple « • » (prévu, pas fait). Chemin inverse : séance du 19 + « L'enregistrer
 au lundi 21 septembre » → enregistrée au 21. Aucune erreur console.
 
+## Version web hébergée (Render Static Site) — 21/09/2026
+
+Demande de Hafiz : « comment je teste sur la version web avec mon téléphone ? ».
+Réponse immédiate donnée : `npx expo start --web --tunnel`, qui produit une
+adresse `https://….exp.direct` ouvrable depuis le navigateur du téléphone,
+depuis n'importe quel réseau. DEUX RAISONS de préférer le tunnel à l'IP du PC
+(`http://192.168.100.45:8081`) : aucune règle de pare-feu n'existe pour le port
+8081 (seul 8000 en a une), et surtout un navigateur REFUSE LA CAMÉRA sur une
+page `http://` — le compteur de pompes ne pourrait donc pas être essayé.
+Limite du tunnel : l'adresse change à chaque relance et le PC doit rester
+allumé. D'où l'hébergement ci-dessous, qui donne une adresse FIXE.
+
+### ⚠️ LE BUG QUE ÇA A RÉVÉLÉ : un site web EXPORTÉ n'a pas de `Constants.expoConfig`
+
+En préparant l'export, le site statique appelait `http://localhost:8000` au lieu
+du serveur Render — vérifié dans le panneau réseau, pas deviné.
+- CAUSE : sur le web, `expo-constants` lit le manifeste dans
+  `process.env.APP_MANIFEST` (`ExponentConstants.web.js`). Ça fonctionne avec
+  `expo start --web` (mode dev), mais dans un site produit par `expo export`,
+  `Constants.expoConfig` ne donne RIEN. `obtenirBaseUrl()` (`src/api.js`) lisait
+  donc `Constants.expoConfig?.extra?.apiUrl` en vain et tombait sur son dernier
+  repli, `localhost:8000` — qui, pour un téléphone, désigne le téléphone.
+- POURQUOI C'ÉTAIT INVISIBLE : le manifeste EST bien inliné dans le bundle
+  (on y lit `"extra":{"apiUrl":"https://fitnessroyale.onrender.com"}`), donc un
+  simple `grep` dans le fichier construit rassurait à tort. C'est la même
+  famille de piège que le cache Metro du 25/08 : ce que contient le bundle ne
+  dit pas ce que le code LIT à l'exécution.
+- CORRECTIF : `app.config.js` recopie l'adresse dans
+  `process.env.EXPO_PUBLIC_API_URL`, que Metro inline dans le code lui-même sur
+  TOUTES les plateformes, et `obtenirBaseUrl()` lit cette source EN PREMIER.
+  app.json (`expo.extra.apiUrl`) reste la SEULE valeur à modifier — mettre
+  `null` pour redévelopper contre le backend local fonctionne comme avant.
+  Vérifié dans le bundle reconstruit : l'adresse apparaît maintenant DANS le
+  code (`const e=u("https://fitnessroyale.onrender.com")`), et le site servi en
+  local atteint bien Render (`/sante` → `{"statut":"ok"}` en 313 ms, écran de
+  connexion affiché au lieu du mode hors-ligne).
+
+### Construire le site
+
+`npm run build:web` (= `expo export --platform web`) produit `dist/` :
+`index.html`, un bundle d'environ 1,1 Mo et les images (les 7 arènes, le fond de
+chargement). `dist/` est dans `.gitignore` — c'est l'hébergeur qui construit.
+`.node-version` fixe Node 22 pour que la construction soit reproductible.
+
+### Le service Render (à créer par Hafiz — accès au compte)
+
+Render → **New +** → **Static Site** → dépôt `jaggerjack49-maker/FitnessRoyale` :
+- Branch `master`, Root Directory **vide** (la racine, pas `backend`)
+- Build Command : `npm ci && npm run build:web`
+- Publish Directory : `dist`
+- Plan Free, puis Create Static Site.
+- Facultatif (Redirects/Rewrites) : Source `/*`, Destination `/index.html`,
+  Action **Rewrite** — utile seulement si une adresse autre que `/` est ouverte
+  un jour ; l'app n'a qu'une page aujourd'hui.
+
+DEUX CHOSES À SAVOIR :
+- un Static Site Render est du fichier statique : il ne dort JAMAIS (contrairement
+  au backend gratuit, qui garde son réveil d'environ 1 min à la première requête) ;
+- il se reconstruit à chaque `git push` sur `master`, comme le backend.
+
+### Ce que la version web ne fera jamais
+
+Les notifications locales (rappels d'entraînement et de suivi) sont des no-op
+sur web, et la carte est cachée — voir « Entraînement v2 ». Le compteur de
+pompes, lui, a besoin d'une page en `https://` pour obtenir la caméra : l'adresse
+Render en fournit une, contrairement à un test sur l'IP du PC en `http://`.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

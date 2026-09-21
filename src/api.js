@@ -58,6 +58,12 @@ function chaineValide(valeur) {
 
 function obtenirBaseUrl() {
   try {
+    // 1re source : l'adresse inlinée à la CONSTRUCTION par Metro (app.config.js
+    // la recopie depuis app.json). C'est la seule qui marche dans un site web
+    // EXPORTÉ, où Constants.expoConfig est vide — voir app.config.js.
+    const inlinee = chaineValide(process.env.EXPO_PUBLIC_API_URL);
+    if (inlinee) return inlinee;
+
     const surApp = chaineValide(Constants.expoConfig?.extra?.apiUrl);
     if (surApp) return surApp;
 
