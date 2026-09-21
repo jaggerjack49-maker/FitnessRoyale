@@ -3159,6 +3159,74 @@ sur web, et la carte est cachée — voir « Entraînement v2 ». Le compteur de
 pompes, lui, a besoin d'une page en `https://` pour obtenir la caméra : l'adresse
 Render en fournit une, contrairement à un test sur l'IP du PC en `http://`.
 
+## Compteur de pompes : des seuils réglés sur TON mouvement — 21/09/2026
+
+Deuxième retour de Hafiz sur le prototype : « le compteur de pompes ne
+fonctionne toujours pas » (après le premier, du 16/09 : « tout apparaissait mais
+le compteur ne marchait pas » — caméra, bras dessinés en or, angle affiché, et
+0 pompe).
+
+LA CAUSE, telle qu'elle était déjà soupçonnée le 16/09 : vu DE FACE, la
+perspective écrase l'angle du coude. Le mouvement réel peut n'osciller
+qu'entre ~120° et ~155°, sans jamais franchir les seuils FIXES écrits en dur
+(bras pliés ≤ 100°, bras tendus ≥ 150°). La phase ne basculait donc jamais et
+le compteur restait à zéro — sans que rien ne le signale.
+
+### La règle ne suppose plus rien sur les valeurs
+
+`src/logic/compteurPompes.js` — on n'impose plus d'angles : on OBSERVE les
+8 dernières secondes, on prend le minimum et le maximum, et on pose les deux
+seuils à l'intérieur de cette amplitude (30 % de chaque côté, le tiers du
+milieu restant zone neutre). Chaque personne, chaque position de téléphone,
+chaque angle de vue s'étalonne donc tout seul. Tant que le mouvement observé
+est trop faible pour être étalonné (< 25°), on garde les anciens seuils fixes :
+la toute première pompe d'une vue bien cadrée compte quand même.
+
+DEUX SIGNAUX, choisis automatiquement (les deux vont dans le même sens :
+GRAND = en haut) :
+1. l'ANGLE DU COUDE, dès que son amplitude atteint 25° ;
+2. sinon la DESCENTE — la hauteur épaule→poignet rapportée à la longueur du
+   bras (`descenteBras`) : ~1 bras tendus, ~0,09 poitrine au sol. Elle sert
+   quand l'angle ne bouge presque pas, cas extrême de la vue de face.
+Les quatre garde-fous d'origine (deux seuils distincts, 150 ms par phase,
+500 ms par pompe, passage obligé par le haut) sont inchangés.
+
+⚠️ LIMITE ASSUMÉE, écrite noir sur blanc dans un test : un balancement RÉGULIER
+de 30°, tenu plus longtemps que la fenêtre d'étalonnage, finit par être compté.
+Sans repère absolu, c'est indiscernable de pompes peu profondes — et le choix
+est délibéré : un compteur qui ne compte RIEN rend la fonctionnalité inutile,
+alors qu'un faux comptage demande de se balancer en rythme pendant des
+secondes devant la caméra.
+
+### L'écran de test dit maintenant ce qu'il fait
+
+`TestPompes.js` affiche « Amplitude vue » et « Étalonné : oui (angle) / pas
+encore », et la phrase d'aide porte les seuils RÉELLEMENT utilisés (« en bas
+sous 131°, en haut au-dessus de 145° ») au lieu des deux constantes. Si le
+compteur reste à zéro, on sait immédiatement POURQUOI — c'est ce qui manquait
+aux deux premiers allers-retours.
+
+### Vérifié
+
+Tests : `harnais/harnais_compteur_pompes.mjs` — 27 cas. Les nouveaux sont
+DOUBLÉS de leur version « anciens seuils fixes », qui doit donner 0 : la preuve
+que c'est bien l'étalonnage qui porte le résultat, pas un hasard de réglage
+(même méthode que les garde-fous du 15/09). Mouvement écrasé 120°-155° → 3
+pompes (0 avec les seuils fixes) ; 135°-165° → 2 ; mouvement ample → 3, comme
+avant ; angle figé + descente qui bouge → le signal « descente » prend le
+relais ; tremblement de 8° → 0 ; la fenêtre d'étalonnage reste bornée.
+Suite complète : **285 tests, tous OK.**
+
+DANS L'APP (navigateur, backend local) : l'écran de test a reçu un mouvement
+écrasé SIMULÉ (3 cycles entre 155° et 120°, envoyés image par image depuis la
+page de détection elle-même, donc par le vrai chemin des messages) → le
+compteur affiche **3 pompes**, « Amplitude vue : 35° · Étalonné : oui (angle) »
+et « Seuils réglés sur TON mouvement : en bas sous 131°, en haut au-dessus de
+145° ». Le même mouvement donnait 0 avant ce correctif.
+⚠️ TOUJOURS PAS VÉRIFIÉ SUR UNE VRAIE PERSONNE : le volet de vérification n'a
+pas de caméra. C'est à Hafiz de le confirmer — désormais sur le site web
+hébergé (https, donc caméra autorisée), sans attendre un APK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

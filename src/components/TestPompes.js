@@ -12,7 +12,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import CameraPompes from './CameraPompes';
 import {
-  REGLAGES_POMPES, angleCoudes, avancerCompteur, nouvelEtatCompteur,
+  REGLAGES_POMPES, avancerCompteur, mesureDepuisPoints, nouvelEtatCompteur,
 } from '../logic/compteurPompes';
 
 const DUREE_TEST_MS = 60 * 1000;
@@ -22,6 +22,13 @@ function messageErreur(m) {
   if (m.nom === 'NotFoundError' || m.nom === 'OverconstrainedError') return 'Aucune caméra avant trouvée sur cet appareil.';
   if (m.nom === 'NotSupportedError') return 'La caméra n\'est pas disponible ici.';
   return `La détection n'a pas pu démarrer : ${m.message || 'erreur inconnue'}`;
+}
+
+// Les deux signaux ne s'affichent pas pareil : l'angle en degrés, la descente
+// est un simple rapport (1 = bras tendu, 0 = poitrine au sol).
+function arrondi(valeur, signal) {
+  if (!Number.isFinite(valeur)) return '—';
+  return signal === 'descente' ? valeur.toFixed(2) : `${Math.round(valeur)}°`;
 }
 
 export default function TestPompes({ onFermer }) {
@@ -36,6 +43,12 @@ export default function TestPompes({ onFermer }) {
   // (bras tendus / bras pliés) sont atteints par son mouvement réel.
   const extremes = useRef({ min: null, max: null });
   const [extremesAffiches, setExtremesAffiches] = useState({ min: null, max: null });
+  // Ce que le compteur a DÉDUIT de ton mouvement (21/09/2026) : quel signal il
+  // utilise, sur quelle amplitude, et où il a posé ses deux seuils. Sans ça, un
+  // compteur qui reste à 0 ne dit pas POURQUOI.
+  const [etalonnage, setEtalonnage] = useState({
+    signal: 'angle', etalonne: false, seuilBas: null, seuilHaut: null, amplitude: null,
+  });
   const [reps, setReps] = useState(0);
   const [angle, setAngle] = useState(null);
   const [phase, setPhase] = useState('inconnue');
@@ -59,6 +72,7 @@ export default function TestPompes({ onFermer }) {
     setReps(0);
     extremes.current = { min: null, max: null };
     setExtremesAffiches({ min: null, max: null });
+    setEtalonnage({ signal: 'angle', etalonne: false, seuilBas: null, seuilHaut: null, amplitude: null });
   }
 
   function lancerTestMinute() {
@@ -75,8 +89,9 @@ export default function TestPompes({ onFermer }) {
     else if (m.type === 'pose') {
       // Test d'une minute terminé : le score est FIGÉ.
       if (finTest !== null && Date.now() >= finTest) return;
-      const a = angleCoudes(m.points, REGLAGES_POMPES);
-      const suivant = avancerCompteur(compteur.current, { angle: a, t: m.t }, REGLAGES_POMPES);
+      const mesure = mesureDepuisPoints(m.points, m.t, REGLAGES_POMPES);
+      const a = mesure.angle;
+      const suivant = avancerCompteur(compteur.current, mesure, REGLAGES_POMPES);
       compteur.current = suivant;
       if (a !== null) {
         const { min, max } = extremes.current;
@@ -92,6 +107,10 @@ export default function TestPompes({ onFermer }) {
         setAngle(a);
         setPhase(suivant.phase);
         setExtremesAffiches({ ...extremes.current });
+        setEtalonnage({
+          signal: suivant.signal, etalonne: suivant.etalonne,
+          seuilBas: suivant.seuilBas, seuilHaut: suivant.seuilHaut, amplitude: suivant.amplitude,
+        });
       }
     }
   }
@@ -132,8 +151,13 @@ export default function TestPompes({ onFermer }) {
         </Text>
       </View>
       <Text style={styles.aide}>
-        Bras tendus : au-dessus de {REGLAGES_POMPES.angleHaut}° · bras pliés : en dessous de{' '}
-        {REGLAGES_POMPES.angleBas}°. Une pompe compte quand tu remontes.
+        {etalonnage.etalonne
+          ? `Seuils réglés sur TON mouvement : en bas sous ${arrondi(etalonnage.seuilBas, etalonnage.signal)}, `
+            + `en haut au-dessus de ${arrondi(etalonnage.seuilHaut, etalonnage.signal)}`
+            + `${etalonnage.signal === 'descente' ? ' (mesure de descente : l\'angle bougeait trop peu)' : ''}. `
+            + 'Une pompe compte quand tu remontes.'
+          : `Les premières secondes servent à s'étalonner : bouge franchement. En attendant, `
+            + `bras tendus au-dessus de ${REGLAGES_POMPES.angleHaut}°, pliés sous ${REGLAGES_POMPES.angleBas}°.`}
       </Text>
       <View style={styles.carteExtremes}>
         <Text style={styles.titreExtremes}>Depuis la remise à zéro</Text>
@@ -142,10 +166,17 @@ export default function TestPompes({ onFermer }) {
           {'   ·   '}
           Plus grand : {extremesAffiches.max === null ? '—' : `${Math.round(extremesAffiches.max)}°`}
         </Text>
+        <Text style={styles.valeursExtremes}>
+          Amplitude vue : {etalonnage.amplitude === null ? '—' : arrondi(etalonnage.amplitude, etalonnage.signal)}
+          {'   ·   '}
+          Étalonné : {etalonnage.etalonne ? `oui (${etalonnage.signal})` : 'pas encore'}
+        </Text>
         <Text style={styles.aide}>
-          Remets à zéro, fais 5 pompes, puis lis ces deux nombres : le plus petit doit
-          passer sous {REGLAGES_POMPES.angleBas}°, le plus grand au-dessus de{' '}
-          {REGLAGES_POMPES.angleHaut}°.
+          Remets à zéro, fais 5 pompes, puis lis ces nombres. Le compteur n'a plus besoin
+          d'angles précis : il lui faut seulement une amplitude d'au moins{' '}
+          {REGLAGES_POMPES.amplitudeAngleMin}°. Si « Étalonné » reste à « pas encore »,
+          c'est que la caméra ne voit pas assez ton mouvement — recule-la ou tourne-toi
+          de trois quarts.
         </Text>
       </View>
 
