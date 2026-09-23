@@ -169,6 +169,20 @@ def _obtenir_reserve():
                     min_size=1,
                     max_size=4,
                     kwargs={"row_factory": dict_row},
+                    # ⚠️ LA CONNEXION GARDÉE EN RÉSERVE MEURT PENDANT LA NUIT
+                    # (bug du 23/09/2026, mesuré : après 7 minutes sans
+                    # requête, le PREMIER appel qui touche la base renvoyait
+                    # une erreur 500 en moins d'une seconde, et le suivant
+                    # passait). L'offre gratuite de Neon SUSPEND la base après
+                    # quelques minutes : elle ferme les connexions de son
+                    # côté, mais la réserve, elle, continuait de distribuer
+                    # ces connexions MORTES sans le savoir.
+                    # `check` vérifie chaque connexion (un simple SELECT 1)
+                    # avant de la prêter : si elle est morte, la réserve la
+                    # jette et en ouvre une neuve — ce qui réveille Neon au
+                    # passage. Le coût est un aller-retour par emprunt,
+                    # négligeable à côté d'un écran vide.
+                    check=ConnectionPool.check_connection,
                     open=False,
                 )
                 reserve.open()
@@ -207,6 +221,22 @@ def connexion():
         # sortant du bloc, puis rend la connexion à la réserve.
         with _obtenir_reserve().connection() as conn_brute:
             yield _ConnexionAdaptee(conn_brute, moteur)
+
+
+def base_repond() -> bool:
+    """La BASE répond-elle vraiment ? (21/09 → 23/09/2026)
+
+    `/sante` ne renvoyait qu'une constante : il prouvait que le serveur web
+    était debout, PAS que Postgres l'était. Or sur l'offre gratuite, Neon
+    SUSPEND sa base après quelques minutes sans requête, et la réveiller prend
+    plusieurs secondes — pendant lesquelles l'app, elle, coupait ses appels au
+    bout de 12 s et se croyait hors-ligne (voir CLAUDE.md, 23/09/2026).
+
+    La requête la plus simple qui soit : si elle passe, toute la chaîne
+    (serveur + réserve de connexions + base) est réveillée."""
+    with connexion() as conn:
+        conn.execute("SELECT 1").fetchone()
+    return True
 
 
 def _colonne_existe(conn, table: str, colonne: str) -> bool:

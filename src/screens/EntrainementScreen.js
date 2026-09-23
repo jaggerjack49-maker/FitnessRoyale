@@ -639,8 +639,14 @@ export default function EntrainementScreen({
     if (etatChargement !== 'echec' || !estConnecte || !actif) return undefined;
     const delais = [5000, 15000, 30000];
     const n = tentativesChargement.current;
-    const minuterie = setTimeout(() => {
+    const minuterie = setTimeout(async () => {
       tentativesChargement.current = n + 1;
+      // ON RÉVEILLE LA BASE AVANT DE RÉESSAYER (23/09/2026). Sur l'offre
+      // gratuite, la base Neon se met en veille et met plusieurs secondes à
+      // repartir : réessayer tout de suite, c'est enchaîner des appels qui
+      // expirent au bout de 12 s. Un seul appel patient suffit à la réveiller,
+      // et le rechargement qui suit passe du premier coup.
+      await api.reveillerServeur();
       chargerTout();
     }, delais[Math.min(n, delais.length - 1)]);
     return () => clearTimeout(minuterie);

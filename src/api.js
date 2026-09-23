@@ -188,12 +188,27 @@ function post(chemin, corps) {
 // « Réveil du serveur… » au lieu de laisser croire à une vraie panne.
 export async function verifierConnexion(onReveil) {
   try {
-    await get('/sante', DELAI_MAX_MS);
+    await get('/sante-base', DELAI_MAX_MS);
   } catch (erreur) {
     if (onReveil) onReveil();
-    await get('/sante', DELAI_REVEIL_MS);
+    await get('/sante-base', DELAI_REVEIL_MS);
   }
   return true;
+}
+
+// RÉVEILLER LA CHAÎNE COMPLÈTE, PATIEMMENT (23/09/2026).
+// `/sante-base` fait une vraie requête à la base : tant qu'il n'a pas répondu,
+// tout appel normal (12 s) risque d'expirer sur une base endormie. À appeler
+// avant de RÉESSAYER un chargement qui vient d'échouer, pour ne pas enchaîner
+// trois échecs de 12 s alors qu'il suffisait d'attendre le réveil.
+// Ne lève jamais : renvoie simplement si la chaîne répond ou non.
+export async function reveillerServeur() {
+  try {
+    await get('/sante-base', DELAI_REVEIL_MS);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ----- Authentification -----

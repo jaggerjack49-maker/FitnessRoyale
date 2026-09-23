@@ -511,7 +511,24 @@ def classement_salles():
 
 @app.get("/sante")
 def sante():
-    """Petit endpoint que l'app appelle pour savoir si le serveur répond."""
+    """Petit endpoint que l'app appelle pour savoir si le serveur répond.
+
+    ⚠️ Il ne touche PAS la base : il ne prouve donc RIEN sur Postgres.
+    Pour savoir si toute la chaîne est prête, voir /sante-base ci-dessous."""
+    return {"statut": "ok"}
+
+
+@app.get("/sante-base")
+def sante_base():
+    """Le serveur ET la base répondent-ils ? C'est ce que l'app vérifie au
+    démarrage (23/09/2026) : sur l'offre gratuite, la base Neon se met en
+    veille de son côté et son réveil prend plusieurs secondes de plus que
+    celui du serveur web. Vérifier /sante seul faisait croire que tout était
+    prêt, et l'appel suivant — le premier à toucher la base — expirait."""
+    try:
+        db.base_repond()
+    except Exception as erreur:  # noqa: BLE001 - on renvoie la panne telle quelle
+        raise HTTPException(503, f"La base de données ne répond pas : {erreur}")
     return {"statut": "ok"}
 
 
