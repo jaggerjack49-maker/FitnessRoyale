@@ -3443,7 +3443,10 @@ lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
   sans vidéo"), ce n'est pas encore un vrai compte "salle" affilié/vérifié par le Club SP. Reste
   aussi l'auto-application pour le joueur `affilieSalle` lui-même (voir "Comptes sécurisés")
 - Historique des duels en ligne dans l'app (actuellement, `DuelEnLigne` ne montre que le duel
-  en cours — le serveur garde tout via `GET /joueurs/{id}/duels`, non affiché pour l'instant)
+  en cours — le serveur garde tout via `GET /joueurs/{id}/duels`, non affiché pour l'instant).
+  ⚠️ `duels_du_joueur` (`basededonnees.py`) emprunte encore UNE CONNEXION PAR DUEL — le motif
+  qui a fait disparaître l'écran Entraînement le 23/09/2026. Sans conséquence tant que l'app
+  n'appelle pas cet endpoint, mais à regrouper AVANT d'afficher cet historique.
 - Vraies illustrations d'avatar (physique/équipement qui évolue) — actuellement juste
   couleur/anneau/emblème, voir "Avatar évolutif"
 - Persistance hors-ligne des PROGRAMMES (AsyncStorage) — un programme créé hors-ligne est encore
