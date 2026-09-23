@@ -3330,6 +3330,37 @@ Les 4,5 s sont le réveil de Neon plus l'ouverture d'une connexion neuve :
 largement sous le délai de 12 s de l'app, alors que l'erreur, elle, était
 immédiate et fatale.
 
+### L'écran dit enfin DE QUEL COMPTE il parle (23/09/2026)
+
+Le correctif de la connexion morte n'a pas suffi : Hafiz, après déploiement,
+« toujours pareil ». Troisième aller-retour sur le même symptôme sans jamais
+disposer du fait le plus élémentaire — **quel compte l'écran a-t-il chargé, et
+qu'a répondu le serveur ?** Trois causes très différentes donnent le même écran
+vide : un chargement raté, un AUTRE compte connecté, ou un serveur réellement
+vide.
+
+L'onglet Entraînement affiche donc, UNIQUEMENT quand il n'a rien à montrer
+(le seul cas où la question se pose) :
+- « ✅ Chargement réussi — mais le serveur n'a renvoyé AUCUNE séance ni
+  programme pour « <pseudo> » (compte n°<id>) », avec le rappel qu'on peut se
+  déconnecter si ce n'est pas le bon compte ;
+- en cas d'échec, le bandeau existant porte en plus le **détail de l'erreur** ;
+- hors-ligne, le message est devenu honnête : il disait « tes programmes et
+  séances restent sur ce téléphone », ce qui laissait croire que les données
+  étaient locales ; il dit maintenant que l'app affiche un profil de
+  **DÉMONSTRATION**, que ce ne sont PAS ses données, et que les vraies sont
+  intactes sur le serveur.
+
+Vérifié dans le navigateur (backend local) en rejouant les deux situations :
+connecté sur un compte VIDE (« The Jaggerjack », n°23, 0 programme 0 séance) →
+le bandeau nomme bien le compte ; serveur coupé → un seul message hors-ligne,
+celui qui dit la vérité (les deux étaient empilés au premier jet, fusionnés
+depuis).
+
+⚠️ CES BANDEAUX N'EXISTENT QUE DANS LA VERSION WEB tant que l'APK n'est pas
+refait (quota EAS jusqu'au 01/10/2026) : c'est donc sur le site hébergé qu'il
+faut regarder pour diagnostiquer.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

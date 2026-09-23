@@ -2341,7 +2341,7 @@ export default function EntrainementScreen({
       </Text>
       {!estConnecte && (
         <Text style={styles.indiceHorsLigne}>
-          📡 Mode hors-ligne : tes programmes et séances restent sur ce téléphone tant que tu n'es pas connecté.
+          📡 Hors-ligne : l'app n'a pas pu joindre le serveur, elle affiche un profil de DÉMONSTRATION — ce ne sont PAS tes données. Tes vraies séances et ton programme sont sur le serveur, intacts, et reviendront à la reconnexion.
         </Text>
       )}
       {/* L'état du chargement, dit EN HAUT (bug du 16/09/2026) : un écran vide
@@ -2353,6 +2353,9 @@ export default function EntrainementScreen({
               ? "⚠️ Tes séances et programmes n'ont pas pu être chargés — le serveur met parfois du temps à se réveiller. Ils ne sont PAS perdus : l'app réessaie toute seule."
               : '⏳ Chargement de tes séances et programmes…'}
           </Text>
+          {etatChargement === 'echec' && erreur ? (
+            <Text style={styles.detailBandeau}>Détail : {erreur}</Text>
+          ) : null}
           {etatChargement === 'echec' && (
             <TouchableOpacity onPress={() => { tentativesChargement.current = 0; chargerTout(); }}>
               <Text style={styles.lienReessayer}>↻ Réessayer maintenant</Text>
@@ -2360,6 +2363,28 @@ export default function EntrainementScreen({
           )}
         </View>
       )}
+
+      {/* ⚠️ DE QUEL COMPTE PARLE CET ÉCRAN ? (23/09/2026)
+          Troisième fois que « mes séances ont disparu » revient sans qu'on
+          puisse trancher entre trois causes très différentes : un chargement
+          raté, un autre compte, ou un serveur réellement vide. L'écran affiche
+          donc le fait brut dès qu'il n'a rien à montrer — le seul cas où la
+          question se pose. Un écran vide ne prouve rien, mais celui-ci dit
+          enfin POURQUOI il est vide. */}
+      {!donneesIncertaines && estConnecte
+        && programmes.length === 0 && cycles.length === 0 && entrainements.length === 0 && (
+        <View style={styles.bandeauCompte}>
+          <Text style={styles.texteBandeau}>
+            ✅ Chargement réussi — mais le serveur n'a renvoyé AUCUNE séance ni
+            programme pour « {moi.pseudo} » (compte n°{moi.id}).
+          </Text>
+          <Text style={styles.detailBandeau}>
+            Si ce n'est pas ton compte habituel, déconnecte-toi depuis le Profil
+            et reconnecte-toi avec le bon pseudo.
+          </Text>
+        </View>
+      )}
+
 
       {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
           (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
@@ -3510,6 +3535,16 @@ const styles = StyleSheet.create({
   bandeauEchec: { borderWidth: 1, borderColor: colors.rouge },
   texteBandeau: { color: colors.texte, fontSize: 13, lineHeight: 18 },
   lienReessayer: { color: colors.or, fontWeight: '800', marginTop: 6 },
+  // Bandeau « de quel compte parle cet écran » (23/09/2026).
+  bandeauCompte: {
+    backgroundColor: '#12161d',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    borderRadius: 8,
+    padding: espacement.s,
+    marginBottom: espacement.s,
+  },
+  detailBandeau: { color: colors.texteGris, fontSize: 12, marginTop: 4, lineHeight: 17 },
   indiceHorsLigne: {
     color: colors.texteGris, fontSize: 12, backgroundColor: colors.carteClaire,
     padding: espacement.s, borderRadius: 10, marginBottom: espacement.m,
