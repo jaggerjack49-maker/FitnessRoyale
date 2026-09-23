@@ -1276,35 +1276,58 @@ def ajouter_exercice_programme(programme_id: int, exercice: str, ordre: int,
         )
 
 
+def _marques(n: int) -> str:
+    """« ?, ?, ? » pour un IN (...) — `_traduire` les convertit pour Postgres."""
+    return ", ".join("?" * n)
+
+
+def _programmes_par_ids(conn, ids: list) -> dict:
+    """Plusieurs programmes d'un coup, en DEUX requêtes, sur une connexion déjà
+    ouverte (23/09/2026). Voir `entrainements_du_joueur` ci-dessous pour la
+    raison : un emprunt de connexion par programme coûtait un aller-retour
+    réseau chacun vers la base distante."""
+    if not ids:
+        return {}
+    programmes = {}
+    for ligne in conn.execute(
+        f"SELECT * FROM programmes WHERE id IN ({_marques(len(ids))})", tuple(ids)
+    ):
+        p = dict(ligne)
+        # Le JSON stocké redevient une vraie liste pour l'app (toujours une
+        # liste, jamais None — plus simple à afficher côté front).
+        p["jours"] = json.loads(p["jours"]) if p.get("jours") else []
+        p["exercices"] = []
+        programmes[p["id"]] = p
+    for ligne in conn.execute(
+        "SELECT programme_id, exercice, ordre, series_cibles, reps_cibles "
+        f"FROM programme_exercices WHERE programme_id IN ({_marques(len(ids))}) ORDER BY ordre",
+        tuple(ids),
+    ):
+        exercice = dict(ligne)
+        parent = programmes.get(exercice.pop("programme_id"))
+        if parent is not None:
+            parent["exercices"].append(exercice)
+    return programmes
+
+
 def lire_programme(programme_id: int) -> dict | None:
     """Un programme avec la liste ordonnée de ses exercices cibles."""
     with connexion() as conn:
-        ligne = conn.execute("SELECT * FROM programmes WHERE id = ?", (programme_id,)).fetchone()
-        if ligne is None:
-            return None
-        programme = dict(ligne)
-        # Le JSON stocké redevient une vraie liste pour l'app (toujours une
-        # liste, jamais None — plus simple à afficher côté front).
-        programme["jours"] = json.loads(programme["jours"]) if programme.get("jours") else []
-        programme["exercices"] = [
-            dict(r) for r in conn.execute(
-                "SELECT exercice, ordre, series_cibles, reps_cibles FROM programme_exercices "
-                "WHERE programme_id = ? ORDER BY ordre",
-                (programme_id,),
-            )
-        ]
-        return programme
+        return _programmes_par_ids(conn, [programme_id]).get(programme_id)
 
 
 def programmes_du_joueur(joueur_id: int) -> list:
-    """Les programmes du joueur, les plus récents d'abord."""
+    """Les programmes du joueur, les plus récents d'abord.
+
+    TROIS requêtes sur UNE connexion, quel que soit le nombre de programmes."""
     with connexion() as conn:
         ids = [
             r["id"] for r in conn.execute(
                 "SELECT id FROM programmes WHERE joueur_id = ? ORDER BY id DESC", (joueur_id,)
             )
         ]
-    return [lire_programme(pid) for pid in ids]
+        programmes = _programmes_par_ids(conn, ids)
+    return [programmes[pid] for pid in ids if pid in programmes]
 
 
 def supprimer_programme(programme_id: int) -> None:
@@ -1386,19 +1409,38 @@ def lire_cycle(cycle_id: int) -> dict | None:
                 (cycle_id,),
             )
         ]
-    seances = [lire_programme(pid) for pid in ids]
-    cycle["seances"] = [s for s in seances if s is not None]
+        # Les séances d'un coup, sur la MÊME connexion (23/09/2026) : une par
+        # une, chacune coûtait un aller-retour réseau vers la base distante.
+        programmes = _programmes_par_ids(conn, ids)
+    cycle["seances"] = [programmes[pid] for pid in ids if pid in programmes]
     return cycle
 
 
 def cycles_du_joueur(joueur_id: int) -> list:
+    """Les cycles du joueur avec leurs séances — QUATRE requêtes sur UNE
+    connexion, quel que soit le nombre de cycles et de séances (23/09/2026)."""
     with connexion() as conn:
-        ids = [
-            r["id"] for r in conn.execute(
-                "SELECT id FROM cycles WHERE joueur_id = ? ORDER BY id DESC", (joueur_id,)
-            )
-        ]
-    return [lire_cycle(cid) for cid in ids]
+        cycles = [dict(r) for r in conn.execute(
+            "SELECT * FROM cycles WHERE joueur_id = ? ORDER BY id DESC", (joueur_id,)
+        )]
+        if not cycles:
+            return []
+        ids = [c["id"] for c in cycles]
+        liens = []
+        for r in conn.execute(
+            "SELECT cycle_id, programme_id FROM cycle_programmes "
+            f"WHERE cycle_id IN ({_marques(len(ids))}) ORDER BY id",
+            tuple(ids),
+        ):
+            liens.append((r["cycle_id"], r["programme_id"]))
+        programmes = _programmes_par_ids(conn, [pid for _, pid in liens])
+        par_cycle = {}
+        for cycle_id, programme_id in liens:
+            if programme_id in programmes:
+                par_cycle.setdefault(cycle_id, []).append(programmes[programme_id])
+        for cycle in cycles:
+            cycle["seances"] = par_cycle.get(cycle["id"], [])
+    return cycles
 
 
 def supprimer_cycle(cycle_id: int, avec_seances: bool = True) -> None:
@@ -1644,15 +1686,40 @@ def lire_entrainement(entrainement_id: int) -> dict | None:
 
 
 def entrainements_du_joueur(joueur_id: int) -> list:
-    """Les séances loggées du joueur, les plus récentes d'abord."""
+    """Les séances loggées du joueur, les plus récentes d'abord.
+
+    ⚠️ C'ÉTAIT LE BUG DU 23/09/2026 (« je n'ai plus mes séances ni mon
+    programme »). Cette fonction demandait les identifiants, puis appelait
+    `lire_entrainement` pour CHACUN — donc un EMPRUNT DE CONNEXION PAR SÉANCE.
+    Sur SQLite c'est gratuit ; vers la base distante, chaque emprunt coûte un
+    aller-retour réseau. Le chargement grandissait donc avec le nombre de
+    séances, jusqu'à dépasser les 12 s de délai de l'app : l'écran se
+    retrouvait vide — d'autant plus vite que le joueur s'entraînait. Un compte
+    neuf, lui, ne voyait jamais le problème.
+    C'est EXACTEMENT le piège noté le 25/08/2026 (« LENTEUR POSTGRES : une
+    connexion par appel, ça ne pardonne pas à distance »), qui avait déjà coûté
+    `lire_tous_les_joueurs` — et la même recette le règle : un nombre FIXE de
+    requêtes, recollées en mémoire.
+    DEUX requêtes, une seule connexion, quel que soit le nombre de séances."""
     with connexion() as conn:
-        ids = [
-            r["id"] for r in conn.execute(
-                "SELECT id FROM entrainements WHERE joueur_id = ? ORDER BY date DESC, id DESC",
-                (joueur_id,),
-            )
-        ]
-    return [lire_entrainement(eid) for eid in ids]
+        seances = [dict(r) for r in conn.execute(
+            "SELECT * FROM entrainements WHERE joueur_id = ? ORDER BY date DESC, id DESC",
+            (joueur_id,),
+        )]
+        if not seances:
+            return []
+        ids = [s["id"] for s in seances]
+        par_seance = {}
+        for r in conn.execute(
+            "SELECT entrainement_id, exercice, numero_serie, reps, poids FROM series_journal "
+            f"WHERE entrainement_id IN ({_marques(len(ids))}) ORDER BY id",
+            tuple(ids),
+        ):
+            serie = dict(r)
+            par_seance.setdefault(serie.pop("entrainement_id"), []).append(serie)
+        for seance in seances:
+            seance["series"] = par_seance.get(seance["id"], [])
+    return seances
 
 
 def dernieres_series_pour_exercice(joueur_id: int, exercice: str, avant_date: str) -> dict | None:

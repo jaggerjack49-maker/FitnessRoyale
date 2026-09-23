@@ -3361,6 +3361,50 @@ depuis).
 refait (quota EAS jusqu'au 01/10/2026) : c'est donc sur le site hébergé qu'il
 faut regarder pour diagnostiquer.
 
+### LA VRAIE CAUSE : une connexion par séance (23/09/2026)
+
+« Toujours pareil » après le correctif de la connexion morte — puis, grâce au
+bandeau ci-dessus, le fait qui manquait depuis trois jours : **« n'ont pas pu
+être chargés »**. Donc pas un compte différent, pas un serveur vide : un
+chargement qui échoue.
+
+`entrainements_du_joueur` demandait la liste des identifiants, puis appelait
+`lire_entrainement` pour CHACUN — donc **un emprunt de connexion PAR SÉANCE**.
+Idem pour `programmes_du_joueur`, `cycles_du_joueur` et les séances d'un cycle.
+Sur SQLite c'est gratuit, ce qui l'a rendu invisible pendant des mois ; vers
+Neon, chaque emprunt coûte un aller-retour réseau — et depuis le correctif de
+la connexion morte, un aller-retour de vérification EN PLUS.
+
+MESURÉ par un test qui compte les emprunts : **41 connexions pour 40 séances**
+(contre 3 pour 2 séances). Ajoutons 13 emprunts pour les programmes, une
+douzaine pour les cycles, le tout en parallèle sur une réserve de 4
+connexions : le chargement dépassait les 12 s de délai de l'app. **Le bug
+grandissait donc avec l'assiduité** — un compte neuf ne le voyait jamais, et
+celui de Hafiz a fini par passer la limite.
+
+C'est MOT POUR MOT le piège documenté le 25/08/2026 (« LENTEUR POSTGRES : une
+connexion par appel, ça ne pardonne pas à distance »), qui s'achevait sur :
+« À surveiller pour toute nouvelle fonction qui boucle sur des joueurs en
+appelant une autre fonction de `basededonnees.py` ». La surveillance n'a pas eu
+lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
+
+- CORRECTIF : un nombre FIXE de requêtes, recollées en mémoire (même recette
+  que `lire_tous_les_joueurs`). `_programmes_par_ids(conn, ids)` charge
+  plusieurs programmes en 2 requêtes ; `entrainements_du_joueur` en fait 2 ;
+  `cycles_du_joueur` 4. **Une seule connexion chacun, quel que soit le volume.**
+- Tests : `backend/tests/test_cout_lectures.py` — 7 cas qui COMPTENT LES
+  EMPRUNTS (`CompteurConnexions` remplace `db.connexion` le temps d'un appel).
+  Le cœur : lire 2 séances et en lire 40 doit coûter PAREIL. Vu échouer avec
+  l'ancien code — « 3 pour 2, 41 pour 40 » — et les autres cas vérifient que le
+  lot ne perd rien (séries complètes, ordre des dates, exercices, jours).
+  Compter les connexions plutôt que chronométrer : une durée ne dirait rien en
+  SQLite local, alors que les allers-retours sont ce qui se paie à distance.
+  Suite complète : **296 tests, tous OK.**
+- ⚠️ RESTE UN N+1 du même genre, non corrigé : `duels_du_joueur`
+  (`basededonnees.py`). L'app ne l'appelle pas encore (l'historique des duels
+  n'est pas affiché, voir « À faire »), mais il faudra le traiter le jour où
+  cet écran existera.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3373,7 +3417,7 @@ faut regarder pour diagnostiquer.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (289 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (296 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
