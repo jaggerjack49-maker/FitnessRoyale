@@ -3227,6 +3227,109 @@ et « Seuils réglés sur TON mouvement : en bas sous 131°, en haut au-dessus d
 pas de caméra. C'est à Hafiz de le confirmer — désormais sur le site web
 hébergé (https, donc caméra autorisée), sans attendre un APK.
 
+## « Je n'ai plus mes séances » (2e fois) : la connexion gardée en réserve mourait — 23/09/2026
+
+Signalé par Hafiz : séance faite le 22/09 sur l'APK, séance faite le 21/09 sur
+le site web, et le 23/09 **plus aucune séance ni programme — sur l'APK ET sur
+le site web**. Le « sur les deux versions » est ce qui distingue ce bug de
+celui du 16/09 : un défaut d'un seul écran ne peut pas frapper deux
+applications construites à des dates différentes.
+
+### Ce qui a été vérifié AVANT de toucher au code
+
+- `GET /joueurs` : le compte **Jaggerjack (id 10) est intact, avec ses
+  15 perfs**, à côté des 5 joueurs de démo et de deux comptes plus récents.
+  La base n'a donc pas été effacée, et le serveur n'est pas retombé sur une
+  base SQLite éphémère (ce serait visible : seuls les joueurs de démo).
+- `git log -- backend/app` : **aucun changement de backend depuis le 18/09**.
+- Un seul chemin peut supprimer des `entrainements` : rien dans l'app ne le
+  propose. Une perte réelle était donc déjà très improbable.
+
+### LA MESURE QUI A TOUT EXPLIQUÉ
+
+En laissant le serveur tranquille **7 minutes**, puis en appelant :
+
+```
+/sante   (ne touche PAS la base) : 1,7 s  → HTTP 200
+/joueurs (PREMIÈRE requête base) : 0,9 s  → HTTP 500   ← le bug
+/joueurs (juste après)           : 2,1 s  → HTTP 200
+```
+
+**Le premier appel qui touche la base après quelques minutes d'inactivité
+échouait, systématiquement, et le suivant passait.** Ce n'est donc PAS une
+lenteur (la piste que je suivais : 12 s de délai contre un réveil de 30 s) —
+c'est une ERREUR IMMÉDIATE. Le correctif « attendre plus patiemment » que
+j'étais en train d'écrire n'aurait rien réglé : il faut mesurer avant de
+corriger, pas après.
+
+### La cause : une connexion morte, prêtée comme si de rien n'était
+
+La réserve de connexions Postgres (`psycopg_pool`, posée le 25/08 contre la
+lenteur, voir « LENTEUR POSTGRES ») garde une connexion ouverte en
+permanence (`min_size=1`). Or l'offre **gratuite de Neon SUSPEND la base**
+après quelques minutes sans requête : Neon ferme alors les connexions de son
+côté — mais la réserve, elle, n'en sait rien et continue de prêter une
+connexion **morte**. D'où le 500 sur le premier emprunt, puis une connexion
+neuve pour les suivants.
+
+CE QUE ÇA DONNAIT DANS L'APP, et pourquoi les deux versions étaient touchées :
+le premier appel de l'app après une nuit (`/auth/moi`, puis les chargements de
+l'Entraînement) tombait sur ce 500. L'app basculait en **mode hors-ligne** —
+donc sur le profil de démonstration, **sans programme ni séance** — ou
+affichait un onglet Entraînement vide. Identique, à l'écran, à une perte de
+données. C'est un bug **de serveur** : aucune version d'app n'y échappait.
+
+- CORRECTIF : `check=ConnectionPool.check_connection` sur la réserve
+  (`_obtenir_reserve`, `basededonnees.py`). La réserve teste chaque connexion
+  (un `SELECT 1`) **avant de la prêter** ; une connexion morte est jetée et
+  remplacée par une neuve, ce qui réveille Neon au passage. Coût : un
+  aller-retour par emprunt. VÉRIFIÉ DANS LE PAQUET INSTALLÉ (psycopg_pool
+  3.3.1) que `check_connection` existe bien, et pas seulement dans la doc.
+- ⚠️ BONNE NOUVELLE POUR L'APK : c'est un correctif **côté serveur**. Il vaut
+  donc immédiatement pour l'APK du 15/09 comme pour le site web — aucun build
+  nécessaire (impossible avant le 01/10, quota EAS).
+
+### Deux défauts secondaires corrigés au passage
+
+1. **`/sante` ne prouvait rien sur la base** : il renvoie une constante. L'app
+   l'appelait pour dire « le serveur répond », puis enchaînait sur le premier
+   appel qui touche la base. Nouvel endpoint **`/sante-base`**, qui fait une
+   VRAIE requête (`db.base_repond()`) et répond 503 si la base est muette ;
+   `verifierConnexion()` (`src/api.js`) l'utilise désormais — la vérification
+   de connexion porte enfin sur toute la chaîne.
+2. **L'Entraînement réessayait trop vite** : après un échec, ses nouveaux
+   essais (5 s, 15 s, 30 s) repartaient sans s'assurer que la base était
+   réveillée. Il appelle maintenant `api.reveillerServeur()` (un
+   `/sante-base` patient, 55 s) avant chaque réessai.
+
+### Ce que ça change pour les séances faites entre-temps
+
+Une séance terminée pendant la panne n'est PAS perdue : elle part d'abord dans
+la file d'attente locale du téléphone ou du navigateur (voir « Entraînement
+v5 »), et n'en sort qu'une fois le serveur confirmé. Elle repart donc toute
+seule au premier chargement réussi — à condition de ne pas désinstaller l'app
+ni effacer les données du navigateur.
+
+### Vérifié
+
+Tests : `backend/tests/test_api_sante.py` — 4 cas, dont
+`test_sante_base_interroge_VRAIMENT_la_base` (si la base est muette,
+`/sante-base` répond 503 pendant que `/sante` continue de dire « ok ») :
+il empêche `/sante-base` de redevenir une constante. Suite : **289 tests, OK.**
+Le chemin SQLite est inchangé — la réserve n'existe que pour Postgres.
+EN CONDITIONS RÉELLES, le scénario exact a été REJOUÉ après déploiement —
+8 minutes de silence, puis premier appel à la base :
+
+```
+AVANT : /joueurs (1re requête après la veille) : 0,9 s → HTTP 500
+APRÈS : /joueurs (1re requête après la veille) : 4,5 s → HTTP 200
+        /joueurs (juste après)                 : 1,8 s → HTTP 200
+```
+
+Les 4,5 s sont le réveil de Neon plus l'ouverture d'une connexion neuve :
+largement sous le délai de 12 s de l'app, alors que l'erreur, elle, était
+immédiate et fatale.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3239,7 +3342,7 @@ hébergé (https, donc caméra autorisée), sans attendre un APK.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (285 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (289 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
