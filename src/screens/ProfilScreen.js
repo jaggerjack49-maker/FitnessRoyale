@@ -13,6 +13,8 @@ import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
 } from 'react-native';
 import { colors, espacement } from '../theme';
+import { lundiDeLaSemaine } from '../data/groupesMusculaires';
+import { enISO } from '../logic/rattrapage';
 import { da, monospace } from '../designSystem';
 import { ligueJoueur, palierExercice, categoriePoids, classer, classerParCategories } from '../logic/classement';
 import { couleursLigues, nomsLigues, baremes } from '../data/clubSP';
@@ -81,8 +83,18 @@ export default function ProfilScreen({
 
   // Stats de la semaine, calculées depuis les séances enregistrées dans
   // l'onglet Entraînement (il n'y a plus de saisie manuelle ici).
-  const nbSeances = seances.length;
-  const minutesSemaine = seances.reduce((total, minutes) => total + minutes, 0);
+  // LA SEMAINE EN COURS, pas « tout depuis le lancement de l'app » (24/09/2026).
+  // `seances` vient maintenant du serveur sous la forme [{ date, minutes }, …] :
+  // avant, c'était un tableau de minutes sans dates, remis à zéro à chaque
+  // connexion — le compteur ne comptait donc à peu près rien.
+  const debutSemaine = enISO(lundiDeLaSemaine());
+  const seancesSemaine = (Array.isArray(seances) ? seances : []).filter(
+    (s) => s && typeof s.date === 'string' && s.date >= debutSemaine
+  );
+  const nbSeances = seancesSemaine.length;
+  const minutesSemaine = seancesSemaine.reduce(
+    (total, s) => total + (Number(s.minutes) || 0), 0
+  );
   const caloriesEstimees = minutesSemaine * 8; // ~8 kcal/min de musculation
 
   const ligue = ligueJoueur(u);

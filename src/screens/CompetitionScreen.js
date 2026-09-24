@@ -62,7 +62,13 @@ function LigneJoueurExercice({ joueur, index, unite }) {
 }
 
 // Carte d'un défi récurrent (journalier / hebdomadaire).
-function CarteDefiRecurrent({ defi, fait, onValider }) {
+// UN DÉFI TEL QUE LE SERVEUR LE VOIT (24/09/2026).
+// `fait` = déjà validé (la récompense est donnée) ; `reussi` = les conditions
+// sont remplies. Plus aucun bouton « Valider » quand on est connecté : l'app
+// valide toute seule dès que c'est gagné (demande de Hafiz).
+// `onValider` ne sert plus qu'au mode HORS-LIGNE, où il n'y a pas de serveur
+// pour vérifier quoi que ce soit — la simulation d'origine y reste.
+function CarteDefiRecurrent({ defi, fait, reussi, automatique, onValider }) {
   return (
     <View style={[styles.carteRecurrent, fait && styles.carteRecurrentFait]}>
       <View style={{ flex: 1 }}>
@@ -73,10 +79,17 @@ function CarteDefiRecurrent({ defi, fait, onValider }) {
         <Text style={styles.recurrentRecompense}>
           +{defi.points} pts{defi.titreRecompense ? ` • Titre : « ${defi.titreRecompense} »` : ''}
         </Text>
+        {automatique && !fait && (
+          <Text style={styles.recurrentEtat}>
+            {reussi
+              ? '✔️ Réussi — la récompense arrive…'
+              : '⏳ Pas encore : il se validera tout seul dès que ce sera fait.'}
+          </Text>
+        )}
       </View>
       {fait ? (
         <Text style={styles.recurrentFaitTexte}>✅ Fait</Text>
-      ) : (
+      ) : automatique ? null : (
         <TouchableOpacity style={styles.boutonValider} onPress={onValider}>
           <Text style={styles.boutonValiderTexte}>Valider</Text>
         </TouchableOpacity>
@@ -88,7 +101,24 @@ function CarteDefiRecurrent({ defi, fait, onValider }) {
 export default function CompetitionScreen({
   joueurs, moi, duels, jouerDepartage, terminerDuelDirect, defisRecurrents, defisFaits, validerDefi,
   estConnecte, rafraichirMonProfil, demandeDuel, actif = true,
+  etatDefis = null, verifierDefis,
 }) {
+  // On regarde les défis en arrivant sur l'onglet : si une séance a été faite
+  // entre-temps, la récompense est donnée sans que rien ne soit à toucher.
+  useEffect(() => {
+    if (actif && estConnecte && verifierDefis) verifierDefis();
+  }, [actif, estConnecte]);
+
+  // L'état du serveur prime ; hors-ligne, on retombe sur la simulation locale.
+  const defisAffiches = etatDefis
+    ? etatDefis.map((d) => ({
+        id: d.id, titre: d.titre, description: d.description, points: d.points,
+        titreRecompense: d.titre_recompense,
+        fait: d.deja_valide, reussi: d.reussi, automatique: true,
+      }))
+    : defisRecurrents.map((d) => ({
+        ...d, fait: !!defisFaits[d.id], reussi: false, automatique: false,
+      }));
   const [onglet, setOnglet] = useState('classement'); // 'classement' ou 'defis'
   const [mode, setMode] = useState('global'); // 'global' | 'relatif' | 'exercice' | 'salles'
   const [exerciceChoisi, setExerciceChoisi] = useState(listeExercicesClassement[0]);
@@ -269,11 +299,13 @@ export default function CompetitionScreen({
                 Prototype du duel de pompes : la caméra compte tes pompes, face au téléphone.
               </Text>
             </TouchableOpacity>
-            {defisRecurrents.map((defi) => (
+            {defisAffiches.map((defi) => (
               <CarteDefiRecurrent
                 key={defi.id}
                 defi={defi}
-                fait={!!defisFaits[defi.id]}
+                fait={defi.fait}
+                reussi={defi.reussi}
+                automatique={defi.automatique}
                 onValider={() => validerDefi(defi)}
               />
             ))}
@@ -440,6 +472,7 @@ const styles = StyleSheet.create({
   recurrentTitre: { color: colors.texte, fontWeight: '800', fontSize: 15 },
   recurrentDescription: { color: colors.texteGris, fontSize: 13, marginTop: 2 },
   recurrentRecompense: { color: colors.or, fontSize: 12, fontWeight: '700', marginTop: 4 },
+  recurrentEtat: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
   recurrentFaitTexte: { color: colors.vert, fontWeight: '800', marginLeft: 8 },
   boutonValider: {
     backgroundColor: colors.accent,

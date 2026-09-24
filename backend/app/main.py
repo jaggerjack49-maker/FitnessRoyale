@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from . import auth
 from . import basededonnees as db
 from . import defis as regles_defis
+from . import seances as regles_seances
 from . import duels as regles_duels
 from . import videos as regles_videos
 from . import xp as regles_xp
@@ -1475,6 +1476,14 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
     )
     for serie in entrainement.series:
         db.ajouter_serie(entrainement_id, serie.exercice, serie.numero_serie, serie.reps, serie.poids)
+    # LA SÉANCE DU JOUR EST ENREGISTRÉE ICI (24/09/2026), plus seulement dans
+    # l'app. Sans ça, le compteur « Cette semaine » du Profil repartait à zéro à
+    # chaque connexion (il ne vivait que dans l'état React) et les défis, qui se
+    # basent sur les séances du serveur, n'étaient JAMAIS réussis — le joueur
+    # devait les valider à la main alors qu'il s'était bien entraîné.
+    db.enregistrer_seance_du_jour(
+        joueur_id, jour, regles_seances.duree_estimee(len(entrainement.series))
+    )
     return db.lire_entrainement(entrainement_id)
 
 

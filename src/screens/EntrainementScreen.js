@@ -1763,11 +1763,6 @@ export default function EntrainementScreen({
     await stockageSeance.effacerSeanceEnCours();
     setNbEnAttente((n) => n + 1);
 
-    // Lie la séance loggée au compteur hebdo du Profil (estimation simple :
-    // ~3 min par série, 20 min minimum).
-    const dureeEstimee = Math.max(20, toutesLesSeries.length * 3);
-    ajouterSeanceLocale?.(dureeEstimee);
-
     if (estConnecte) {
       try {
         const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
@@ -1784,6 +1779,17 @@ export default function EntrainementScreen({
         );
       }
     }
+    // LE COMPTEUR DE SÉANCES DU PROFIL — APRÈS L'ENVOI, PAS AVANT (24/09/2026).
+    // C'est le SERVEUR qui enregistre la séance du jour en recevant
+    // l'entraînement (voir backend/app/main.py) ; cet appel affiche la durée
+    // tout de suite, puis relit la vérité du serveur et regarde les défis.
+    // Appelé AVANT l'envoi, il relisait des séances que le serveur ne
+    // connaissait pas encore : le compteur restait figé sur la valeur d'avant.
+    // ⚠️ LE JOUR COMPTE : une séance faite hier et enregistrée aujourd'hui
+    // alimente le compteur d'HIER (même règle que src/logic/dateSeance.js).
+    const dureeEstimee = Math.max(20, toutesLesSeries.length * 3);
+    await ajouterSeanceLocale?.(dureeEstimee, jour);
+
     // Le volume de la semaine vient de changer : on remet à jour le message du
     // rappel de suivi (sinon il annoncerait des chiffres périmés).
     rafraichirRappelSuivi([local, ...entrainements]);

@@ -25,6 +25,7 @@ import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
 import useRetour from './src/useRetour';
 import { decisionRetour, DELAI_DOUBLE_RETOUR_MS } from './src/logic/retour';
+import { enISO } from './src/logic/rattrapage';
 import ConnexionScreen from './src/screens/ConnexionScreen';
 import ProfilScreen from './src/screens/ProfilScreen';
 import CompetitionScreen from './src/screens/CompetitionScreen';
@@ -62,6 +63,17 @@ const ONGLETS = [
 // Point d'entrée réel : enveloppe AppInterne dans un filet de sécurité
 // (voir src/components/LimiteErreur.js) pour afficher un diagnostic clair
 // en cas de plantage au rendu, au lieu de l'écran générique d'Expo Go.
+// Les séances de DÉMONSTRATION (mode hors-ligne). mockData ne donne que des
+// durées ; on les date sur les derniers jours pour que le compteur « Cette
+// semaine » du Profil montre quelque chose de cohérent sans compte connecté.
+function seancesDeDemonstration() {
+  return (utilisateur.seances || []).map((minutes, index) => {
+    const jour = new Date();
+    jour.setDate(jour.getDate() - index);
+    return { date: enISO(jour), minutes };
+  });
+}
+
 export default function App() {
   return (
     <LimiteErreur>
@@ -144,11 +156,20 @@ function AppInterne() {
     if (options && options.duel) setDemandeDuel((n) => n + 1);
   }
   const [mesPerfs, setMesPerfs] = useState(utilisateur.performances);
-  const [mesSeances, setMesSeances] = useState(utilisateur.seances);
+  // LES SÉANCES VIENNENT DU SERVEUR (24/09/2026) : [{ date, minutes }, …].
+  // Avant, c'était un simple tableau de MINUTES vivant dans cet état — remis à
+  // zéro à chaque connexion et jamais envoyé au serveur. Le compteur « Cette
+  // semaine » du Profil repartait donc de zéro à chaque lancement, et les défis
+  // (qui, eux, lisent les séances du serveur) n'étaient jamais réussis.
+  // Hors-ligne, on garde les séances faites sur ce téléphone en attendant.
+  const [mesSeances, setMesSeances] = useState(seancesDeDemonstration);
   const [maSalle, setMaSalle] = useState(utilisateur.salle);
   const [mesPoints, setMesPoints] = useState(utilisateur.points);
   const [mesTitres, setMesTitres] = useState(utilisateur.titres);
-  const [defisFaits, setDefisFaits] = useState({}); // { jour: true, semaine: true }
+  const [defisFaits, setDefisFaits] = useState({}); // simulation LOCALE (hors-ligne uniquement)
+  // L'état RÉEL des défis, tel que le serveur le calcule depuis les séances.
+  // null tant qu'on ne l'a pas lu (hors-ligne, il reste null).
+  const [etatDefis, setEtatDefis] = useState(null);
   const [mesDuels, setMesDuels] = useState(duels);
 
   // ----- Comptes & branchement backend -----
@@ -197,6 +218,8 @@ function AppInterne() {
     setDefisFaits({});
     setMesSeances([]);
     setEnLigne(true);
+    chargerSeances(joueur.id);
+    verifierDefis(joueur.id);
   }
 
   // Au démarrage : on regarde si le serveur répond, puis si on a une session
@@ -285,11 +308,50 @@ function AppInterne() {
     setMoiServeur(null);
   }
 
-  // Ajoute une durée (minutes) au compteur hebdo du Profil — utilisé quand une
-  // séance est loggée depuis l'onglet Entraînement (voir EntrainementScreen.js).
-  // Reste LOCAL comme le reste de mesSeances, pas encore envoyé au serveur.
-  function ajouterSeanceLocale(minutes) {
-    setMesSeances((s) => [...s, minutes]);
+  // Les séances telles que le SERVEUR les connaît (source de vérité).
+  async function chargerSeances(joueurId) {
+    try {
+      setMesSeances(await api.seancesDuJoueur(joueurId));
+    } catch {
+      // Coupure : on garde ce qu'on a à l'écran plutôt que de tout effacer.
+    }
+  }
+
+  // Appelée quand une séance vient d'être loggée depuis l'onglet Entraînement.
+  // ⚠️ C'EST LE SERVEUR QUI ENREGISTRE LA SÉANCE, au moment où il reçoit
+  // l'entraînement (voir backend/app/main.py) : ici on ne fait qu'afficher le
+  // résultat tout de suite, puis on relit la vérité du serveur. Envoyer la
+  // séance une deuxième fois depuis l'app la compterait en double.
+  async function ajouterSeanceLocale(minutes, jour) {
+    const date = jour || enISO(new Date());
+    setMesSeances((s) => [{ date, minutes }, ...s.filter((x) => x.date !== date)]);
+    if (!moiServeur) return;
+    await chargerSeances(moiServeur.id);
+    await verifierDefis(moiServeur.id);
+  }
+
+  // LES DÉFIS SE VALIDENT TOUT SEULS (demande de Hafiz du 24/09/2026).
+  // Le serveur dit lesquels sont RÉUSSIS (d'après les vraies séances) et
+  // lesquels sont DÉJÀ VALIDÉS ; l'app valide simplement ceux qui attendent.
+  // Il n'y a donc plus rien à toucher pour toucher sa récompense.
+  async function verifierDefis(joueurId) {
+    const id = joueurId || (moiServeur && moiServeur.id);
+    if (!id) return;
+    try {
+      let etats = await api.etatDesDefis(id);
+      const aValider = etats.filter((d) => d.reussi && !d.deja_valide);
+      if (aValider.length > 0) {
+        for (const defi of aValider) {
+          // 409 = déjà validé entre-temps (deux appareils) : sans gravité.
+          await api.validerDefiServeur(id, defi.id).catch(() => null);
+        }
+        etats = await api.etatDesDefis(id).catch(() => etats);
+        await rafraichirMonProfil(); // points et titres gagnés
+      }
+      setEtatDefis(etats);
+    } catch {
+      // Hors-ligne : on garde l'état précédent, les défis se reverront plus tard.
+    }
   }
 
   // Recharge mes points/titres depuis le serveur (ex. après un duel en ligne
@@ -458,6 +520,8 @@ function AppInterne() {
             defisRecurrents={[defiJournalier, defiHebdo]}
             defisFaits={defisFaits}
             validerDefi={validerDefi}
+            etatDefis={etatDefis}
+            verifierDefis={verifierDefis}
             estConnecte={!!moiServeur}
             rafraichirMonProfil={rafraichirMonProfil}
             demandeDuel={demandeDuel}

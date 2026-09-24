@@ -1110,6 +1110,33 @@ def ajouter_seance(joueur_id: int, date: str, minutes: int) -> int:
         return curseur.lastrowid
 
 
+def enregistrer_seance_du_jour(joueur_id: int, date: str, minutes: int) -> None:
+    """UNE séance par JOUR (24/09/2026) : si le joueur s'entraîne deux fois le
+    même jour, on ajoute les minutes à la séance existante au lieu d'en créer
+    une seconde.
+
+    POURQUOI : le défi de la semaine demande « 4 séances » — si deux
+    entraînements du même jour comptaient double, on validerait le défi sans
+    avoir mis les pieds à la salle quatre fois. Une séance = une JOURNÉE
+    d'entraînement, ce qui est aussi ce que compte déjà l'XP (dates distinctes,
+    voir `xp.py`)."""
+    with connexion() as conn:
+        ligne = conn.execute(
+            "SELECT id, minutes FROM seances WHERE joueur_id = ? AND date = ?",
+            (joueur_id, date),
+        ).fetchone()
+        if ligne is None:
+            conn.execute(
+                "INSERT INTO seances (joueur_id, date, minutes) VALUES (?, ?, ?)",
+                (joueur_id, date, minutes),
+            )
+        else:
+            conn.execute(
+                "UPDATE seances SET minutes = ? WHERE id = ?",
+                (ligne["minutes"] + minutes, ligne["id"]),
+            )
+
+
 def seances_du_joueur(joueur_id: int) -> list:
     """Toutes les séances du joueur : [{date, minutes}, ...] (récentes d'abord)."""
     with connexion() as conn:
