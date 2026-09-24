@@ -355,6 +355,25 @@ export async function seancesDuJoueur(joueurId) {
   return get(`/joueurs/${joueurId}/seances`);
 }
 
+// ----- Axes de surcharge progressive, par exercice (24/09/2026) -----
+// { "développé couché": ["reps", "poids"], … } — un exercice absent suit le
+// réglage par défaut (double progression). La SUGGESTION est calculée dans
+// l'app (src/logic/surchargeProgressive.js) : le serveur ne garde que le choix.
+export async function progressionsExercices(joueurId) {
+  return get(`/joueurs/${joueurId}/progressions-exercices`);
+}
+
+export async function definirProgressionExercice(joueurId, exercice, modes) {
+  return appel(`/joueurs/${joueurId}/progressions-exercices/${encodeURIComponent(exercice)}`, {
+    method: 'PUT', body: JSON.stringify({ modes }),
+  });
+}
+
+// Ajoute une séance (un jour) à un programme DÉJÀ créé.
+export async function ajouterSeanceAuCycle(cycleId, seance) {
+  return post(`/cycles/${cycleId}/seances`, seance);
+}
+
 // ----- Défis récurrents -----
 export async function etatDesDefis(joueurId) {
   return get(`/joueurs/${joueurId}/defis`);

@@ -733,6 +733,44 @@ def seances_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_c
 
 # ----- Défis récurrents (journalier / hebdomadaire) -----
 
+# ----- Type de surcharge progressive, exercice par exercice (24/09/2026) -----
+# Demande de Hafiz : « les perfs attendues à la prochaine séance devront être
+# cohérentes avec le type de progressive overload qu'on a choisi pour les
+# exercices : les séries, les reps ou le poids. On peut choisir un ou un
+# mélange des 3. » La SUGGESTION elle-même est calculée côté app
+# (src/logic/surchargeProgressive.js, elle marche hors-ligne) ; le serveur ne
+# garde que le choix.
+
+AXES_PROGRESSION = ["series", "reps", "poids"]
+
+
+class ProgressionExercice(BaseModel):
+    modes: list[str]
+
+
+@app.get("/joueurs/{joueur_id}/progressions-exercices")
+def progressions_exercices(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes axes de progression par exercice. Un exercice absent = réglage par défaut."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    return db.progressions_exercices(joueur_id)
+
+
+@app.put("/joueurs/{joueur_id}/progressions-exercices/{exercice}")
+def definir_progression_exercice(joueur_id: int, exercice: str, choix: ProgressionExercice,
+                                 courant: dict = Depends(auth.utilisateur_courant)):
+    auth.verifier_proprietaire(courant, joueur_id)
+    inconnus = [m for m in choix.modes if m not in AXES_PROGRESSION]
+    if inconnus:
+        raise HTTPException(
+            400, f"Axe de progression inconnu : {inconnus[0]}. "
+                 f"Utilise {', '.join(AXES_PROGRESSION)}."
+        )
+    # On enlève les doublons en gardant l'ordre de référence (series, reps, poids).
+    modes = [m for m in AXES_PROGRESSION if m in choix.modes]
+    db.definir_progression_exercice(joueur_id, exercice, modes)
+    return {"exercice": exercice, "modes": modes}
+
+
 @app.get("/joueurs/{joueur_id}/defis")
 def etat_des_defis(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
     """L'état des 2 défis : réussi ? déjà validé aujourd'hui / cette semaine ?"""
@@ -1163,7 +1201,7 @@ def renommer_exercice(joueur_id: int, ancien: str, donnees: RenommageExercice,
     if not nouveau:
         raise HTTPException(400, "Le nouveau nom ne peut pas être vide.")
     if nouveau == ancien:
-        return {"programmes": 0, "series": 0, "groupes": 0}
+        return {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
     return db.renommer_exercice_partout(joueur_id, ancien, nouveau)
 
 
@@ -1369,6 +1407,38 @@ def cycles_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_co
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.cycles_du_joueur(joueur_id)
+
+
+@app.post("/cycles/{cycle_id}/seances", status_code=201)
+def ajouter_seance_au_cycle(cycle_id: int, seance: SeanceCycle,
+                            courant: dict = Depends(auth.utilisateur_courant)):
+    """Ajoute une séance (un jour) à un programme DÉJÀ créé (24/09/2026).
+
+    Demande de Hafiz : « ajoute la possibilité d'ajouter une séance à un
+    programme ». Jusqu'ici un cycle était figé à sa création — ajouter un jour
+    obligeait à tout supprimer et tout refaire.
+
+    La séance reste un `programme` ordinaire portant ses jours, comme toutes
+    les autres (aucune nouvelle table, voir « UN PROGRAMME = UN CYCLE COMPLET
+    SUR LA SEMAINE ») : elle est donc éditable, plaçable au calendrier et
+    démarrable comme les séances créées avec le cycle."""
+    cycle = db.lire_cycle(cycle_id)
+    if cycle is None:
+        raise HTTPException(404, "Programme introuvable.")
+    auth.verifier_proprietaire(courant, cycle["joueur_id"])
+    jours_invalides = [j for j in seance.jours if j not in JOURS_SEMAINE]
+    if jours_invalides:
+        raise HTTPException(400, f"Jour(s) inconnu(s) : {', '.join(jours_invalides)}.")
+    programme_id = db.creer_programme(
+        cycle["joueur_id"], seance.nom,
+        datetime.now().isoformat(timespec="milliseconds"), seance.jours,
+    )
+    for ordre, exo in enumerate(seance.exercices, start=1):
+        db.ajouter_exercice_programme(
+            programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles
+        )
+    db.rattacher_programme_au_cycle(cycle_id, programme_id)
+    return db.lire_cycle(cycle_id)
 
 
 @app.delete("/cycles/{cycle_id}")

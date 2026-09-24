@@ -45,7 +45,37 @@ function incrementCharge(poids) {
 // tant que l'objectif de reps n'est pas atteint, on ajoute une rep ;
 // une fois atteint, on monte la charge et on repart à l'objectif de reps.
 // Renvoie null si l'exercice n'a jamais été fait (rien à quoi se comparer).
-export function suggererProchaineSerie(entrainements, exercice, repsCibles, avantDate = null) {
+// LES AXES DE PROGRESSION (24/09/2026).
+// Demande de Hafiz : « les perfs attendues à la prochaine séance devront être
+// cohérentes avec le type de progressive overload qu'on a choisi pour les
+// exercices : les séries, les reps ou le poids. On peut choisir un ou un
+// mélange des 3. »
+//
+// Par défaut on garde la DOUBLE PROGRESSION d'origine (reps puis poids) :
+// c'est ce que faisait l'app depuis le 12/08/2026, et un exercice sans réglage
+// ne doit pas changer de comportement du jour au lendemain.
+export const AXES_PROGRESSION = ['series', 'reps', 'poids'];
+export const AXES_PAR_DEFAUT = ['reps', 'poids'];
+
+// UN SEUL AXE AVANCE À LA FOIS, dans cet ordre : séries → reps → poids.
+// Pourquoi cet ordre : ajouter une série puis des reps se fait à charge égale
+// (le corps encaisse le volume avant l'intensité) ; on ne monte la charge que
+// lorsque les objectifs du programme sont tenus. C'est la « triple
+// progression » classique, dont la double progression n'est qu'un cas
+// particulier — d'où un seul chemin de code pour les deux.
+function axesValides(modes) {
+  if (!Array.isArray(modes)) return AXES_PAR_DEFAUT;
+  const gardes = AXES_PROGRESSION.filter((axe) => modes.includes(axe));
+  return gardes.length > 0 ? gardes : AXES_PAR_DEFAUT;
+}
+
+export function suggererProchaineSerie(entrainements, exercice, repsCibles, options = {}) {
+  // Rétrocompatibilité : le 4e paramètre était autrefois `avantDate`.
+  const reglages = typeof options === 'string' || options === null
+    ? { avantDate: options } : (options || {});
+  const { avantDate = null, modes, seriesCibles = null } = reglages;
+  const axes = axesValides(modes);
+
   const precedentes = seancesAvec(entrainements, exercice, avantDate);
   if (precedentes.length === 0) return null;
   const seriesExercice = precedentes[0].series.filter((s) => s.exercice === exercice);
@@ -53,23 +83,60 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, avan
   if (!meilleure) return null;
 
   const cible = repsCibles && repsCibles > 0 ? repsCibles : 8;
-  if (meilleure.reps >= cible) {
-    const increment = incrementCharge(meilleure.poids);
-    if (increment === 0) {
-      // Poids du corps : on ne peut que viser plus de répétitions.
-      return {
-        poids: 0, reps: meilleure.reps + 1,
-        raison: `tu as tenu ${meilleure.reps} reps — vise une de plus`,
-      };
-    }
+  const seriesFaites = seriesExercice.length;
+  const cibleSeries = seriesCibles && seriesCibles > 0 ? seriesCibles : null;
+  const increment = incrementCharge(meilleure.poids);
+  // Poids du corps : la charge ne peut pas monter, quoi qu'on ait coché.
+  const peutCharger = axes.includes('poids') && increment > 0;
+  // `series` n'est renseigné QUE si l'axe des séries est choisi : sinon,
+  // afficher « 10 séries » ressemblerait à une consigne alors qu'on n'a rien
+  // demandé de tel. Ce qui ne progresse pas ne s'affiche pas.
+  const series = axes.includes('series') ? seriesFaites : null;
+  const base = { poids: meilleure.poids, reps: meilleure.reps, series };
+
+  // 1) Une série de plus, à charge et reps égales.
+  if (axes.includes('series') && (cibleSeries === null || seriesFaites < cibleSeries)) {
     return {
-      poids: meilleure.poids + increment, reps: cible,
-      raison: `objectif de ${cible} reps atteint à ${meilleure.poids} kg`,
+      ...base, series: seriesFaites + 1,
+      raison: `ajoute une série : ${seriesFaites + 1} × ${meilleure.reps} reps à ${meilleure.poids} kg`,
     };
   }
+
+  // 2) Une répétition de plus, à charge égale, jusqu'à l'objectif du programme.
+  if (axes.includes('reps') && meilleure.reps < cible) {
+    return {
+      ...base, reps: meilleure.reps + 1,
+      raison: peutCharger
+        ? `vise ${cible} reps à ${meilleure.poids} kg avant de charger`
+        : `vise ${cible} reps à ${meilleure.poids} kg`,
+    };
+  }
+
+  // 3) Plus lourd — et on repart de l'objectif de reps (et de séries).
+  if (peutCharger) {
+    return {
+      poids: meilleure.poids + increment,
+      reps: axes.includes('reps') ? cible : meilleure.reps,
+      series: axes.includes('series') ? (cibleSeries || seriesFaites) : null,
+      raison: axes.includes('reps')
+        ? `objectif de ${cible} reps atteint à ${meilleure.poids} kg`
+        : `monte la charge : +${increment} kg`,
+    };
+  }
+
+  // 4) Plus de charge possible (poids du corps, ou axe non coché) : les reps
+  // restent le seul levier si elles sont autorisées.
+  if (axes.includes('reps')) {
+    return {
+      ...base, reps: meilleure.reps + 1,
+      raison: `tu as tenu ${meilleure.reps} reps — vise une de plus`,
+    };
+  }
+
+  // 5) Tous les objectifs sont tenus et rien d'autre n'est autorisé à bouger.
   return {
-    poids: meilleure.poids, reps: meilleure.reps + 1,
-    raison: `vise ${cible} reps à ${meilleure.poids} kg avant de charger`,
+    ...base,
+    raison: `objectifs tenus : ${seriesFaites} × ${meilleure.reps} reps à ${meilleure.poids} kg`,
   };
 }
 

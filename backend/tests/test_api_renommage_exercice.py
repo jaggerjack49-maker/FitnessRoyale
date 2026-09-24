@@ -159,7 +159,9 @@ class TestRenommageExercice(unittest.TestCase):
         self._programme(h, joueur_id, "Push", "Dips")
         r = self._renommer(h, joueur_id, "Dips", "Dips")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"programmes": 0, "series": 0, "groupes": 0})
+        self.assertEqual(
+            r.json(), {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
+        )
 
     def test_un_nom_vide_est_refuse(self):
         h, joueur_id = self._inscrire("NomVide")
@@ -170,7 +172,9 @@ class TestRenommageExercice(unittest.TestCase):
         h, joueur_id = self._inscrire("Inexistant")
         r = self._renommer(h, joueur_id, "Exercice jamais fait", "Autre chose")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"programmes": 0, "series": 0, "groupes": 0})
+        self.assertEqual(
+            r.json(), {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
+        )
 
     def test_le_renommage_ne_touche_pas_les_performances_du_bareme(self):
         """Les perfs du barème Fitness Royale sont un AUTRE espace de noms :
@@ -187,6 +191,23 @@ class TestRenommageExercice(unittest.TestCase):
         joueur = self.client.get(f"/joueurs/{joueur_id}").json()
         self.assertIn("Développé couché", joueur["performances"])
         self.assertNotIn("Bench press", joueur["performances"])
+
+    def test_le_type_de_progression_suit_le_renommage(self):
+        """Le NOM est l'identifiant : chaque nouvelle table qui le porte doit
+        être renommée avec lui, sinon son réglage devient orphelin — le bug de
+        fond du 04/09/2026, une table plus loin (24/09/2026)."""
+        entete, joueur_id = self._inscrire("ProgRenomme")
+        self.client.put(
+            f"/joueurs/{joueur_id}/progressions-exercices/Dev couche",
+            json={"modes": ["series", "poids"]}, headers=entete,
+        )
+        reponse = self._renommer(entete, joueur_id, "Dev couche", "Développé couché")
+        self.assertEqual(reponse.status_code, 200, reponse.text)
+        apres = self.client.get(
+            f"/joueurs/{joueur_id}/progressions-exercices", headers=entete
+        ).json()
+        self.assertEqual(apres.get("Développé couché"), ["series", "poids"])
+        self.assertNotIn("Dev couche", apres)
 
 
 if __name__ == "__main__":

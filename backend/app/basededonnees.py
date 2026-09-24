@@ -537,6 +537,23 @@ def initialiser():
         # Les exercices étant en TEXTE LIBRE, l'app devine leur groupe
         # musculaire par mots-clés. Cette table garde les CORRECTIONS de
         # l'utilisateur (ex. « Mon exo bizarre » -> Dos), qui priment.
+        # COMMENT CET EXERCICE DOIT-IL PROGRESSER ? (24/09/2026)
+        # `modes` = les axes autorisés, en JSON : ["series"], ["reps","poids"]…
+        # Rangé PAR EXERCICE (et non par programme) : c'est le mouvement qui
+        # progresse, quel que soit le programme où on le croise — même logique
+        # que `groupes_exercices`. Le NOM est la clé (voir « Le NOM d'un
+        # exercice est son identifiant »), donc `renommer_exercice_partout`
+        # doit traiter cette table aussi.
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS progressions_exercices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
+                exercice TEXT NOT NULL,
+                modes TEXT NOT NULL,
+                UNIQUE (joueur_id, exercice)
+            )
+        """)
+
         _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS groupes_exercices (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -766,6 +783,39 @@ def supprimer_programme_officiel(programme_id: int) -> None:
 
 # ----- Renommer un exercice partout -----
 
+def progressions_exercices(joueur_id: int) -> dict:
+    """{ "développé couché": ["reps", "poids"], … } — vide = réglage par défaut."""
+    with connexion() as conn:
+        lignes = conn.execute(
+            "SELECT exercice, modes FROM progressions_exercices WHERE joueur_id = ?",
+            (joueur_id,),
+        )
+        resultat = {}
+        for ligne in lignes:
+            try:
+                resultat[ligne["exercice"]] = json.loads(ligne["modes"])
+            except (TypeError, ValueError):
+                continue  # ligne abîmée : on l'ignore plutôt que de tout casser
+        return resultat
+
+
+def definir_progression_exercice(joueur_id: int, exercice: str, modes: list) -> None:
+    """Enregistre les axes de progression d'un exercice. Une liste VIDE efface
+    le réglage : l'exercice revient au comportement par défaut."""
+    with connexion() as conn:
+        if not modes:
+            conn.execute(
+                "DELETE FROM progressions_exercices WHERE joueur_id = ? AND exercice = ?",
+                (joueur_id, exercice),
+            )
+            return
+        conn.execute(
+            "INSERT INTO progressions_exercices (joueur_id, exercice, modes) VALUES (?, ?, ?) "
+            "ON CONFLICT (joueur_id, exercice) DO UPDATE SET modes = excluded.modes",
+            (joueur_id, exercice, json.dumps(modes)),
+        )
+
+
 def renommer_exercice_partout(joueur_id: int, ancien: str, nouveau: str) -> dict:
     """Renomme un exercice dans TOUT ce qui appartient à ce joueur.
 
@@ -823,7 +873,28 @@ def renommer_exercice_partout(joueur_id: int, ancien: str, nouveau: str) -> dict
             )
             groupes = curseur.rowcount
 
-    return {"programmes": programmes, "series": series, "groupes": groupes}
+        # Le type de progression suit le nom, exactement comme le groupe
+        # musculaire ci-dessus (même contrainte UNIQUE, même arbitrage :
+        # le réglage du NOUVEAU nom fait autorité s'il existe déjà).
+        deja = conn.execute(
+            "SELECT 1 FROM progressions_exercices WHERE joueur_id = ? AND exercice = ?",
+            (joueur_id, nouveau),
+        ).fetchone()
+        if deja:
+            conn.execute(
+                "DELETE FROM progressions_exercices WHERE joueur_id = ? AND exercice = ?",
+                (joueur_id, ancien),
+            )
+            progressions = 0
+        else:
+            curseur = conn.execute(
+                "UPDATE progressions_exercices SET exercice = ? WHERE joueur_id = ? AND exercice = ?",
+                (nouveau, joueur_id, ancien),
+            )
+            progressions = curseur.rowcount
+
+    return {"programmes": programmes, "series": series, "groupes": groupes,
+            "progressions": progressions}
 
 
 def creer_joueur(pseudo: str, sexe: str, poids: float, salle: str | None,

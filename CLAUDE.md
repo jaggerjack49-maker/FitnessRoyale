@@ -3405,6 +3405,118 @@ lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
   n'est pas affiché, voir « À faire »), mais il faudra le traiter le jour où
   cet écran existera.
 
+## Lot du 24/09/2026 : quatre demandes de Hafiz
+
+« Ajoute la possibilité d'ajouter une séance à un programme. De plus, les perfs
+attendues à la prochaine séance devront être cohérentes avec le type de
+progressive overload qu'on a choisi pour les exercices : les séries, les reps
+ou le poids — on peut choisir un ou un mélange des 3. De plus, les défis
+doivent se valider automatiquement lorsqu'ils sont atteints, et j'ai
+l'impression que le comptabilisateur de séance au niveau du profil ne
+fonctionne pas. »
+
+### Les défis et le compteur du Profil : UNE SEULE CAUSE
+
+Les deux dernières demandes n'en faisaient qu'une : **les séances n'existaient
+que dans l'état React de l'app** — un tableau de MINUTES, sans dates, remis à
+zéro à chaque connexion (`entrerEnLigne`) et jamais envoyé au serveur. D'où :
+- le compteur « Cette semaine » du Profil repartait de zéro à chaque lancement
+  (et ne filtrait même pas sur la semaine : il comptait tout depuis l'ouverture
+  de l'app) ;
+- les défis, qui lisent les séances DU SERVEUR (`backend/app/defis.py`,
+  écrit dès le 20/07/2026), n'étaient donc JAMAIS réussis, quoi que le joueur
+  fasse. Le bouton « Valider » de l'app était une simulation locale.
+
+CORRECTIF — la séance naît là où elle est faite : **`POST /entrainements`
+enregistre la séance du jour**, avec sa durée estimée (`backend/app/seances.py`,
+≈3 min par série, 20 min minimum — la règle vivait dans l'app, elle est
+maintenant à UN seul endroit). Conséquences :
+- `db.enregistrer_seance_du_jour` garde **UNE séance par JOUR** et additionne
+  les minutes. Sans ça, deux entraînements le même jour compteraient pour deux
+  et valideraient « 4 séances cette semaine » sans y être allé quatre fois —
+  c'est aussi la règle de l'XP (dates distinctes).
+- l'app ne POSTe PLUS de séance de son côté : ce serait un double comptage.
+  `ajouterSeanceLocale(minutes, jour)` affiche la durée tout de suite, puis
+  relit la vérité du serveur.
+- ⚠️ ORDRE IMPORTANT, trouvé en vérifiant : cet appel était fait AVANT l'envoi
+  de l'entraînement, donc il relisait des séances que le serveur ne connaissait
+  pas encore — le compteur restait figé sur la valeur d'avant. Il est
+  maintenant fait APRÈS.
+
+**Les défis se valident tout seuls** : `verifierDefis()` (App.js) lit l'état du
+serveur, valide ceux qui sont réussis et pas encore validés, puis rafraîchit
+points et titres. Appelé à la connexion, après chaque séance, et en arrivant
+sur l'onglet Compétition. Le bouton « Valider » a disparu quand on est connecté
+(il ne reste qu'en mode hors-ligne, où il n'y a personne pour vérifier) ; la
+carte affiche « ✅ Fait » ou « ⏳ Pas encore : il se validera tout seul ».
+
+Vérifié dans l'app (backend local) : séance de 10 séries → séance du jour créée
+(30 min), **défi du jour validé automatiquement, +20 points**, carte « ✅ Fait »,
+Profil « 1 séance · ≈240 kcal · 30 min ». Deux séances de plus le même jour →
+toujours **1 séance**, 70 min, mis à jour SANS recharger l'app.
+
+### Ajouter une séance à un programme
+
+Un cycle était figé à sa création : ajouter un jour obligeait à tout supprimer
+et tout refaire. Nouveau `POST /cycles/{id}/seances` (propriété vérifiée, jours
+validés) et, dans « Mes programmes », un bouton **« ➕ Ajouter une séance »** qui
+rouvre les composants existants (`ChoixJoursSeance` + `EditeurSeance`) — aucun
+formulaire de plus à maintenir.
+La séance ajoutée est un `programme` ordinaire portant ses jours, comme toutes
+les autres : éditable, plaçable au calendrier, démarrable.
+PIÈGE TRAITÉ EN VÉRIFIANT : sans jour coché, le serveur répond 422 et le
+message partait dans `erreur`, affiché EN BAS de la page — donc invisible.
+Le formulaire porte maintenant son propre message (« Choisis au moins un
+jour »), et refuse avant même d'appeler le serveur.
+
+### Le type de surcharge progressive, exercice par exercice
+
+`src/logic/surchargeProgressive.js` — **un seul axe avance à la fois, dans
+l'ordre séries → reps → poids**, et seuls les axes cochés bougent :
+- ajouter une série se fait à charge et reps égales (le volume avant
+  l'intensité), jusqu'à l'objectif de séries du programme ;
+- puis une répétition de plus, jusqu'à l'objectif de reps ;
+- puis la charge (+2,5 kg, ou +1 kg sous 20 kg), en repartant des objectifs.
+La DOUBLE PROGRESSION d'origine (reps puis poids) est le réglage PAR DÉFAUT :
+un exercice sans choix ne change pas de comportement. Poids du corps : l'axe
+« poids » est ignoré, on ne promet pas une charge impossible.
+- Le nombre de séries n'est annoncé QUE si on fait progresser les séries —
+  sinon « 10 séries » ressemblerait à une consigne qu'on n'a pas demandée
+  (constaté à l'écran, corrigé).
+- LE CHOIX EST RANGÉ PAR EXERCICE (table `progressions_exercices`,
+  `GET/PUT /joueurs/{id}/progressions-exercices`) : c'est le mouvement qui
+  progresse, quel que soit le programme où on le croise — comme
+  `groupes_exercices`. ⚠️ Le NOM étant l'identifiant, `renommer_exercice_partout`
+  traite cette table aussi (test dédié : sans ça on recréait le bug du
+  04/09/2026, une table plus loin).
+- ÉCRAN : trois puces « Faire progresser : Séries / Reps / Poids » sous
+  l'exercice PENDANT la séance — là où la suggestion se lit. Les « 🎯 Attendu »
+  du calendrier et des programmes utilisent le MÊME calcul avec les mêmes
+  axes : les deux ne peuvent pas se contredire.
+
+### Vérifié
+
+Tests : `test_api_seance_auto.py` (8 cas : séance créée avec l'entraînement,
+un jour = une séance, défis réussis puis validés, estimation de durée),
+`harnais/harnais_progression.mjs` + `test_progression.py` (19 cas : chaque axe
+seul, les mélanges, l'ordre, le poids du corps, les réglages absurdes),
+`test_api_renommage_exercice.py` (+1 cas). **306 tests, tous OK.**
+Les deux règles ont été vues ÉCHOUER pour la bonne raison : ignorer les axes
+choisis casse 17 cas, charger avant de monter les reps en casse 5.
+
+Dans l'app (backend local) : séance « Épaules » (mercredi, élévations
+latérales) ajoutée au programme « Mon PPL » et vérifiée en base ; puces
+affichées sous l'exercice ; cocher « Séries » fait passer la suggestion de
+« 8 reps à 102,5 kg » à « 11 séries × 8 reps à 100 kg — ajoute une série », et
+le choix est enregistré côté serveur (`["series", "reps", "poids"]`).
+
+⚠️ INCIDENT DE MÉTHODE À RETENIR : le commit de la première moitié a emporté
+`app.json` avec `apiUrl: null` — la valeur que je pose le temps de vérifier
+contre le backend LOCAL. Le prochain déploiement du site web aurait appelé
+localhost (le bug du 21/09). Rien n'a été cassé en production (le site tournait
+encore sur la construction précédente), et c'est corrigé — mais la leçon est
+simple : **vérifier `git diff app.json` AVANT de commiter, pas après.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3417,7 +3529,7 @@ lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (296 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (306 tests, tous OK).
 - À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -3433,8 +3545,6 @@ lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
 - Mode Royale (multijoueur, un seul en tête)
 - Vrai temps réel pour les duels ET le chat de clan (push serveur / WebSocket) — actuellement polling
   toutes les 3 secondes, ça marche mais c'est moins réactif qu'un vrai push
-- Brancher les SÉANCES au serveur (`POST /joueurs/{id}/seances`) quand on en ajoute une dans Profil,
-  puis brancher les DÉFIS (`GET/POST /joueurs/{id}/defis`) pour remplacer la simulation locale
 - Suivre `serieJours` et `stats` (victoires/défaites) pour de vrais comptes côté serveur
   (actuellement seulement dans mockData.js, valeurs par défaut à 0 pour un vrai compte — noter
   que les VRAIES victoires/défaites de duels en ligne ne sont pas encore comptées dans ces stats)
@@ -3463,6 +3573,7 @@ lieu — ces quatre fonctions existaient déjà et n'ont jamais été relues.
 - Écran de progression PAR EXERCICE (toutes les séances d'un mouvement + courbe) — proposé à
   Hafiz le 12/08/2026, non retenu pour l'instant (il a choisi suggestion + records + stagnation)
 - Renommer un CYCLE (le nom du programme complet) — il faut encore le supprimer et le recréer.
+  AJOUTER une séance à un cycle se fait depuis le 24/09/2026 (« ➕ Ajouter une séance »).
   Ajouter/retirer un JOUR se fait depuis le 07/09/2026 avec les puces de « Mes programmes »
   (voir « Entraînement v5 »), et ses séances restent éditables une par une
 - IDÉE DE HAFIZ (12/08/2026) : transformer la SEMAINE TYPE en un programme à part entière

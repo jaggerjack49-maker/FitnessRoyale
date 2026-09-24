@@ -25,7 +25,7 @@ import {
 } from '../data/groupesMusculaires';
 import {
   suggererProchaineSerie, recordPersonnel, bat_le_record,
-  detecterStagnation, tousLesRecords,
+  detecterStagnation, tousLesRecords, AXES_PROGRESSION, AXES_PAR_DEFAUT,
 } from '../logic/surchargeProgressive';
 import {
   jourDeLaSeance, seriesSansJour, joursTravailles,
@@ -126,8 +126,41 @@ function joursDuCycle(cycle) {
 // déduit de l'historique déjà chargé (marche hors-ligne).
 // Pas de suggestion = exercice jamais loggé : on n'affiche rien plutôt
 // qu'un chiffre inventé.
-function LigneExercicePrevu({ exo, entrainements }) {
-  const suggestion = suggererProchaineSerie(entrainements, exo.exercice, exo.reps_cibles);
+// COMMENT CET EXERCICE DOIT PROGRESSER (24/09/2026).
+// Trois puces à cocher, affichées LÀ OÙ LA SUGGESTION EST LUE : pendant la
+// séance, sous l'exercice. On règle ce qu'on voit, au moment où on s'en sert.
+const LIBELLES_AXES = { series: 'Séries', reps: 'Reps', poids: 'Poids' };
+
+function ChoixAxesProgression({ exercice, modes, onBasculer }) {
+  const actifs = Array.isArray(modes) && modes.length > 0 ? modes : AXES_PAR_DEFAUT;
+  return (
+    <View style={styles.ligneAxes}>
+      <Text style={styles.libelleAxes}>Faire progresser :</Text>
+      {AXES_PROGRESSION.map((axe) => {
+        const choisi = actifs.includes(axe);
+        return (
+          <TouchableOpacity
+            key={axe}
+            style={[styles.puceAxe, choisi && styles.puceAxeActive]}
+            onPress={() => onBasculer(exercice, axe)}
+          >
+            <Text style={[styles.puceAxeTexte, choisi && styles.puceAxeTexteActif]}>
+              {LIBELLES_AXES[axe]}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function LigneExercicePrevu({ exo, entrainements, progressions = {} }) {
+  // LES PERFS ATTENDUES SUIVENT LES AXES CHOISIS (24/09/2026) : c'est le
+  // même calcul que pendant la séance, donc les deux ne peuvent pas se
+  // contredire.
+  const suggestion = suggererProchaineSerie(entrainements, exo.exercice, exo.reps_cibles, {
+    modes: progressions[exo.exercice], seriesCibles: exo.series_cibles,
+  });
   return (
     <View style={{ marginTop: 3 }}>
       <Text style={styles.exerciceDetailJour}>
@@ -135,8 +168,8 @@ function LigneExercicePrevu({ exo, entrainements }) {
       </Text>
       {suggestion && (
         <Text style={styles.attenduDetailJour}>
-          {'    '}🎯 Attendu : {suggestion.poids > 0 ? `${suggestion.poids} kg × ` : ''}
-          {suggestion.reps} reps
+          {'    '}🎯 Attendu : {suggestion.series ? `${suggestion.series} × ` : ''}
+          {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
         </Text>
       )}
     </View>
@@ -455,6 +488,15 @@ export default function EntrainementScreen({
   // non »). Dérouler séance par séance restait possible, mais il fallait le
   // faire une par une pour voir sa semaine.
   const [cyclesDeroules, setCyclesDeroules] = useState([]);
+  // AJOUTER UNE SÉANCE À UN PROGRAMME EXISTANT (24/09/2026, demande de Hafiz).
+  // Un cycle était figé à sa création : ajouter un jour obligeait à tout
+  // supprimer et tout refaire. `cycleQuiRecoit` = l'id du cycle dont le
+  // formulaire est ouvert (null = aucun).
+  const [cycleQuiRecoit, setCycleQuiRecoit] = useState(null);
+  const [joursNouvelleSeance, setJoursNouvelleSeance] = useState([]);
+  // Le message de ce formulaire s'affiche DANS le formulaire : `erreur`
+  // vit en bas de page, donc hors de vue au moment où on ajoute la séance.
+  const [messageAjoutSeance, setMessageAjoutSeance] = useState(null);
 
   function basculerDetailCycle(id) {
     setCyclesDeroules((liste) =>
@@ -584,6 +626,27 @@ export default function EntrainementScreen({
 
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
+
+  // COMMENT CHAQUE EXERCICE DOIT PROGRESSER (24/09/2026, demande de Hafiz).
+  // { "développé couché": ["reps", "poids"], … } — un exercice absent suit le
+  // réglage par défaut (double progression, voir surchargeProgressive.js).
+  const [progressions, setProgressions] = useState({});
+
+  // Coche / décoche un axe pour un exercice, et l'enregistre tout de suite :
+  // le réglage se fait là où la suggestion s'affiche, pendant la séance.
+  async function basculerAxe(exercice, axe) {
+    const actuels = progressions[exercice] || AXES_PAR_DEFAUT;
+    const suivants = actuels.includes(axe)
+      ? actuels.filter((a) => a !== axe)
+      : AXES_PROGRESSION.filter((a) => actuels.includes(a) || a === axe);
+    setProgressions((p) => ({ ...p, [exercice]: suivants }));
+    if (!estConnecte) return;
+    try {
+      await api.definirProgressionExercice(moi.id, exercice, suivants);
+    } catch {
+      // Réglage gardé à l'écran ; il repartira au prochain changement.
+    }
+  }
 
   // ---- La séance survit à tout (07/09/2026) ----
   // `seanceRestauree` : a-t-on FINI de relire la séance interrompue ?
@@ -728,9 +791,10 @@ export default function EntrainementScreen({
         api.cyclesDuJoueur(moi.id),
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
+        api.progressionsExercices(moi.id),
       ]);
       toutReussi = resultats.every((r) => r.status === 'fulfilled');
-      const [p, e, pl, c, obj, grp] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
+      const [p, e, pl, c, obj, grp, prog] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
       if (p) setProgrammes(p);
       if (e) {
         // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
@@ -745,6 +809,7 @@ export default function EntrainementScreen({
       if (c) setCycles(c);
       if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
       if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+      if (prog) setProgressions(prog);
       // Seul l'admin a une liste à voir : celle de SES propres partages, avec
       // leurs codes. Personne d'autre ne peut lister quoi que ce soit.
       if (moi.admin) {
@@ -1344,6 +1409,34 @@ export default function EntrainementScreen({
   // Avertissement affiché dans l'éditeur : une séance est le MÊME objet partout
   // où elle est prévue, donc la retoucher change tous ses jours et toutes ses
   // dates posées.
+  // La séance ajoutée est un `programme` ordinaire portant ses jours, comme
+  // toutes les autres : elle est donc éditable, plaçable au calendrier et
+  // démarrable, sans rien de particulier à prévoir ailleurs.
+  async function ajouterSeanceAuCycle(cycleId, nom, exercices) {
+    if (!estConnecte) {
+      setMessageAjoutSeance("Ajouter une séance à un programme demande d'être connecté.");
+      return;
+    }
+    // Une séance de programme se fait UN JOUR donné : sans jour, elle
+    // n'apparaîtrait ni dans la semaine, ni au calendrier. Le serveur le
+    // refuse déjà — autant le dire ici, avant de partir pour rien.
+    if (joursNouvelleSeance.length === 0) {
+      setMessageAjoutSeance('Choisis au moins un jour pour cette séance.');
+      return;
+    }
+    setMessageAjoutSeance(null);
+    try {
+      await api.ajouterSeanceAuCycle(cycleId, {
+        nom, jours: joursNouvelleSeance, exercices,
+      });
+      setCycleQuiRecoit(null);
+      setJoursNouvelleSeance([]);
+      await chargerTout();
+    } catch (err) {
+      setMessageAjoutSeance(err.message || "La séance n'a pas pu être ajoutée.");
+    }
+  }
+
   function noteReutilisation(programme) {
     const dates = planning.filter((pl) => pl.programme_id === programme.id).length;
     const jours = (programme.jours || []).length;
@@ -2072,7 +2165,9 @@ export default function EntrainementScreen({
           // Et si une séance a déjà été loggée aujourd'hui, elle compte bien.
           const cibleExo = programmeActif?.exercices?.find((e) => e.exercice === exercice);
           const dansLeProgramme = !!cibleExo;
-          const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles);
+          const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles, {
+            modes: progressions[exercice], seriesCibles: cibleExo?.series_cibles,
+          });
           const record = recordPersonnel(entrainements, exercice);
           const nouveauRecord = bat_le_record(seriesFaites, record);
           const stagnation = detecterStagnation(entrainements, exercice, 3);
@@ -2093,11 +2188,16 @@ export default function EntrainementScreen({
               {/* Quoi tenter aujourd'hui pour progresser */}
               {suggestion && (
                 <Text style={styles.suggestion}>
-                  🎯 Aujourd'hui : {suggestion.poids > 0 ? `${suggestion.poids} kg × ` : ''}
-                  {suggestion.reps} reps
+                  🎯 Aujourd'hui : {suggestion.series ? `${suggestion.series} séries × ` : ''}
+                  {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
                   <Text style={styles.raisonSuggestion}> — {suggestion.raison}</Text>
                 </Text>
               )}
+              <ChoixAxesProgression
+                exercice={exercice}
+                modes={progressions[exercice]}
+                onBasculer={basculerAxe}
+              />
 
               {/* Record personnel + badge quand il tombe en direct */}
               {record && (
@@ -2914,7 +3014,8 @@ export default function EntrainementScreen({
                   )}
                 </View>
                 {programme.exercices.map((exo, i) => (
-                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
+                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
+                    progressions={progressions} />
                 ))}
                 {/* Le bouton n'apparaissait QUE sur la date du jour, donc
                     toucher n'importe quel autre jour ne proposait rien
@@ -3150,7 +3251,8 @@ export default function EntrainementScreen({
                     {seance.exercices.length === 0 ? (
                       <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                     ) : seance.exercices.map((exo, i) => (
-                      <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
+                      <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
+                    progressions={progressions} />
                     ))}
                   </View>
                 )}
@@ -3171,6 +3273,42 @@ export default function EntrainementScreen({
               </View>
             );
           })}
+          {/* AJOUTER UNE SÉANCE à ce programme (24/09/2026). */}
+          {cycleQuiRecoit === cycle.id ? (
+            <View style={styles.blocNouvelleSeance}>
+              <Text style={styles.titreNouvelleSeance}>➕ Nouvelle séance de « {cycle.nom} »</Text>
+              <Text style={styles.aideNouvelleSeance}>
+                Choisis son ou ses jours, puis écris ses exercices.
+              </Text>
+              {messageAjoutSeance && (
+                <Text style={styles.messageAjoutSeance}>{messageAjoutSeance}</Text>
+              )}
+              <ChoixJoursSeance
+                programme={{ jours: joursNouvelleSeance }}
+                onBasculer={(_, jour) => setJoursNouvelleSeance((actuels) => (
+                  actuels.includes(jour)
+                    ? actuels.filter((j) => j !== jour)
+                    : [...actuels, jour]
+                ))}
+              />
+              <EditeurSeance
+                programme={null}
+                placeholderNom="Nom de la séance (ex. Épaules)"
+                libelleBouton="Ajouter cette séance"
+                onSauvegarder={(nom, exercices) => ajouterSeanceAuCycle(cycle.id, nom, exercices)}
+              />
+              <TouchableOpacity onPress={() => { setCycleQuiRecoit(null); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}>
+                <Text style={styles.lienAnnuler}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.boutonAjouterSeance}
+              onPress={() => { setCycleQuiRecoit(cycle.id); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}
+            >
+              <Text style={styles.boutonAjouterSeanceTexte}>➕ Ajouter une séance</Text>
+            </TouchableOpacity>
+          )}
           {cycleEnService(cycle) && (
             <>
               <TouchableOpacity
@@ -3238,7 +3376,8 @@ export default function EntrainementScreen({
                 {programme.exercices.length === 0 ? (
                   <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                 ) : programme.exercices.map((exo, i) => (
-                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements} />
+                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
+                    progressions={progressions} />
                 ))}
               </View>
             )}
@@ -3682,6 +3821,30 @@ const styles = StyleSheet.create({
     color: colors.texte, fontWeight: '700', fontSize: 13, marginBottom: 4,
   },
   suggestion: { color: colors.accent, fontSize: 12, fontWeight: '700', marginBottom: 3 },
+  // « ➕ Ajouter une séance » sur la carte d'un programme (24/09/2026).
+  boutonAjouterSeance: {
+    borderWidth: 1, borderColor: colors.or, borderRadius: 8,
+    paddingVertical: 8, alignItems: 'center', marginTop: espacement.s,
+  },
+  boutonAjouterSeanceTexte: { color: colors.or, fontWeight: '800', fontSize: 13 },
+  blocNouvelleSeance: {
+    borderWidth: 1, borderColor: colors.bordure, borderRadius: 8,
+    padding: espacement.s, marginTop: espacement.s,
+  },
+  titreNouvelleSeance: { color: colors.texte, fontWeight: '800', marginBottom: 2 },
+  messageAjoutSeance: { color: colors.rouge, fontSize: 12, marginBottom: 6 },
+  aideNouvelleSeance: { color: colors.texteGris, fontSize: 12, marginBottom: 6 },
+
+  // Les puces « Faire progresser : Séries / Reps / Poids » (24/09/2026).
+  ligneAxes: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 6 },
+  libelleAxes: { color: colors.texteGris, fontSize: 11, marginRight: 6 },
+  puceAxe: {
+    borderWidth: 1, borderColor: colors.bordure, borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 3, marginRight: 6, marginTop: 2,
+  },
+  puceAxeActive: { backgroundColor: colors.or, borderColor: colors.or },
+  puceAxeTexte: { color: colors.texteGris, fontSize: 11, fontWeight: '700' },
+  puceAxeTexteActif: { color: '#12100a' },
   raisonSuggestion: { color: colors.texteGris, fontSize: 11, fontWeight: '400' },
   record: { color: colors.texteGris, fontSize: 11, marginBottom: 3 },
   recordBattu: { color: colors.or, fontSize: 12, fontWeight: '800', marginBottom: 3 },
