@@ -27,7 +27,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": null,
+      "apiUrl": "https://fitnessroyale.onrender.com",
       "eas": {
         "projectId": "534a0816-7157-49da-8bc1-7a9fd016784b"
       }
