@@ -441,15 +441,16 @@ const stylesConfirmation = StyleSheet.create({
   texteAnnuler: { color: colors.texteGris, fontSize: 12 },
 });
 
-// `idStockage` : sous quel compte ranger la séance en cours et la file
-// d'attente sur CE téléphone. Ce n'est pas toujours `moi.id` — sans réseau,
-// l'app retombe sur l'identité de démonstration alors que la séance doit
-// rester rattachée au vrai compte (voir src/stockageSeance.js).
-// Les appels au SERVEUR, eux, continuent d'utiliser `moi.id`.
+// `idLocal` : sous quel compte ranger la séance en cours et la file d'attente
+// sur CE téléphone (voir src/stockageSeance.js). C'est simplement `moi.id`
+// depuis le 26/09/2026 : il n'existe plus d'identité de démonstration sous
+// laquelle une séance pourrait se ranger par erreur. L'app passait auparavant
+// par un paramètre `idStockage` pour couvrir ce cas ; il a disparu avec le
+// mode hors-ligne.
 export default function EntrainementScreen({
-  moi, estConnecte, ajouterSeanceLocale, idStockage, actif = true,
+  moi, ajouterSeanceLocale, actif = true,
 }) {
-  const idLocal = idStockage ?? moi.id;
+  const idLocal = moi.id;
   const [vue, setVue] = useState('accueil'); // 'accueil' | 'nouveauProgramme' | 'seance'
 
   // ---- Garder sa place dans l'accueil (14/09/2026, demande de Hafiz) ----
@@ -640,7 +641,6 @@ export default function EntrainementScreen({
       ? actuels.filter((a) => a !== axe)
       : AXES_PROGRESSION.filter((a) => actuels.includes(a) || a === axe);
     setProgressions((p) => ({ ...p, [exercice]: suivants }));
-    if (!estConnecte) return;
     try {
       await api.definirProgressionExercice(moi.id, exercice, suivants);
     } catch {
@@ -690,16 +690,16 @@ export default function EntrainementScreen({
   // Désormais : on recharge à CHAQUE retour sur l'onglet (comme avant le 14/09),
   // on réessaie tout seul après un échec, et l'état est dit EN HAUT de l'écran.
   useEffect(() => {
-    if (!estConnecte || !actif) return;
+    if (!actif) return;
     tentativesChargement.current = 0;
     chargerTout();
-  }, [estConnecte, actif, moi.id]);
+  }, [actif, moi.id]);
 
   // Après un échec : nouvel essai dans 5 s, puis 15 s, puis toutes les 30 s,
   // tant que l'onglet est à l'écran. Chaque échec relance cet effet (l'état
   // passe par 'en_cours' puis revient à 'echec').
   useEffect(() => {
-    if (etatChargement !== 'echec' || !estConnecte || !actif) return undefined;
+    if (etatChargement !== 'echec' || !actif) return undefined;
     const delais = [5000, 15000, 30000];
     const n = tentativesChargement.current;
     const minuterie = setTimeout(async () => {
@@ -713,11 +713,11 @@ export default function EntrainementScreen({
       chargerTout();
     }, delais[Math.min(n, delais.length - 1)]);
     return () => clearTimeout(minuterie);
-  }, [etatChargement, estConnecte, actif]);
+  }, [etatChargement, actif]);
 
   // Tant que le chargement n'a pas RÉUSSI, un écran vide ne prouve rien :
   // on ne dit pas « aucune séance » (voir le bug du 16/09 ci-dessus).
-  const donneesIncertaines = estConnecte && etatChargement !== 'ok';
+  const donneesIncertaines = etatChargement !== 'ok';
 
   // AU DÉMARRAGE : REPRENDRE LA SÉANCE INTERROMPUE (demande de Hafiz du
   // 07/09/2026 : « on doit pouvoir rattraper une séance en cours même si on
@@ -836,14 +836,13 @@ export default function EntrainementScreen({
   // enregistrée : en cas d'échec elle y reste et repartira au prochain
   // chargement. On préfère renvoyer une séance une fois de trop que la perdre.
   async function viderLaFileDAttente() {
-    if (!estConnecte) return;
     const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
     if (enAttente.length === 0) return;
     for (const seance of enAttente) {
       try {
-        // Un programme créé hors-ligne porte un id « local-… » que le
-        // serveur ne connaît pas : la séance part alors sans programme
-        // plutôt que d'être refusée. Les séries, elles, sont intactes.
+        // Un programme dont la création a échoué porte encore un id
+        // « local-… » que le serveur ne connaît pas : la séance part alors
+        // sans programme plutôt que d'être refusée. Les séries sont intactes.
         const programmeId = seance.programme_id
           && !String(seance.programme_id).startsWith('local-')
           ? seance.programme_id : null;
@@ -884,23 +883,31 @@ export default function EntrainementScreen({
       setProgrammes((liste) =>
         liste.map((p) => (p.id === programmeExistant.id ? { ...p, jours: restants } : p))
       );
-      if (estConnecte && !String(programmeExistant.id).startsWith('local-')) {
+      if (!String(programmeExistant.id).startsWith('local-')) {
         try {
           await api.changerJoursProgramme(programmeExistant.id, restants);
         } catch (err) {
-          setErreur(err.message || "Changement gardé en local, l'envoi au serveur a échoué.");
+          setErreur(
+            'Changement NON enregistré côté serveur '
+            + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+          );
+          await chargerTout();
         }
       }
     } else if (programmeExistant) {
       setProgrammes((liste) =>
         liste.map((p) => (p.id === programmeExistant.id ? { ...p, nom, exercices } : p))
       );
-      if (!estConnecte || String(programmeExistant.id).startsWith('local-')) return;
+      if (String(programmeExistant.id).startsWith('local-')) return; // création pas encore confirmée
       try {
         if (nom !== programmeExistant.nom) await api.renommerProgramme(programmeExistant.id, nom);
         await api.changerExercicesProgramme(programmeExistant.id, exercices);
       } catch (err) {
-        setErreur(err.message || "Séance gardée en local, l'envoi au serveur a échoué.");
+        setErreur(
+          'Changement NON enregistré côté serveur '
+          + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+        );
+        await chargerTout();
       }
       return;
     }
@@ -909,12 +916,15 @@ export default function EntrainementScreen({
       duree_semaines: null, date_debut: null, cree_le: new Date().toISOString(),
     };
     setProgrammes((liste) => [local, ...liste]);
-    if (!estConnecte) return;
     try {
       const cree = await api.creerProgramme(moi.id, nom, exercices, [jour]);
       setProgrammes((liste) => liste.map((p) => (p.id === local.id ? cree : p)));
     } catch (err) {
-      setErreur(err.message || "Séance gardée en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -948,11 +958,14 @@ export default function EntrainementScreen({
     }
     setObjectifsSeries(nouveaux);
     setEditionObjectifs(false);
-    if (!estConnecte) return;
     try {
       await api.definirObjectifsSeries(moi.id, objectifs);
     } catch (err) {
-      setErreur(err.message || "Objectifs gardés en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1034,11 +1047,14 @@ export default function EntrainementScreen({
   async function classerExercice(exercice, groupe) {
     setCorrectionsGroupes((c) => ({ ...c, [exercice]: groupe }));
     setExerciceAClasser(null);
-    if (!estConnecte) return;
     try {
       await api.definirGroupeExercice(moi.id, exercice, groupe);
     } catch (err) {
-      setErreur(err.message || "Classement gardé en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1078,11 +1094,15 @@ export default function EntrainementScreen({
       ...c,
       seances: c.seances.map((s) => (s.id === programme.id ? { ...s, jours } : s)),
     })));
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.changerJoursProgramme(programme.id, jours);
     } catch (err) {
-      setErreur(err.message || "Jours gardés en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1104,12 +1124,16 @@ export default function EntrainementScreen({
         seances: c.seances.map((s) => (s.id === programme.id ? { ...s, nom, exercices } : s)),
       }))
     );
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       if (nom !== programme.nom) await api.renommerProgramme(programme.id, nom);
       await api.changerExercicesProgramme(programme.id, exercices);
     } catch (err) {
-      setErreur(err.message || "Modification gardée en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1120,11 +1144,15 @@ export default function EntrainementScreen({
     const restants = (programme.jours || []).filter((j) => j !== jour);
     setProgrammes((liste) => liste.map((p) => (p.id === programme.id ? { ...p, jours: restants } : p)));
     setJourSemaineOuvert(null);
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.changerJoursProgramme(programme.id, restants);
     } catch (err) {
-      setErreur(err.message || "Changement gardé en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1146,14 +1174,19 @@ export default function EntrainementScreen({
           date_debut: null, cree_le: new Date().toISOString(),
         };
         listeProgrammes = [prog, ...listeProgrammes];
-        if (estConnecte) {
-          try {
-            const cree = await api.creerProgramme(moi.id, seance.nom, seance.exercices, []);
-            listeProgrammes = listeProgrammes.map((p) => (p.id === prog.id ? cree : p));
-            prog = cree;
-          } catch (err) {
-            setErreur(err.message || "Programme gardé en local, l'envoi au serveur a échoué.");
-          }
+        try {
+          const cree = await api.creerProgramme(moi.id, seance.nom, seance.exercices, []);
+          listeProgrammes = listeProgrammes.map((p) => (p.id === prog.id ? cree : p));
+          prog = cree;
+        } catch (err) {
+          // La séance garde son id « local-… » : les dates qui la visent ne
+          // partiront pas au serveur (elles sont filtrées plus bas), et le
+          // message le dit. On ne resynchronise PAS ici : la boucle continue,
+          // le rechargement se fait à la fin.
+          setErreur(
+            `« ${seance.nom} » n'a pas pu être créé côté serveur `
+            + `(${err.message || 'aucune réponse'}).`
+          );
         }
       }
       programmesParNom[seance.nom] = prog;
@@ -1197,7 +1230,6 @@ export default function EntrainementScreen({
     setModeleAPlacer(null);
     setJourOuvert(dateISO);   // on reste sur le jour posé, pour voir le résultat
 
-    if (!estConnecte) return;
     const envoyables = nouveaux.filter((pl) => !String(pl.programme_id).startsWith('local-'));
     if (envoyables.length === 0) return;
     try {
@@ -1205,7 +1237,11 @@ export default function EntrainementScreen({
       // Recharge le planning du serveur : remplace les entrées locales par les vraies.
       setPlanning(await api.planningDuJoueur(moi.id));
     } catch (err) {
-      setErreur(err.message || "Cycle gardé en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1218,12 +1254,16 @@ export default function EntrainementScreen({
     const local = { id: `local-${Date.now()}`, date: dateISO, programme_id: programme.id };
     setPlanning((l) => [...l, local]);
     setChoixProgrammeOuvert(false);
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       const cree = await api.planifierJour(moi.id, dateISO, programme.id);
       setPlanning((l) => l.map((pl) => (pl.id === local.id ? cree : pl)));
     } catch (err) {
-      setErreur(err.message || "Planification gardée en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1237,7 +1277,7 @@ export default function EntrainementScreen({
   // immédiatement, plutôt qu'au prochain passage sur l'onglet.
   async function retirerDuPlanning(planif) {
     setPlanning((l) => l.filter((pl) => pl.id !== planif.id));
-    if (!estConnecte || String(planif.id).startsWith('local-')) return;
+    if (String(planif.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.deplanifierJour(planif.id);
     } catch (err) {
@@ -1354,13 +1394,16 @@ export default function EntrainementScreen({
     reinitialiserFormulaireProgramme();
     setVue('accueil');
 
-    if (!estConnecte) return;
     try {
       const cree = await api.creerCycle(moi.id, nom, seances);
       setCycles((c) => c.map((cy) => (cy.id === cycleLocal.id ? cree : cy)));
       setProgrammes(await api.programmesDuJoueur(moi.id));
     } catch (err) {
-      setErreur(err.message || "Programme gardé en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1383,7 +1426,6 @@ export default function EntrainementScreen({
     setSeanceDeroulee(null);
     setProgrammeEnEdition(null);
 
-    if (!estConnecte) return;
     try {
       for (const seance of seances) {
         if (!String(seance.id).startsWith('local-')) {
@@ -1396,7 +1438,11 @@ export default function EntrainementScreen({
         }
       }
     } catch (err) {
-      setErreur(err.message || "Sortie gardée en local, l'envoi au serveur a échoué.");
+      setErreur(
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
   }
 
@@ -1413,10 +1459,6 @@ export default function EntrainementScreen({
   // toutes les autres : elle est donc éditable, plaçable au calendrier et
   // démarrable, sans rien de particulier à prévoir ailleurs.
   async function ajouterSeanceAuCycle(cycleId, nom, exercices) {
-    if (!estConnecte) {
-      setMessageAjoutSeance("Ajouter une séance à un programme demande d'être connecté.");
-      return;
-    }
     // Une séance de programme se fait UN JOUR donné : sans jour, elle
     // n'apparaîtrait ni dans la semaine, ni au calendrier. Le serveur le
     // refuse déjà — autant le dire ici, avant de partir pour rien.
@@ -1451,7 +1493,7 @@ export default function EntrainementScreen({
     const idsSeances = cycle.seances.map((s) => s.id);
     setCycles((c) => c.filter((cy) => cy.id !== cycle.id));
     setProgrammes((p) => p.filter((prog) => !idsSeances.includes(prog.id)));
-    if (!estConnecte || String(cycle.id).startsWith('local-')) return;
+    if (String(cycle.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.supprimerCycle(cycle.id);
     } catch (err) {
@@ -1478,14 +1520,16 @@ export default function EntrainementScreen({
     };
     setCycles((c) => [cycleLocal, ...c]);
     setProgrammes((p) => [...cycleLocal.seances, ...p]);
-    if (estConnecte) {
-      try {
-        const cree = await api.creerCycle(moi.id, modele.nom, modele.seances);
-        setCycles((c) => c.map((cy) => (cy.id === cycleLocal.id ? cree : cy)));
-        setProgrammes(await api.programmesDuJoueur(moi.id));
-      } catch (err) {
-        setErreur(err.message || "Programme gardé en local, l'envoi au serveur a échoué.");
-      }
+    try {
+      const cree = await api.creerCycle(moi.id, modele.nom, modele.seances);
+      setCycles((c) => c.map((cy) => (cy.id === cycleLocal.id ? cree : cy)));
+      setProgrammes(await api.programmesDuJoueur(moi.id));
+    } catch (err) {
+      setErreur(
+        'Programme NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
     }
     setModeleEnCours(null);
     setModelesOuverts(false);
@@ -1540,7 +1584,7 @@ export default function EntrainementScreen({
 
   async function supprimerProgramme(programme) {
     setProgrammes((p) => p.filter((prog) => prog.id !== programme.id));
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.supprimerProgramme(programme.id);
     } catch (err) {
@@ -1627,11 +1671,6 @@ export default function EntrainementScreen({
   // records, la suggestion de charge et le comptage de séries se calculent
   // depuis l'historique, ils doivent repartir des nouveaux noms.
   async function appliquerRenommages() {
-    if (!estConnecte) {
-      setErreur('Renommage partout impossible hors-ligne : reconnecte-toi.');
-      setRenommages([]);
-      return;
-    }
     setRenommageEnCours(true);
     try {
       for (const { ancien, nouveau } of renommages) {
@@ -1721,13 +1760,15 @@ export default function EntrainementScreen({
       ...c,
       seances: c.seances.map((s) => (s.id === programme.id ? { ...s, exercices } : s)),
     })));
-    if (!estConnecte || String(programme.id).startsWith('local-')) return;
+    if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
     try {
       await api.changerExercicesProgramme(programme.id, exercices);
     } catch (err) {
       setErreur(
-        err.message || "Exercice ajouté en local, l'envoi au serveur a échoué."
+        'Changement NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
+      await chargerTout();
     }
   }
 
@@ -1856,21 +1897,22 @@ export default function EntrainementScreen({
     await stockageSeance.effacerSeanceEnCours();
     setNbEnAttente((n) => n + 1);
 
-    if (estConnecte) {
-      try {
-        const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
-          ? programmeActif.id : null;
-        const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries);
-        // Confirmée par le serveur : elle peut enfin sortir de la file.
-        await stockageSeance.retirerSeanceEnAttente(local.id);
-        setNbEnAttente((n) => Math.max(0, n - 1));
-        setEntrainements((e) => e.map((ent) => (ent.id === local.id ? cree : ent)));
-      } catch (err) {
-        setErreur(
-          err.message
-          || "Séance gardée sur le téléphone : elle repartira toute seule au retour du réseau."
-        );
-      }
+    try {
+      const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
+        ? programmeActif.id : null;
+      const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries);
+      // Confirmée par le serveur : elle peut enfin sortir de la file.
+      await stockageSeance.retirerSeanceEnAttente(local.id);
+      setNbEnAttente((n) => Math.max(0, n - 1));
+      setEntrainements((e) => e.map((ent) => (ent.id === local.id ? cree : ent)));
+    } catch (err) {
+      // LA SEULE MÉMOIRE LOCALE QUI RESTE, ET ELLE N'EST PAS UN « MODE » :
+      // la séance est déjà dans la file d'attente (voir plus haut), elle
+      // repartira toute seule au prochain chargement réussi.
+      setErreur(
+        err.message
+        || "Séance gardée sur le téléphone : elle repartira toute seule au retour du réseau."
+      );
     }
     // LE COMPTEUR DE SÉANCES DU PROFIL — APRÈS L'ENVOI, PAS AVANT (24/09/2026).
     // C'est le SERVEUR qui enregistre la séance du jour en recevant
@@ -2445,11 +2487,10 @@ export default function EntrainementScreen({
       <Text style={styles.sousTitre}>
         Tes programmes et ton journal de séance — indépendant des paliers Fitness Royale.
       </Text>
-      {!estConnecte && (
-        <Text style={styles.indiceHorsLigne}>
-          📡 Hors-ligne : l'app n'a pas pu joindre le serveur, elle affiche un profil de DÉMONSTRATION — ce ne sont PAS tes données. Tes vraies séances et ton programme sont sur le serveur, intacts, et reviendront à la reconnexion.
-        </Text>
-      )}
+      {/* LA BANNIÈRE « 📡 Hors-ligne… » A DISPARU LE 26/09/2026 : l'app
+          n'entre plus sans serveur, donc cet écran ne montre plus jamais un
+          profil de démonstration. Si le serveur ne répond pas, c'est dit
+          AVANT d'entrer (voir App.js et EcranChargement). */}
       {/* L'état du chargement, dit EN HAUT (bug du 16/09/2026) : un écran vide
           sans explication faisait croire que tout avait été effacé. */}
       {donneesIncertaines && (
@@ -2477,7 +2518,7 @@ export default function EntrainementScreen({
           donc le fait brut dès qu'il n'a rien à montrer — le seul cas où la
           question se pose. Un écran vide ne prouve rien, mais celui-ci dit
           enfin POURQUOI il est vide. */}
-      {!donneesIncertaines && estConnecte
+      {!donneesIncertaines
         && programmes.length === 0 && cycles.length === 0 && entrainements.length === 0 && (
         <View style={styles.bandeauCompte}>
           <Text style={styles.texteBandeau}>
@@ -2494,7 +2535,7 @@ export default function EntrainementScreen({
 
       {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
           (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
-      <CarteNutrition moi={moi} estConnecte={estConnecte} actif={actif} />
+      <CarteNutrition moi={moi} actif={actif} />
 
       {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
       <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>
@@ -3690,10 +3731,6 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s,
   },
   detailBandeau: { color: colors.texteGris, fontSize: 12, marginTop: 4, lineHeight: 17 },
-  indiceHorsLigne: {
-    color: colors.texteGris, fontSize: 12, backgroundColor: colors.carteClaire,
-    padding: espacement.s, borderRadius: 10, marginBottom: espacement.m,
-  },
   totalSeries: {
     color: colors.or, fontSize: 13, fontWeight: '800',
     marginTop: -4, marginBottom: espacement.s,

@@ -86,13 +86,13 @@ function uniteLisible(bareme, valeur) {
 
 // `actif` : vrai quand cet onglet est celui qu'on regarde (voir App.js).
 export default function PerformancesScreen({
-  moi, mesPerfs, ajouterPerf, validerPerf, estConnecte, actif = true,
+  moi, mesPerfs, ajouterPerf, actif = true,
 }) {
   const [exerciceChoisi, setExerciceChoisi] = useState(null);
   const [valeur, setValeur] = useState('');
   const [listeOuverte, setListeOuverte] = useState(false);
 
-  // Upload vidéo (compte connecté uniquement).
+  // Upload vidéo.
   const [videosEnvoyees, setVideosEnvoyees] = useState({}); // { exercice: true } — envoyées cette session
   const [envoiEnCours, setEnvoiEnCours] = useState(null); // nom de l'exercice en cours d'envoi
   const [erreurVideo, setErreurVideo] = useState(null);
@@ -170,14 +170,14 @@ export default function PerformancesScreen({
 
   useEffect(() => {
     // En pause hors écran (voir App.js) ; on recharge en revenant sur l'onglet.
-    if (!estConnecte || !actif) return;
+    if (!actif) return undefined;
     chargerVideosAValider();
     // Pas de WebSocket (voir CLAUDE.md) : on re-consulte le serveur
     // régulièrement pour voir apparaître les nouvelles vidéos/perfs des autres
     // (silencieux = pas de spinner, pour ne pas faire clignoter la liste).
     const id = setInterval(() => chargerVideosAValider(true), DELAI_RAFRAICHISSEMENT_MS);
     return () => clearInterval(id);
-  }, [estConnecte, actif]);
+  }, [actif]);
 
   async function chargerVideosAValider(silencieux) {
     if (!silencieux) setChargementVideos(true);
@@ -219,25 +219,19 @@ export default function PerformancesScreen({
     // inchangée) : le parcours choisi ne s'enregistre pas, il déclenche la
     // suite. On ATTEND le serveur avant d'aller plus loin — générer un code ou
     // joindre une vidéo à une perf qu'il ne connaît pas encore échouerait.
-    await ajouterPerf(exo, nombre, statutALEnregistrement);
-
-    if (moi.affilieSalle || parcours === 'non_verifie') {
-      setMessageSaisie(`Perf enregistrée : ${resume}`);
+    // SI LE SERVEUR REFUSE, ON LE DIT (26/09/2026, avec la suppression du mode
+    // hors-ligne) : avant, l'échec faisait basculer l'app en hors-ligne et la
+    // perf restait affichée comme si elle était enregistrée. Inutile d'aller
+    // plus loin (vidéo, code partenaire) : ils portent sur une perf que le
+    // serveur ne connaît pas.
+    const echec = await ajouterPerf(exo, nombre, statutALEnregistrement);
+    if (echec) {
+      setMessageSaisie(`⚠️ Perf NON enregistrée (${resume}) : ${echec}`);
       return;
     }
 
-    // HORS-LIGNE, pas de serveur pour recevoir une vidéo ou émettre un code.
-    // La communauté garde la simulation locale qui existait déjà dans ce mode ;
-    // le code partenaire, lui, n'a aucun sens sans un second téléphone connecté.
-    if (!estConnecte) {
-      if (parcours === 'communaute') {
-        validerPerf(exo);
-        setMessageSaisie(`Perf enregistrée : ${resume} — validation simulée (mode hors-ligne).`);
-      } else {
-        setMessageSaisie(
-          `Perf enregistrée en « déclaré » : le code partenaire demande une connexion.`
-        );
-      }
+    if (moi.affilieSalle || parcours === 'non_verifie') {
+      setMessageSaisie(`Perf enregistrée : ${resume}`);
       return;
     }
 
@@ -254,11 +248,6 @@ export default function PerformancesScreen({
 
     setMessageSaisie(`Perf enregistrée : ${resume}. Donne ce code à ton partenaire :`);
     await genererCode(exo);
-  }
-
-  // Simulation locale (mode hors-ligne uniquement, voir estConnecte plus bas).
-  function validerParCommunaute(exo) {
-    validerPerf(exo);
   }
 
   // Choisit une vidéo dans la pellicule et l'envoie au serveur pour cette perf.
@@ -518,12 +507,11 @@ export default function PerformancesScreen({
                 {st.emoji} {st.libelle}
               </Text>
             </View>
-            {perf.statut === 'non_verifie' && !estConnecte && (
-              <TouchableOpacity style={styles.boutonValider} onPress={() => validerParCommunaute(exo)}>
-                <Text style={styles.boutonValiderTexte}>📹 Envoyer{'\n'}une vidéo</Text>
-              </TouchableOpacity>
-            )}
-            {perf.statut === 'non_verifie' && estConnecte && codeGenere?.exercice === exo && (
+            {/* Le bouton « 📹 Envoyer une vidéo » qui validait la perf sur
+                place a disparu avec le mode hors-ligne (26/09/2026) : c'était
+                une simulation, personne ne validait rien. Restent les deux
+                vrais chemins, ci-dessous. */}
+            {perf.statut === 'non_verifie' && codeGenere?.exercice === exo && (
               <View style={styles.blocCode}>
                 <Text style={styles.codeTexte}>{codeGenere.code}</Text>
                 <TouchableOpacity onPress={() => setCodeGenere(null)}>
@@ -531,7 +519,7 @@ export default function PerformancesScreen({
                 </TouchableOpacity>
               </View>
             )}
-            {perf.statut === 'non_verifie' && estConnecte && codeGenere?.exercice !== exo && (
+            {perf.statut === 'non_verifie' && codeGenere?.exercice !== exo && (
               <View style={{ gap: 6 }}>
                 {videosEnvoyees[exo] ? (
                   <Text style={styles.perfEnAttente}>🕒 Vidéo{'\n'}envoyée</Text>
@@ -585,28 +573,26 @@ export default function PerformancesScreen({
       {erreurVideo && <Text style={styles.messageErreur}>⚠️ {erreurVideo}</Text>}
 
       {/* ---- Valider la perf d'un partenaire avec un code ---- */}
-      {estConnecte && (
-        <View style={styles.carteCode}>
-          <Text style={styles.sectionTitre}>🔑 Valider la perf d'un partenaire</Text>
-          <Text style={styles.indice}>
-            Ton partenaire de salle t'a donné un code juste après sa perf ? Entre-le ici pour la confirmer.
-          </Text>
-          <TextInput
-            style={styles.champ}
-            value={codeSaisi}
-            onChangeText={(t) => setCodeSaisi(t.toUpperCase())}
-            placeholder="Ex. : K7XPQR"
-            placeholderTextColor={colors.texteGris}
-            autoCapitalize="characters"
-          />
-          <TouchableOpacity style={styles.boutonAjouter} onPress={validerAvecCode} disabled={validationEnCours}>
-            {validationEnCours ? <ActivityIndicator color={colors.texte} /> : (
-              <Text style={styles.boutonAjouterTexte}>Valider avec ce code</Text>
-            )}
-          </TouchableOpacity>
-          {messageValidation && <Text style={styles.messageSucces}>{messageValidation}</Text>}
-        </View>
-      )}
+      <View style={styles.carteCode}>
+        <Text style={styles.sectionTitre}>🔑 Valider la perf d'un partenaire</Text>
+        <Text style={styles.indice}>
+          Ton partenaire de salle t'a donné un code juste après sa perf ? Entre-le ici pour la confirmer.
+        </Text>
+        <TextInput
+          style={styles.champ}
+          value={codeSaisi}
+          onChangeText={(t) => setCodeSaisi(t.toUpperCase())}
+          placeholder="Ex. : K7XPQR"
+          placeholderTextColor={colors.texteGris}
+          autoCapitalize="characters"
+        />
+        <TouchableOpacity style={styles.boutonAjouter} onPress={validerAvecCode} disabled={validationEnCours}>
+          {validationEnCours ? <ActivityIndicator color={colors.texte} /> : (
+            <Text style={styles.boutonAjouterTexte}>Valider avec ce code</Text>
+          )}
+        </TouchableOpacity>
+        {messageValidation && <Text style={styles.messageSucces}>{messageValidation}</Text>}
+      </View>
 
       {/* La section « 🤝 Perfs à valider (sans preuve) » a été RETIRÉE le
           01/09/2026 (demande de Hafiz). C'était le chemin de validation le plus
@@ -618,37 +604,33 @@ export default function PerformancesScreen({
           casserait `test_api_validation.py` sans rien gagner. */}
 
       {/* ---- Vidéos des autres joueurs à valider ---- */}
-      {estConnecte && (
-        <>
-          <Text style={styles.sectionTitre}>🎥 Vidéos à valider</Text>
-          <Text style={styles.indice}>
-            Le premier avis compte : valide si la perf te semble réelle, refuse sinon.
-          </Text>
-          {chargementVideos && <ActivityIndicator color={colors.accent} style={{ marginTop: espacement.s }} />}
-          {!chargementVideos && videosAValider.length === 0 && (
-            <Text style={styles.indice}>Aucune vidéo en attente pour l'instant.</Text>
-          )}
-          {videosAValider.map((v) => (
-            <View key={v.id} style={styles.carteVideo}>
-              <Text style={styles.perfNom}>{v.pseudo} · {v.exercice}</Text>
-              <Video
-                source={{ uri: api.urlVideo(v.id) }}
-                style={styles.lecteurVideo}
-                useNativeControls
-                resizeMode="contain"
-              />
-              <View style={styles.ligneVoteBoutons}>
-                <TouchableOpacity style={styles.boutonRefuser} onPress={() => voter(v.id, false)}>
-                  <Text style={styles.boutonRefuserTexte}>❌ Refuser</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.boutonValiderVideo} onPress={() => voter(v.id, true)}>
-                  <Text style={styles.boutonValiderVideoTexte}>✅ Valider</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </>
+      <Text style={styles.sectionTitre}>🎥 Vidéos à valider</Text>
+      <Text style={styles.indice}>
+        Le premier avis compte : valide si la perf te semble réelle, refuse sinon.
+      </Text>
+      {chargementVideos && <ActivityIndicator color={colors.accent} style={{ marginTop: espacement.s }} />}
+      {!chargementVideos && videosAValider.length === 0 && (
+        <Text style={styles.indice}>Aucune vidéo en attente pour l'instant.</Text>
       )}
+      {videosAValider.map((v) => (
+        <View key={v.id} style={styles.carteVideo}>
+          <Text style={styles.perfNom}>{v.pseudo} · {v.exercice}</Text>
+          <Video
+            source={{ uri: api.urlVideo(v.id) }}
+            style={styles.lecteurVideo}
+            useNativeControls
+            resizeMode="contain"
+          />
+          <View style={styles.ligneVoteBoutons}>
+            <TouchableOpacity style={styles.boutonRefuser} onPress={() => voter(v.id, false)}>
+              <Text style={styles.boutonRefuserTexte}>❌ Refuser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.boutonValiderVideo} onPress={() => voter(v.id, true)}>
+              <Text style={styles.boutonValiderVideoTexte}>✅ Valider</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }

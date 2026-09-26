@@ -1,9 +1,12 @@
 // Client API — relie l'app au serveur FastAPI (backend/).
 //
-// MODE HORS-LIGNE : si le serveur ne répond pas (pas lancé, pas sur le même
-// réseau, timeout…), TOUTES les fonctions ci-dessous lèvent une erreur.
-// App.js attrape ces erreurs et retombe sur les données locales (mockData.js).
-// Rien ne casse si le backend n'est pas démarré : l'app reste utilisable.
+// SANS SERVEUR, PAS D'APP (depuis le 26/09/2026 — le mode hors-ligne a été
+// supprimé) : si le serveur ne répond pas (pas lancé, pas sur le même réseau,
+// délai dépassé…), TOUTES les fonctions ci-dessous lèvent une erreur. Au
+// démarrage, App.js s'arrête alors sur un écran « Serveur injoignable » avec un
+// bouton « Réessayer » ; en cours d'utilisation, l'écran concerné dit ce qui
+// n'est pas passé. Plus aucun repli sur des données de démonstration : elles
+// ressemblaient à s'y tromper à un compte vidé de ses séances.
 //
 // ADRESSE DU SERVEUR (depuis le 25/08/2026) : le serveur est HÉBERGÉ EN LIGNE
 // (https://fitnessroyale.onrender.com — voir "Hébergement gratuit" dans
@@ -83,7 +86,7 @@ function obtenirBaseUrl() {
   return 'http://localhost:8000';
 }
 
-// Exposée pour l'affichage (ex. bannière hors-ligne) : utile pour diagnostiquer
+// Exposée pour l'affichage (écran « Serveur injoignable ») : utile pour diagnostiquer
 // un souci de connexion sans avoir à fouiller le code. String(...) en dernier
 // rempart : ne renvoie JAMAIS autre chose qu'une vraie chaîne de caractères,
 // même si obtenirBaseUrl() se comportait mal un jour.
@@ -117,9 +120,9 @@ function joueurDepuisAPI(joueur) {
 }
 
 // Erreur "métier" : le serveur A RÉPONDU mais a refusé (403, 404, 409…).
-// À distinguer d'une vraie coupure réseau (timeout, serveur injoignable) —
-// App.js ne doit PAS basculer en mode hors-ligne pour un simple refus de
-// permission, seulement pour une vraie panne de connexion.
+// À distinguer d'une vraie coupure réseau (délai dépassé, serveur injoignable) :
+// un refus de permission se raconte à l'utilisateur tel quel, il ne veut pas
+// dire que la connexion est perdue.
 export class ErreurAPI extends Error {
   constructor(message, status) {
     super(message);
@@ -144,7 +147,7 @@ function messageErreurDepuis(corps, statutHTTP) {
   return `Erreur serveur (${statutHTTP})`;
 }
 
-// Requête HTTP avec timeout : au-delà de delaiMs, on abandonne (mode hors-ligne).
+// Requête HTTP avec délai maximum : au-delà de delaiMs, on abandonne.
 // delaiMs est réglable au cas par cas (voir verifierConnexion, seul appel qui
 // s'autorise à attendre plus longtemps que DELAI_MAX_MS).
 async function appel(chemin, options = {}, delaiMs = DELAI_MAX_MS) {

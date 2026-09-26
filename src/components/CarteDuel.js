@@ -1,14 +1,18 @@
 // Carte d'un duel BO3 : charge fixe, le plus de reps gagne, premier à 2 victoires.
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import { comptageVictoires } from '../logic/duels';
 
 const QUI_CHOISIT = { moi: 'choisi par toi', lui: 'choisi par lui', ia: "choisi par l'IA" };
 
-export default function CarteDuel({ duel, onJouerRoundIA }) {
+// LECTURE SEULE. Le bouton « Jouer le round de départage » (une simulation
+// par l'IA) a été retiré le 26/09/2026 avec le mode hors-ligne : il ne servait
+// qu'aux duels de démonstration, les seuls à rester « en cours ». Un duel en
+// direct se joue jusqu'au bout sur le téléphone, un duel en ligne est arbitré
+// par le serveur.
+export default function CarteDuel({ duel }) {
   const { moi, lui } = comptageVictoires(duel);
-  const roundEnAttente = duel.rounds.find((r) => r.exercice === null);
 
   return (
     <View style={styles.carte}>
@@ -63,13 +67,6 @@ export default function CarteDuel({ duel, onJouerRoundIA }) {
         );
       })}
 
-      {/* Bouton pour jouer le départage (simulation en attendant le backend) */}
-      {duel.statut === 'en cours' && roundEnAttente && (
-        <TouchableOpacity style={styles.boutonJouer} onPress={onJouerRoundIA}>
-          <Text style={styles.boutonJouerTexte}>🎲 Jouer le round de départage</Text>
-        </TouchableOpacity>
-      )}
-
       <Text style={styles.recompense}>Récompense : +{duel.recompense} pts</Text>
     </View>
   );
@@ -110,13 +107,5 @@ const styles = StyleSheet.create({
   roundReps: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   roundAttente: { color: colors.texteGris, fontSize: 13, flex: 1 },
   roundIssue: { fontSize: 16, marginLeft: 6 },
-  boutonJouer: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    marginTop: espacement.s,
-  },
-  boutonJouerTexte: { color: colors.texte, fontWeight: '700' },
   recompense: { color: colors.or, fontWeight: '700', fontSize: 13, marginTop: espacement.s },
 });

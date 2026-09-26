@@ -1,7 +1,8 @@
-// Écran de connexion / inscription — obligatoire pour utiliser l'app en ligne
-// (chaque joueur a maintenant un compte protégé par mot de passe).
-// Si le serveur est injoignable, App.js ne montre même pas cet écran :
-// l'app bascule directement en mode hors-ligne avec les données locales.
+// Écran de connexion / inscription — OBLIGATOIRE pour utiliser l'app (chaque
+// joueur a un compte protégé par mot de passe).
+// Si le serveur est injoignable, App.js ne montre pas cet écran mais celui qui
+// l'annonce, avec un bouton « Réessayer » : depuis le 26/09/2026 il n'y a plus
+// de mode hors-ligne derrière.
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,

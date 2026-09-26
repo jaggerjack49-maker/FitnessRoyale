@@ -34,7 +34,7 @@ export default function ProfilScreen({
   // `setSeances` n'est plus reçu : cet écran ne fait que LIRE les séances
   // depuis le retrait de la saisie manuelle (elles s'ajoutent désormais
   // uniquement depuis l'onglet Entraînement).
-  moi, joueurs, seances, salle, estConnecte, seDeconnecter,
+  moi, joueurs, seances, salle, seDeconnecter,
   allerA, rafraichir,
 }) {
   const u = moi;
@@ -383,79 +383,75 @@ export default function ProfilScreen({
       </View>
 
       {/* Sécurité du compte : repliée par défaut pour ne pas encombrer le profil. */}
-      {estConnecte && (
-        <View style={styles.carteSecurite}>
-          <TouchableOpacity onPress={() => setSecuriteOuverte(!securiteOuverte)}>
-            <Text style={styles.titreSecurite}>
-              🔒 Sécurité du compte {securiteOuverte ? '▲' : '▼'}
+      <View style={styles.carteSecurite}>
+        <TouchableOpacity onPress={() => setSecuriteOuverte(!securiteOuverte)}>
+          <Text style={styles.titreSecurite}>
+            🔒 Sécurité du compte {securiteOuverte ? '▲' : '▼'}
+          </Text>
+        </TouchableOpacity>
+
+        {securiteOuverte && (
+          <>
+            <Text style={styles.libelleSecurite}>Changer mon mot de passe</Text>
+            <TextInput
+              style={styles.champSecurite}
+              value={ancienMdp}
+              onChangeText={setAncienMdp}
+              placeholder="Mot de passe actuel"
+              placeholderTextColor={colors.texteGris}
+              secureTextEntry
+            />
+            <TextInput
+              style={styles.champSecurite}
+              value={nouveauMdp}
+              onChangeText={setNouveauMdp}
+              placeholder="Nouveau mot de passe (4 caractères min.)"
+              placeholderTextColor={colors.texteGris}
+              secureTextEntry
+            />
+            <TouchableOpacity
+              style={styles.boutonSecurite}
+              onPress={validerChangementMdp}
+              disabled={securiteEnCours}
+            >
+              <Text style={styles.boutonSecuriteTexte}>Changer le mot de passe</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.libelleSecurite}>Code de secours</Text>
+            <Text style={styles.explicationSecurite}>
+              Il sert à récupérer ton compte si tu oublies ton mot de passe
+              (« Mot de passe oublié ? » sur l'écran de connexion). En
+              regénérer un nouveau annule l'ancien.
             </Text>
-          </TouchableOpacity>
-
-          {securiteOuverte && (
-            <>
-              <Text style={styles.libelleSecurite}>Changer mon mot de passe</Text>
-              <TextInput
-                style={styles.champSecurite}
-                value={ancienMdp}
-                onChangeText={setAncienMdp}
-                placeholder="Mot de passe actuel"
-                placeholderTextColor={colors.texteGris}
-                secureTextEntry
-              />
-              <TextInput
-                style={styles.champSecurite}
-                value={nouveauMdp}
-                onChangeText={setNouveauMdp}
-                placeholder="Nouveau mot de passe (4 caractères min.)"
-                placeholderTextColor={colors.texteGris}
-                secureTextEntry
-              />
-              <TouchableOpacity
-                style={styles.boutonSecurite}
-                onPress={validerChangementMdp}
-                disabled={securiteEnCours}
-              >
-                <Text style={styles.boutonSecuriteTexte}>Changer le mot de passe</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.libelleSecurite}>Code de secours</Text>
-              <Text style={styles.explicationSecurite}>
-                Il sert à récupérer ton compte si tu oublies ton mot de passe
-                (« Mot de passe oublié ? » sur l'écran de connexion). En
-                regénérer un nouveau annule l'ancien.
+            {codeSecoursAffiche && (
+              <Text style={styles.codeSecours}>{codeSecoursAffiche}</Text>
+            )}
+            <TouchableOpacity
+              style={styles.boutonSecurite}
+              onPress={regenererCodeSecours}
+              disabled={securiteEnCours}
+            >
+              <Text style={styles.boutonSecuriteTexte}>
+                {codeSecoursAffiche ? 'Regénérer encore' : '🔑 Regénérer mon code de secours'}
               </Text>
-              {codeSecoursAffiche && (
-                <Text style={styles.codeSecours}>{codeSecoursAffiche}</Text>
-              )}
-              <TouchableOpacity
-                style={styles.boutonSecurite}
-                onPress={regenererCodeSecours}
-                disabled={securiteEnCours}
-              >
-                <Text style={styles.boutonSecuriteTexte}>
-                  {codeSecoursAffiche ? 'Regénérer encore' : '🔑 Regénérer mon code de secours'}
-                </Text>
-              </TouchableOpacity>
+            </TouchableOpacity>
 
-              {messageSecurite && (
-                <Text style={[styles.messageSecurite, messageSecurite.erreur && { color: colors.rouge }]}>
-                  {messageSecurite.texte}
-                </Text>
-              )}
-            </>
-          )}
-        </View>
-      )}
+            {messageSecurite && (
+              <Text style={[styles.messageSecurite, messageSecurite.erreur && { color: colors.rouge }]}>
+                {messageSecurite.texte}
+              </Text>
+            )}
+          </>
+        )}
+      </View>
 
       {/* MODE TEST — n'apparaît que sur un compte administrateur (drapeau
           `admin` renvoyé par le serveur, activable uniquement en base). */}
-      {estConnecte && u.admin ? <PanneauModeTest onChangement={rafraichir} /> : null}
+      {u.admin ? <PanneauModeTest onChangement={rafraichir} /> : null}
 
-      {estConnecte && (
-        <TouchableOpacity style={styles.boutonDeconnexion} onPress={seDeconnecter}>
-          <Text style={styles.boutonDeconnexionTexte}>🚪 Se déconnecter</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity style={styles.boutonDeconnexion} onPress={seDeconnecter}>
+        <Text style={styles.boutonDeconnexionTexte}>🚪 Se déconnecter</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }

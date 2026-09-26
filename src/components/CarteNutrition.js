@@ -10,7 +10,7 @@
 // cette relecture : c'est une ESTIMATION, et l'écran le dit.
 //
 // La photo n'est gardée nulle part (ni sur le serveur, ni ici).
-// L'analyse a besoin du serveur ; hors-ligne, la carte l'explique.
+// L'analyse a besoin du serveur (elle passe par lui pour joindre Claude).
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -40,7 +40,7 @@ function Barre({ valeur, objectif, couleur }) {
   );
 }
 
-export default function CarteNutrition({ moi, estConnecte, actif = true }) {
+export default function CarteNutrition({ moi, actif = true }) {
   const [journal, setJournal] = useState(null); // { repas, totaux, objectifs }
   const [analyseEnCours, setAnalyseEnCours] = useState(false);
   const [brouillon, setBrouillon] = useState(null);
@@ -56,7 +56,6 @@ export default function CarteNutrition({ moi, estConnecte, actif = true }) {
   const jour = enISO(new Date());
 
   async function charger() {
-    if (!estConnecte) return;
     try {
       setJournal(await api.journalNutrition(moi.id, jour));
     } catch (erreur) {
@@ -67,8 +66,8 @@ export default function CarteNutrition({ moi, estConnecte, actif = true }) {
   // Rechargé à chaque retour sur l'onglet — même leçon que le bug du 16/09
   // (un premier chargement raté ne doit jamais rester raté).
   useEffect(() => {
-    if (estConnecte && actif) charger();
-  }, [estConnecte, actif, moi.id, jour]);
+    if (actif) charger();
+  }, [actif, moi.id, jour]);
 
   async function analyser(depuisGalerie) {
     setMessage(null);
@@ -178,15 +177,6 @@ export default function CarteNutrition({ moi, estConnecte, actif = true }) {
     } catch (erreur) {
       setMessage({ texte: `Objectif non enregistré : ${erreur.message}`, erreur: true });
     }
-  }
-
-  if (!estConnecte) {
-    return (
-      <View style={styles.carte}>
-        <Text style={styles.titre}>🍽 Nutrition</Text>
-        <Text style={styles.indice}>Connecte-toi pour tenir ton journal alimentaire et analyser tes repas en photo.</Text>
-      </View>
-    );
   }
 
   const totaux = journal?.totaux || { kcal: 0, proteines_g: 0, glucides_g: 0, lipides_g: 0 };

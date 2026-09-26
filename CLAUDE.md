@@ -21,17 +21,19 @@ Hafiz (le créateur) est débutant en programmation : expliquer simplement, comm
   Depuis le 01/09/2026 elle est VRAIMENT enregistrée côté serveur (`PUT /joueurs/{id}/salle`) :
   ce n'est plus un champ local.
 - POINTS de compétition (duels + défis) : DÉPARTAGE des égalités uniquement, jamais le critère principal
-- Défis récurrents : journalier (+20 pts) et hebdomadaire (+100 pts + titre) — CÔTÉ FRONT toujours
-  simulés (bouton "Valider" = simulation locale, comme avant). CÔTÉ BACKEND, désormais réels :
-  voir "Défis récurrents (backend)" ci-dessous. Le lien front↔backend pour les défis est une
-  prochaine étape (voir "À faire").
+- Défis récurrents : journalier (+20 pts) et hebdomadaire (+100 pts + titre) — RÉELS de bout en
+  bout depuis le 24/09/2026 : le serveur les vérifie sur les vraies séances et l'app les valide
+  TOUTE SEULE dès qu'ils sont atteints (plus aucun bouton « Valider »). La simulation locale qui
+  restait pour le mode hors-ligne a disparu avec lui le 26/09/2026.
 - Titres (ex. « Guerrier de la semaine ») : gagnés via défis, affichés au Profil (encore simulés côté front)
 - Classement Salles : palier moyen des membres de chaque salle, départage aux points cumulés
 - DUELS (src/logic/duels.js) : charge fixe, le plus de reps gagne, premier à 2 victoires.
   R1 choisi par le challenger, R2 par l'adversaire, R3 (départage) par l'IA.
-  DEUX façons de jouer maintenant : le duel EN DIRECT (pass-and-play, un seul téléphone,
-  toujours simulé/local, voir ci-dessous) et le duel EN LIGNE (deux téléphones séparés, vrai
-  compte requis, via un code à partager — voir "Duels en ligne à deux téléphones" plus bas).
+  DEUX façons de jouer maintenant : le duel EN DIRECT (pass-and-play, un seul téléphone, arbitré
+  par ce téléphone, voir ci-dessous) et le duel EN LIGNE (deux téléphones séparés, vrai compte
+  requis, via un code à partager — voir "Duels en ligne à deux téléphones" plus bas).
+  Le départage joué par l'IA a été retiré le 26/09/2026 : il ne servait qu'aux duels de
+  démonstration, les seuls à rester « en cours ».
 - DUEL EN DIRECT (src/components/DuelDirect.js) : pass-and-play sur UN téléphone (les deux joueurs
   en salle), le téléphone arbitre. FAIT : le duel à DEUX téléphones existe (code à partager, voir
   "Duels en ligne à deux téléphones") — synchronisé par polling, pas encore par WebSocket (voir
@@ -42,19 +44,23 @@ Hafiz (le créateur) est débutant en programmation : expliquer simplement, comm
   classement global par RANG (1er, 2e…) basé sur le PALIER MOYEN (pas la somme) + relatif par CATÉGORIES DE POIDS (-60/-70/-80/-90/+90 kg), rang au palier moyen dans chaque catégorie
 - Preuve de performance (`src/data/statuts.js`) : Déclaré (suivi perso, hors classement) /
   Vérifié communauté (vidéo) / Vérifié salle (partenaire). Seul le vérifié compte.
-  VÉRIFIÉ COMMUNAUTÉ = maintenant une VRAIE vidéo + un vrai vote d'un autre joueur pour un compte
-  connecté (voir "Upload vidéo + validation communauté" plus bas) ; reste une simulation en mode
-  hors-ligne (pas de serveur à qui envoyer la vidéo).
-- État partagé : `mesPerfs` vit dans App.js, passé en props. Données factices dans mockData.js
-  (servent de repli hors-ligne — voir "Branchement backend" ci-dessous).
-- Test : `npx expo start` (SANS --tunnel si tu veux tester avec le backend, voir plus bas) avec Expo Go.
+  VÉRIFIÉ COMMUNAUTÉ = une VRAIE vidéo + un vrai vote d'un AUTRE joueur (voir "Upload vidéo +
+  validation communauté" plus bas). Plus aucune auto-validation simulée : elle n'existait que pour
+  le mode hors-ligne, supprimé le 26/09/2026.
+- État partagé : `mesPerfs` vit dans App.js, passé en props. Il n'y a PLUS de données factices
+  côté app (`src/data/mockData.js` supprimé le 26/09/2026) : tout vient du serveur, y compris les
+  5 joueurs de démonstration du classement, qu'il crée lui-même à son premier démarrage.
+- ⚠️ IL FAUT UN SERVEUR POUR LANCER L'APP (26/09/2026) : plus de mode hors-ligne, donc en
+  développement le backend doit tourner À CÔTÉ d'`npx expo start`, sinon on n'arrive qu'à l'écran
+  « Serveur injoignable ». Voir la section dédiée plus bas.
+- Test : `npx expo start` (SANS --tunnel si tu veux tester avec le backend local, voir plus bas)
+  avec Expo Go.
 
 - Calories : ESTIMÉES depuis le temps d'entraînement (~8 kcal/min), pas de vraie mesure
-- Séances : saisies par l'utilisateur dans Profil (durée en minutes) ; état mesSeances dans App.js.
-  Restent LOCALES pour l'instant (pas encore envoyées au serveur) — le backend a bien un endpoint
-  pour enregistrer des séances (utilisé par les défis), mais l'app ne l'appelle pas encore
-  automatiquement quand tu ajoutes une séance dans Profil. Prochaine étape si on veut que les
-  défis "réels" du backend se déclenchent depuis l'usage normal de l'app.
+- Séances : enregistrées CÔTÉ SERVEUR depuis le 24/09/2026, au moment où l'entraînement est envoyé
+  (une séance par JOUR, minutes cumulées — voir « Lot du 24/09/2026 »). `mesSeances` dans App.js
+  n'est plus qu'un reflet de ce que le serveur renvoie, et c'est ce qui fait marcher à la fois le
+  compteur du Profil et les défis.
 
 ## Branchement backend (front ↔ API) — fait le 20/07/2026
 
@@ -3517,6 +3523,126 @@ localhost (le bug du 21/09). Rien n'a été cassé en production (le site tourna
 encore sur la construction précédente), et c'est corrigé — mais la leçon est
 simple : **vérifier `git diff app.json` AVANT de commiter, pas après.**
 
+## Le mode hors-ligne est supprimé — 26/09/2026
+
+Demande de Hafiz, en une phrase : « on va supprimer le mode hors-ligne ».
+
+### Ce qu'il faisait, et pourquoi il devait partir
+
+Depuis le tout début, si le serveur ne répondait pas au démarrage, l'app entrait
+QUAND MÊME : elle chargeait `src/data/mockData.js` — un joueur inventé (Hafiz,
+5 perfs), un classement inventé, deux duels inventés — et affichait ses écrans
+habituels. L'intention était bonne (« rien ne casse si le backend n'est pas
+démarré »), mais le résultat était le pire possible : **un profil de
+démonstration ressemble EXACTEMENT à son propre compte vidé de ses données.**
+
+C'est ce qui a fait croire DEUX FOIS à Hafiz que tout avait été effacé (voir les
+sections du 16/09 et du 23/09/2026) : mêmes onglets, même arène, mais plus une
+séance ni un programme. Les deux fois, le serveur allait bien et rien n'avait
+disparu. Le mode hors-ligne ne protégeait donc de rien — il rendait une panne
+réseau indiscernable d'une perte de données.
+
+Et il coûtait cher en code : chaque écran portait une version dégradée derrière
+un drapeau `estConnecte` — défi validé pour de faux, perf « vérifiée » par
+personne, programme « gardé en local » qui n'allait nulle part.
+
+### Ce qui le remplace : on s'arrête, et on le dit
+
+- **Au démarrage**, si le serveur ne répond pas, l'app affiche
+  « SERVEUR INJOIGNABLE », la raison, **l'adresse appelée** (la première chose à
+  vérifier) et un bouton **« ↻ RÉESSAYER »** qui rejoue exactement le démarrage.
+  C'est le même écran illustré que l'attente (`EcranChargement`), avec un
+  troisième état — pas une nouvelle page à maintenir.
+- **En cours d'utilisation**, une action qui n'atteint pas le serveur n'est plus
+  « gardée en local » : l'écran le DIT et se **resynchronise** sur la vérité du
+  serveur (`chargerTout()`), comme le faisaient déjà les suppressions depuis le
+  04/09/2026. Une perf refusée affiche « ⚠️ Perf NON enregistrée (…) » au lieu
+  de rester à l'écran comme si elle était sauvée.
+- ⚠️ LE MESSAGE D'ABORD, LE DÉTAIL ENSUITE : un premier jet mettait la phrase
+  française en REPLI de `err.message` (`err.message || "…"`). Or le navigateur
+  dit toujours quelque chose — « Failed to fetch » — donc la phrase n'était
+  JAMAIS affichée. Vu à l'écran, corrigé : la phrase passe devant, le détail
+  technique va entre parenthèses.
+
+### CE QUI RESTE LOCAL, et n'est PAS un mode hors-ligne
+
+`src/stockageSeance.js` ne bouge pas : la **séance en cours** et la **file des
+séances terminées pas encore envoyées** restent dans AsyncStorage. C'est un
+filet contre la PERTE (coupure en pleine salle, base Neon endormie, app fermée
+pendant l'envoi), pas une app parallèle — une séance sort de la file seulement
+quand le serveur confirme. Un test dédié empêche de les supprimer « pour finir
+le ménage ».
+En revanche, `memoriserJoueurConnecte` / `lireJoueurMemorise` ont disparu : ils
+n'existaient que pour ranger une séance faite sous l'identité de démonstration.
+Le compte est désormais toujours connu, donc `moi.id` suffit (le paramètre
+`idStockage` d'`EntrainementScreen` disparaît avec eux).
+
+### ⚠️ CE QU'ON PERD, ASSUMÉ
+
+**Une séance interrompue n'est plus reprenable si l'app est relancée sans
+réseau** : on reste bloqué à l'écran « Serveur injoignable ». Tant que l'app
+n'est pas fermée, la séance continue normalement (elle vit dans l'écran, et sa
+mémoire locale la protège d'un changement d'onglet). Si le besoin se présente,
+il faudra un chemin explicite « continuer ma séance sans serveur » — pas le
+retour d'un mode complet qui fait semblant d'être l'app.
+
+### Le détail des suppressions
+
+- `src/data/mockData.js` : **supprimé** (joueur, classement et duels factices).
+  Les défis récurrents n'en avaient plus besoin : leurs libellés viennent du
+  serveur (`GET /joueurs/{id}/defis`).
+- `estConnecte` : le prop n'existe plus NULLE PART (Profil, Perfs, Entraînement,
+  Compétition, Clan, CarteNutrition). Chaque branche « pas connecté » a été
+  retirée, jamais la branche connectée.
+- App.js : plus d'état `enLigne`, plus de bannière « 📡 Mode hors-ligne », plus
+  de `validerDefi`/`defisFaits` (simulation locale), plus de `validerPerf`
+  (auto-validation), plus de `jouerDepartage` (le départage IA des faux duels).
+  `ajouterPerf` RENVOIE maintenant l'erreur au lieu de la ravaler.
+- `PerformancesScreen` : le bouton « 📹 Envoyer une vidéo » qui validait la perf
+  sur place a disparu — c'était une simulation. Restent les deux vrais chemins
+  (vidéo à faire voter, code partenaire).
+- `EntrainementScreen` : 9 gardes `!estConnecte || …` et 8 `if (!estConnecte)
+  return;` retirés ; 13 messages « gardé en local » réécrits. Les ids
+  provisoires `local-…` RESTENT : ce sont des placeholders d'affichage le temps
+  que le serveur réponde (et, si la création échoue, ce qui reste à l'écran
+  jusqu'à la resynchro), pas un stockage hors-ligne.
+
+### Vérifié
+
+Tests : `backend/tests/test_plus_de_mode_hors_ligne.py` — 5 cas qui verrouillent
+une ABSENCE (même méthode que « aucun moyen de lister les programmes des
+autres », 01/09/2026) : mockData n'existe plus, personne ne l'importe,
+`estConnecte` n'est nulle part, App.js n'a plus d'état « hors-ligne » et a bien
+l'écran d'échec, et la file d'attente des séances est toujours là. **Les cinq
+ont été vus ÉCHOUER** en réintroduisant chaque régression une par une (fichier
+recréé, import ajouté, `estConnecte` remis, `setEnLigne` remis, export de la
+file retiré). Suite complète : **311 tests, tous OK.**
+
+DANS L'APP (navigateur, backend LOCAL, compte de test local) :
+- serveur coupé au démarrage → « SERVEUR INJOIGNABLE », la raison en français,
+  l'adresse appelée, et « ↻ RÉESSAYER » ;
+- « Réessayer » serveur toujours coupé → **un espion sur `fetch` montre 2 appels
+  à `/sante-base`** (l'essai rapide puis l'essai patient) : le bouton AGIT, il ne
+  repeint pas l'écran (leçon de méthode du 14/09) ;
+- serveur rallumé puis « Réessayer » → l'app entre, `/auth/moi` →
+  `/joueurs/36/seances` → `/défis` → `/joueurs`, et les six onglets s'affichent
+  sur le VRAI compte (Profil, Perfs, Paliers, Compétition, Entraînement, Clan),
+  sans une erreur console ;
+- perf enregistrée serveur coupé → « ⚠️ Perf NON enregistrée (Squat · 10 × 123
+  kg) : le serveur n'a pas répondu… » ; au retour du serveur, la liste réaffiche
+  les 120 kg qu'il connaît, pas les 123 jamais enregistrés ;
+- jour de semaine coché serveur coupé → la puce bouge, puis le bandeau du haut
+  dit « n'ont pas pu être chargés » avec le détail « Changement NON enregistré
+  côté serveur (Failed to fetch) » ; serveur rallumé, **l'essai automatique
+  remet tout seul « Lun Mar Jeu »** — la puce fantôme disparaît.
+
+⚠️ PIÈGE DE VÉRIFICATION rencontré : pour tester contre le backend local sans
+toucher `app.json` (l'incident du 24/09), j'ai voulu passer `API_URL` par
+`.claude/launch.json` — `cmd /c set "X=…" && …` s'est fait manger par le
+lanceur (il a affiché tout l'environnement au lieu de définir la variable).
+Repli sur la méthode documentée : `apiUrl` à `null` le temps du test, restauré
+ensuite, `git diff app.json` vérifié AVANT le commit (vide).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3529,8 +3655,8 @@ simple : **vérifier `git diff app.json` AVANT de commiter, pas après.**
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (306 tests, tous OK).
-- À FAIRE : brancher défis/séances au front (voir "À faire" plus bas).
+- Tests : `cd backend && python -m unittest discover tests` (311 tests, tous OK).
+- Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
 
@@ -3559,9 +3685,11 @@ simple : **vérifier `git diff app.json` AVANT de commiter, pas après.**
   n'appelle pas cet endpoint, mais à regrouper AVANT d'afficher cet historique.
 - Vraies illustrations d'avatar (physique/équipement qui évolue) — actuellement juste
   couleur/anneau/emblème, voir "Avatar évolutif"
-- Persistance hors-ligne des PROGRAMMES (AsyncStorage) — un programme créé hors-ligne est encore
-  perdu si l'app redémarre avant reconnexion. Les SÉANCES LOGGÉES, elles, ne le sont plus depuis
-  le 07/09/2026 (voir « Entraînement v5 »)
+- Reprendre une séance interrompue SANS serveur : impossible depuis le 26/09/2026 (on reste à
+  l'écran « Serveur injoignable »). La séance n'est pas perdue — elle attend dans la mémoire
+  locale — mais on ne peut pas continuer à s'entraîner tant que le serveur ne répond pas. À
+  traiter par un chemin explicite si le besoin se présente, jamais par le retour d'un mode
+  hors-ligne complet (voir « Le mode hors-ligne est supprimé »)
 - Champ durée explicite pour une séance loggée (Entraînement) — actuellement estimée automatiquement
   (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement"
 - Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait

@@ -3,7 +3,8 @@
 //
 // TOUT SE CALCULE ICI, CÔTÉ APP : ces fonctions ne lisent que la liste
 // `entrainements` déjà chargée par l'écran Entraînement. Aucun appel au
-// serveur, donc ça marche aussi en mode hors-ligne.
+// serveur — une aide affichée pendant la séance ne doit pas dépendre du
+// réseau, et surtout pas attendre une réponse entre deux séries.
 //
 // Rappel du format : un entraînement = { date: 'AAAA-MM-JJ', series: [
 //   { exercice, numero_serie, reps, poids }, ... ] }

@@ -1,11 +1,16 @@
 // L'ÉCRAN D'ATTENTE DU DÉMARRAGE — le tout premier écran de l'app.
 //
-// Il couvre deux moments (voir App.js) :
+// Il couvre trois moments (voir App.js) :
 //  - « Connexion au serveur… » : le cas normal, une seconde ou deux ;
 //  - « Réveil du serveur… » : l'hébergement gratuit (Render) met le service
 //    en veille après 15 min d'inactivité et peut mettre jusqu'à une minute à
 //    répondre. Ce second message existe POUR ÉVITER DE CROIRE À UNE PANNE —
-//    c'est la raison d'être de cet écran, pas une décoration.
+//    c'est la raison d'être de cet écran, pas une décoration ;
+//  - « Serveur injoignable » (26/09/2026) : le point d'arrivée quand il ne
+//    répond vraiment pas. C'EST LE REMPLAÇANT DU MODE HORS-LIGNE : avant,
+//    l'app entrait quand même, avec un profil de démonstration qu'on pouvait
+//    prendre pour son propre compte vidé de ses données. Ici on s'arrête, on
+//    dit l'adresse appelée et on propose de réessayer.
 //
 // LE FOND est l'illustration fournie par Hafiz (06/09/2026), préparée par
 // `scripts/preparer_fond_chargement.py`. Ce script COUPE le bandeau peint
@@ -17,7 +22,8 @@
 //    on ne prétend pas afficher un pourcentage.
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ImageBackground, Animated, Easing, Dimensions, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ImageBackground, Animated, Easing,
+  Dimensions, Platform,
 } from 'react-native';
 import { colors } from '../theme';
 import { da } from '../designSystem';
@@ -78,7 +84,10 @@ function BarreIndeterminee() {
   );
 }
 
-export default function EcranChargement({ reveil }) {
+// `erreur` : le message du serveur muet (null = on attend encore).
+// `adresse` : l'adresse appelée — la première chose à vérifier quand ça ne
+// répond pas (serveur local pas lancé, mauvaise adresse dans app.json…).
+export default function EcranChargement({ reveil, erreur, adresse, onReessayer }) {
   return (
     <ImageBackground
       source={FOND}
@@ -93,15 +102,32 @@ export default function EcranChargement({ reveil }) {
       <View style={styles.voile} />
 
       <View style={styles.bandeau}>
-        <Text style={styles.message}>
-          {reveil ? 'RÉVEIL DU SERVEUR…' : 'CONNEXION AU SERVEUR…'}
-        </Text>
-        <BarreIndeterminee />
-        <Text style={styles.precision}>
-          {reveil
-            ? 'Il dormait — jusqu\'à 1 minute, c\'est normal'
-            : '— PLUS FORTS ENSEMBLE —'}
-        </Text>
+        {erreur ? (
+          <>
+            <Text style={styles.message}>SERVEUR INJOIGNABLE</Text>
+            <Text style={styles.erreur}>{erreur}</Text>
+            <TouchableOpacity style={styles.boutonReessayer} onPress={onReessayer}>
+              <Text style={styles.boutonReessayerTexte}>↻ RÉESSAYER</Text>
+            </TouchableOpacity>
+            <Text style={styles.precision}>
+              Fitness Royale a besoin du serveur : tes séances, tes perfs et le
+              classement vivent là-bas, jamais sur le téléphone.
+            </Text>
+            {adresse ? <Text style={styles.adresse}>Adresse appelée : {adresse}</Text> : null}
+          </>
+        ) : (
+          <>
+            <Text style={styles.message}>
+              {reveil ? 'RÉVEIL DU SERVEUR…' : 'CONNEXION AU SERVEUR…'}
+            </Text>
+            <BarreIndeterminee />
+            <Text style={styles.precision}>
+              {reveil
+                ? 'Il dormait — jusqu\'à 1 minute, c\'est normal'
+                : '— PLUS FORTS ENSEMBLE —'}
+            </Text>
+          </>
+        )}
       </View>
     </ImageBackground>
   );
@@ -151,6 +177,30 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   reflet: { height: '100%', backgroundColor: da.or },
+  erreur: {
+    color: colors.texte,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  boutonReessayer: {
+    backgroundColor: da.or,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+  },
+  boutonReessayerTexte: {
+    color: '#12100a', fontWeight: '900', fontSize: 14, letterSpacing: 1.5,
+  },
+  adresse: {
+    color: colors.texteGris,
+    fontSize: 10,
+    marginTop: 8,
+    textAlign: 'center',
+  },
   precision: {
     color: colors.texteGris,
     fontSize: 11,

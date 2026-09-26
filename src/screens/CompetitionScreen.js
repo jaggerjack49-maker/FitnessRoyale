@@ -64,11 +64,11 @@ function LigneJoueurExercice({ joueur, index, unite }) {
 // Carte d'un défi récurrent (journalier / hebdomadaire).
 // UN DÉFI TEL QUE LE SERVEUR LE VOIT (24/09/2026).
 // `fait` = déjà validé (la récompense est donnée) ; `reussi` = les conditions
-// sont remplies. Plus aucun bouton « Valider » quand on est connecté : l'app
-// valide toute seule dès que c'est gagné (demande de Hafiz).
-// `onValider` ne sert plus qu'au mode HORS-LIGNE, où il n'y a pas de serveur
-// pour vérifier quoi que ce soit — la simulation d'origine y reste.
-function CarteDefiRecurrent({ defi, fait, reussi, automatique, onValider }) {
+// sont remplies. AUCUN bouton « Valider » : l'app valide toute seule dès que
+// c'est gagné (demande de Hafiz). La simulation locale qui restait pour le mode
+// hors-ligne a disparu avec lui le 26/09/2026 — sans serveur, personne ne peut
+// vérifier qu'une séance a vraiment été faite.
+function CarteDefiRecurrent({ defi, fait, reussi }) {
   return (
     <View style={[styles.carteRecurrent, fait && styles.carteRecurrentFait]}>
       <View style={{ flex: 1 }}>
@@ -79,7 +79,7 @@ function CarteDefiRecurrent({ defi, fait, reussi, automatique, onValider }) {
         <Text style={styles.recurrentRecompense}>
           +{defi.points} pts{defi.titreRecompense ? ` • Titre : « ${defi.titreRecompense} »` : ''}
         </Text>
-        {automatique && !fait && (
+        {!fait && (
           <Text style={styles.recurrentEtat}>
             {reussi
               ? '✔️ Réussi — la récompense arrive…'
@@ -87,38 +87,31 @@ function CarteDefiRecurrent({ defi, fait, reussi, automatique, onValider }) {
           </Text>
         )}
       </View>
-      {fait ? (
-        <Text style={styles.recurrentFaitTexte}>✅ Fait</Text>
-      ) : automatique ? null : (
-        <TouchableOpacity style={styles.boutonValider} onPress={onValider}>
-          <Text style={styles.boutonValiderTexte}>Valider</Text>
-        </TouchableOpacity>
-      )}
+      {fait ? <Text style={styles.recurrentFaitTexte}>✅ Fait</Text> : null}
     </View>
   );
 }
 
 export default function CompetitionScreen({
-  joueurs, moi, duels, jouerDepartage, terminerDuelDirect, defisRecurrents, defisFaits, validerDefi,
-  estConnecte, rafraichirMonProfil, demandeDuel, actif = true,
+  joueurs, moi, duels, terminerDuelDirect,
+  rafraichirMonProfil, demandeDuel, actif = true,
   etatDefis = null, verifierDefis,
 }) {
   // On regarde les défis en arrivant sur l'onglet : si une séance a été faite
   // entre-temps, la récompense est donnée sans que rien ne soit à toucher.
   useEffect(() => {
-    if (actif && estConnecte && verifierDefis) verifierDefis();
-  }, [actif, estConnecte]);
+    if (actif && verifierDefis) verifierDefis();
+  }, [actif]);
 
-  // L'état du serveur prime ; hors-ligne, on retombe sur la simulation locale.
-  const defisAffiches = etatDefis
-    ? etatDefis.map((d) => ({
-        id: d.id, titre: d.titre, description: d.description, points: d.points,
-        titreRecompense: d.titre_recompense,
-        fait: d.deja_valide, reussi: d.reussi, automatique: true,
-      }))
-    : defisRecurrents.map((d) => ({
-        ...d, fait: !!defisFaits[d.id], reussi: false, automatique: false,
-      }));
+  // LES DÉFIS VIENNENT DU SERVEUR, ET DE LUI SEUL (26/09/2026) : c'est lui qui
+  // sait quelles séances ont été faites. `etatDefis` est null tant qu'on ne les
+  // a pas lus — on le dit, au lieu d'afficher des défis « pas encore réussis »
+  // qui seraient une pure invention.
+  const defisAffiches = (etatDefis || []).map((d) => ({
+    id: d.id, titre: d.titre, description: d.description, points: d.points,
+    titreRecompense: d.titre_recompense,
+    fait: d.deja_valide, reussi: d.reussi,
+  }));
   const [onglet, setOnglet] = useState('classement'); // 'classement' ou 'defis'
   const [mode, setMode] = useState('global'); // 'global' | 'relatif' | 'exercice' | 'salles'
   const [exerciceChoisi, setExerciceChoisi] = useState(listeExercicesClassement[0]);
@@ -285,33 +278,38 @@ export default function CompetitionScreen({
                 Vous êtes deux dans la salle ? Le téléphone arbitre.
               </Text>
             </TouchableOpacity>
-            {estConnecte && (
-              <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setDuelEnLigneActif(true)}>
-                <Text style={styles.boutonDuelDirectTexte}>🌐 Duel en ligne (à deux téléphones)</Text>
-                <Text style={styles.boutonDuelDirectSousTexte}>
-                  Crée un duel et partage un code, ou rejoins-en un.
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setDuelEnLigneActif(true)}>
+              <Text style={styles.boutonDuelDirectTexte}>🌐 Duel en ligne (à deux téléphones)</Text>
+              <Text style={styles.boutonDuelDirectSousTexte}>
+                Crée un duel et partage un code, ou rejoins-en un.
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setTestPompesActif(true)}>
               <Text style={styles.boutonDuelDirectTexte}>🧪 Tester le compteur de pompes</Text>
               <Text style={styles.boutonDuelDirectSousTexte}>
                 Prototype du duel de pompes : la caméra compte tes pompes, face au téléphone.
               </Text>
             </TouchableOpacity>
+            {etatDefis === null && (
+              <Text style={styles.explication}>⏳ Chargement des défis…</Text>
+            )}
             {defisAffiches.map((defi) => (
               <CarteDefiRecurrent
                 key={defi.id}
                 defi={defi}
                 fait={defi.fait}
                 reussi={defi.reussi}
-                automatique={defi.automatique}
-                onValider={() => validerDefi(defi)}
               />
             ))}
-            <Text style={styles.sectionTitre}>Mes duels — premier à 2 victoires</Text>
+            {/* L'historique des duels EN DIRECT joués depuis le lancement de
+                l'app (les duels de démonstration ont disparu le 26/09/2026 avec
+                le mode hors-ligne). Celui des duels EN LIGNE, que le serveur
+                garde pourtant, n'est pas encore affiché — voir « À faire ». */}
+            {duels.length > 0 && (
+              <Text style={styles.sectionTitre}>Mes duels — premier à 2 victoires</Text>
+            )}
             {duels.map((duel) => (
-              <CarteDuel key={duel.id} duel={duel} onJouerRoundIA={() => jouerDepartage(duel.id)} />
+              <CarteDuel key={duel.id} duel={duel} />
             ))}
           </>
         )}
@@ -474,12 +472,4 @@ const styles = StyleSheet.create({
   recurrentRecompense: { color: colors.or, fontSize: 12, fontWeight: '700', marginTop: 4 },
   recurrentEtat: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
   recurrentFaitTexte: { color: colors.vert, fontWeight: '800', marginLeft: 8 },
-  boutonValider: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginLeft: 8,
-  },
-  boutonValiderTexte: { color: colors.texte, fontWeight: '700' },
 });

@@ -2,15 +2,20 @@
 // L'état des performances de l'utilisateur vit ICI (App) et est partagé
 // avec les écrans : quand tu ajoutes une perf, tout se met à jour.
 //
-// COMPTES : au démarrage, l'app essaie de joindre le serveur FastAPI
-// (src/api.js). Si le serveur répond mais qu'on n'a pas de session valide,
-// l'écran de connexion/inscription s'affiche (src/screens/ConnexionScreen.js).
-// Le token de connexion est gardé dans AsyncStorage pour ne pas avoir à se
-// reconnecter à chaque lancement. Si le serveur ne répond PAS DU TOUT (pas
-// lancé, pas sur le même réseau…), l'app saute la connexion et retombe sur
-// les données locales de mockData.js — MODE HORS-LIGNE, rien ne casse.
-// Les duels et défis restent simulés localement pour l'instant (voir
-// CLAUDE.md : "duels en ligne" est une prochaine étape de la roadmap).
+// IL FAUT UN SERVEUR ET UN COMPTE — le « mode hors-ligne » a été SUPPRIMÉ
+// le 26/09/2026 (demande de Hafiz). Au démarrage, l'app joint le serveur
+// FastAPI (src/api.js) :
+//   - il ne répond pas  → on le DIT, avec un bouton « Réessayer ». Avant,
+//     l'app basculait sur un profil de DÉMONSTRATION (src/data/mockData.js,
+//     supprimé ce jour-là) qui
+//     ressemblait à s'y tromper à un compte vidé de ses données : c'est ce qui
+//     a fait croire deux fois à Hafiz que ses séances avaient disparu ;
+//   - il répond sans session valide → écran de connexion/inscription
+//     (src/screens/ConnexionScreen.js). Le token est gardé dans AsyncStorage
+//     pour ne pas avoir à se reconnecter à chaque lancement.
+// CE QUI RESTE LOCAL, et n'a rien à voir avec un « mode » : la séance EN COURS
+// et la file des séances terminées pas encore envoyées (src/stockageSeance.js)
+// — un filet contre la perte, pas une app parallèle.
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, ScrollView, Dimensions,
@@ -19,8 +24,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './src/theme';
-import { utilisateur, autresJoueurs, duels, defiJournalier, defiHebdo } from './src/data/mockData';
-import { jouerRoundIA } from './src/logic/duels';
 import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
 import useRetour from './src/useRetour';
@@ -63,17 +66,6 @@ const ONGLETS = [
 // Point d'entrée réel : enveloppe AppInterne dans un filet de sécurité
 // (voir src/components/LimiteErreur.js) pour afficher un diagnostic clair
 // en cas de plantage au rendu, au lieu de l'écran générique d'Expo Go.
-// Les séances de DÉMONSTRATION (mode hors-ligne). mockData ne donne que des
-// durées ; on les date sur les derniers jours pour que le compteur « Cette
-// semaine » du Profil montre quelque chose de cohérent sans compte connecté.
-function seancesDeDemonstration() {
-  return (utilisateur.seances || []).map((minutes, index) => {
-    const jour = new Date();
-    jour.setDate(jour.getDate() - index);
-    return { date: enISO(jour), minutes };
-  });
-}
-
 export default function App() {
   return (
     <LimiteErreur>
@@ -155,111 +147,114 @@ function AppInterne() {
     setOngletActif(cle);
     if (options && options.duel) setDemandeDuel((n) => n + 1);
   }
-  const [mesPerfs, setMesPerfs] = useState(utilisateur.performances);
+  // TOUT VIENT DU SERVEUR : ces états ne sont qu'un reflet de mon compte,
+  // rempli à la connexion. Aucune valeur de démonstration — un écran vide
+  // avant la première réponse, c'est plus honnête qu'un faux profil.
+  const [mesPerfs, setMesPerfs] = useState({});
   // LES SÉANCES VIENNENT DU SERVEUR (24/09/2026) : [{ date, minutes }, …].
   // Avant, c'était un simple tableau de MINUTES vivant dans cet état — remis à
   // zéro à chaque connexion et jamais envoyé au serveur. Le compteur « Cette
   // semaine » du Profil repartait donc de zéro à chaque lancement, et les défis
   // (qui, eux, lisent les séances du serveur) n'étaient jamais réussis.
-  // Hors-ligne, on garde les séances faites sur ce téléphone en attendant.
-  const [mesSeances, setMesSeances] = useState(seancesDeDemonstration);
-  const [maSalle, setMaSalle] = useState(utilisateur.salle);
-  const [mesPoints, setMesPoints] = useState(utilisateur.points);
-  const [mesTitres, setMesTitres] = useState(utilisateur.titres);
-  const [defisFaits, setDefisFaits] = useState({}); // simulation LOCALE (hors-ligne uniquement)
-  // L'état RÉEL des défis, tel que le serveur le calcule depuis les séances.
-  // null tant qu'on ne l'a pas lu (hors-ligne, il reste null).
+  const [mesSeances, setMesSeances] = useState([]);
+  const [maSalle, setMaSalle] = useState('');
+  const [mesPoints, setMesPoints] = useState(0);
+  const [mesTitres, setMesTitres] = useState([]);
+  // L'état des défis, tel que le serveur le calcule depuis les vraies séances
+  // (null tant qu'on ne l'a pas lu). Il n'y a plus de simulation locale : sans
+  // serveur, personne ne peut vérifier qu'un défi est réussi.
   const [etatDefis, setEtatDefis] = useState(null);
-  const [mesDuels, setMesDuels] = useState(duels);
+  // L'historique des duels EN DIRECT (pass-and-play, un seul téléphone) joués
+  // depuis le lancement de l'app. Il commence vide : les duels de
+  // démonstration ont disparu avec le fichier mockData.js, supprimé.
+  const [mesDuels, setMesDuels] = useState([]);
 
   // ----- Comptes & branchement backend -----
   const [chargement, setChargement] = useState(true); // true pendant la vérification initiale
   const [reveil, setReveil] = useState(false); // true pendant l'attente du réveil du serveur (hébergement gratuit, voir CLAUDE.md)
-  const [enLigne, setEnLigne] = useState(false); // true si le SERVEUR répond (avec ou sans compte connecté)
+  // LE SERVEUR N'A PAS RÉPONDU : le message à afficher (null = tout va bien).
+  // C'est le remplaçant du mode hors-ligne : on s'arrête et on le dit, au lieu
+  // de faire semblant avec des données de démonstration.
+  const [erreurServeur, setErreurServeur] = useState(null);
   const [moiServeur, setMoiServeur] = useState(null); // mon compte réel (null = pas connecté)
   const [joueursServeur, setJoueursServeur] = useState(null); // autres joueurs venant du serveur
-  // SOUS QUEL COMPTE RANGER LES SÉANCES SUR CE TÉLÉPHONE (07/09/2026).
-  // Ce n'est PAS forcément `moi.id` : sans réseau, l'app retombe sur
-  // l'identité de démonstration, alors que la séance doit rester rattachée au
-  // vrai compte pour repartir au serveur une fois le réseau revenu.
-  const [idStockage, setIdStockage] = useState(null);
-
-  // Au tout premier rendu, on relit le dernier compte connu (le serveur, lui,
-  // n'a peut-être pas encore répondu — ou pas du tout).
-  useEffect(() => {
-    let annule = false;
-    stockageSeance.lireJoueurMemorise().then((id) => {
-      if (!annule && id !== null) setIdStockage((actuel) => actuel ?? id);
-    });
-    return () => { annule = true; };
-  }, []);
 
   // Applique les données d'un compte fraîchement connecté (login, inscription,
   // ou session retrouvée dans AsyncStorage au démarrage).
-  // BUG CORRIGÉ (26/07/2026) : mesDuels/defisFaits/mesSeances sont des états
-  // 100% LOCAUX (jamais envoyés au serveur, voir décisions dans CLAUDE.md) —
-  // ils ne se réinitialisaient pas quand on changeait de compte, donc un
-  // nouveau compte voyait les duels/défis simulés du compte précédent (ou de
-  // mockData.js). Ces états vivent dans AppInterne, qui ne redémarre PAS à la
-  // connexion (seul l'écran affiché change) : il faut donc les remettre à
-  // zéro explicitement ici à chaque connexion.
+  // BUG CORRIGÉ (26/07/2026) : `mesDuels` (l'historique des duels en direct)
+  // vit dans AppInterne, qui ne redémarre PAS à la connexion — seul l'écran
+  // affiché change. Sans remise à zéro explicite ici, un nouveau compte
+  // voyait les duels du compte précédent.
   function entrerEnLigne(joueur) {
     setMoiServeur(joueur);
-    // On retient QUEL compte est connecté sur ce téléphone, pour que les
-    // séances faites plus tard SANS réseau soient rangées sous lui — et non
-    // sous l'identité de démonstration (voir src/stockageSeance.js).
-    stockageSeance.memoriserJoueurConnecte(joueur.id);
-    setIdStockage(joueur.id);
     setMesPerfs(joueur.performances);
     setMaSalle(joueur.salle || '');
     setMesPoints(joueur.points || 0);
     setMesTitres(joueur.titres || []);
     setMesDuels([]);
-    setDefisFaits({});
     setMesSeances([]);
-    setEnLigne(true);
     chargerSeances(joueur.id);
     verifierDefis(joueur.id);
   }
 
-  // Au démarrage : on regarde si le serveur répond, puis si on a une session
-  // sauvegardée (AsyncStorage) encore valide. Si le serveur ne répond PAS DU
-  // TOUT, on saute direct en mode hors-ligne avec mockData — pas de compte à
-  // proposer puisqu'il n'y a personne à qui parler.
-  useEffect(() => {
-    let annule = false;
-    (async () => {
-      try {
-        await api.verifierConnexion(() => { if (!annule) setReveil(true); });
-        if (annule) return;
-        setReveil(false);
-        setEnLigne(true);
+  // LE DÉMARRAGE — et le bouton « Réessayer », qui rejoue exactement la même
+  // chose. On regarde si le serveur répond, puis si on a une session
+  // sauvegardée (AsyncStorage) encore valide. S'il ne répond pas, on s'arrête
+  // là et on l'annonce : il n'y a plus de repli hors-ligne.
+  // `numeroEssai` évite qu'un essai abandonné (l'app fermée, ou un second
+  // « Réessayer » plus rapide) vienne écraser l'état du plus récent.
+  const numeroEssai = useRef(0);
+  async function demarrer() {
+    numeroEssai.current += 1;
+    const essai = numeroEssai.current;
+    const encoreAJour = () => numeroEssai.current === essai;
+    setChargement(true);
+    setErreurServeur(null);
+    try {
+      await api.verifierConnexion(() => { if (encoreAJour()) setReveil(true); });
+      if (!encoreAJour()) return;
+      setReveil(false);
 
-        const tokenSauvegarde = await AsyncStorage.getItem(CLE_TOKEN);
-        if (tokenSauvegarde) {
-          api.definirToken(tokenSauvegarde);
-          try {
-            const joueur = await api.monProfil();
-            if (!annule) entrerEnLigne(joueur);
-          } catch {
-            // Token périmé ou compte supprimé : on l'oublie, l'écran de
-            // connexion s'affichera pour que l'utilisateur se reconnecte.
-            await AsyncStorage.removeItem(CLE_TOKEN);
-            api.definirToken(null);
-          }
-        }
-        const joueurs = await api.listerJoueurs().catch(() => null);
-        if (!annule && joueurs) setJoueursServeur(joueurs);
-      } catch (erreur) {
-        if (!annule) setEnLigne(false); // serveur injoignable → mode hors-ligne (mockData)
-      } finally {
-        if (!annule) {
-          setReveil(false);
-          setChargement(false);
+      const tokenSauvegarde = await AsyncStorage.getItem(CLE_TOKEN);
+      if (tokenSauvegarde) {
+        api.definirToken(tokenSauvegarde);
+        try {
+          const joueur = await api.monProfil();
+          if (encoreAJour()) entrerEnLigne(joueur);
+        } catch {
+          // Token périmé ou compte supprimé : on l'oublie, l'écran de
+          // connexion s'affichera pour que l'utilisateur se reconnecte.
+          await AsyncStorage.removeItem(CLE_TOKEN);
+          api.definirToken(null);
         }
       }
-    })();
-    return () => { annule = true; };
+      const joueurs = await api.listerJoueurs().catch(() => null);
+      if (encoreAJour() && joueurs) setJoueursServeur(joueurs);
+    } catch (erreur) {
+      if (encoreAJour()) {
+        // Le message brut du navigateur (« Failed to fetch ») ne dit rien à
+        // personne : on le garde entre parenthèses, derrière une phrase qui
+        // indique quoi faire.
+        const detail = erreur && erreur.message ? ` (${erreur.message})` : '';
+        setErreurServeur(
+          `Pas de réponse du serveur${detail}. Vérifie ta connexion internet,`
+          + " puis réessaie : s'il dormait, il peut mettre jusqu'à une minute"
+          + ' à se lever.'
+        );
+      }
+    } finally {
+      if (encoreAJour()) {
+        setReveil(false);
+        setChargement(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    demarrer();
+    // On ne redémarre jamais tout seul : « Réessayer » est un geste de
+    // l'utilisateur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // RAFRAÎCHISSEMENT AUTOMATIQUE : pas de WebSocket (comme les duels/le chat
@@ -288,10 +283,10 @@ function AppInterne() {
   }
 
   useEffect(() => {
-    if (!enLigne) return;
+    if (!moiServeur) return undefined;
     const id = setInterval(rechargerDepuisServeur, DELAI_RAFRAICHISSEMENT_MS);
     return () => clearInterval(id);
-  }, [enLigne, !!moiServeur]);
+  }, [moiServeur?.id]);
 
   // Appelé par ConnexionScreen après une connexion/inscription réussie.
   async function surConnexionReussie(token, joueur) {
@@ -313,7 +308,8 @@ function AppInterne() {
     try {
       setMesSeances(await api.seancesDuJoueur(joueurId));
     } catch {
-      // Coupure : on garde ce qu'on a à l'écran plutôt que de tout effacer.
+      // Coupure passagère : on garde ce qu'on a à l'écran plutôt que de tout
+      // effacer, et le prochain tick de rafraîchissement remettra à jour.
     }
   }
 
@@ -323,9 +319,9 @@ function AppInterne() {
   // résultat tout de suite, puis on relit la vérité du serveur. Envoyer la
   // séance une deuxième fois depuis l'app la compterait en double.
   async function ajouterSeanceLocale(minutes, jour) {
+    if (!moiServeur) return;
     const date = jour || enISO(new Date());
     setMesSeances((s) => [{ date, minutes }, ...s.filter((x) => x.date !== date)]);
-    if (!moiServeur) return;
     await chargerSeances(moiServeur.id);
     await verifierDefis(moiServeur.id);
   }
@@ -350,7 +346,8 @@ function AppInterne() {
       }
       setEtatDefis(etats);
     } catch {
-      // Hors-ligne : on garde l'état précédent, les défis se reverront plus tard.
+      // Coupure passagère : on garde l'état précédent. On revient ici à chaque
+      // arrivée sur l'onglet Compétition et après chaque séance.
     }
   }
 
@@ -361,6 +358,7 @@ function AppInterne() {
     if (!moiServeur) return;
     try {
       const joueur = await api.monProfil();
+      setMesPerfs(joueur.performances);
       setMesPoints(joueur.points || 0);
       setMesTitres(joueur.titres || []);
     } catch {
@@ -368,33 +366,25 @@ function AppInterne() {
     }
   }
 
-  // Ajoute une perf : mise à jour locale immédiate + synchro serveur si connecté.
-  // Une vraie coupure réseau repasse l'app hors-ligne ; un refus du serveur
-  // (permission…) reste local et n'affecte pas le statut de connexion.
+  // Ajoute une perf : affichée tout de suite, puis envoyée au serveur.
+  // RENVOIE null si c'est passé, sinon le message d'erreur — l'écran le dit et
+  // l'affichage est remis d'accord avec le serveur. Avant, un échec faisait
+  // basculer toute l'app en mode hors-ligne : la perf restait à l'écran comme
+  // si elle était enregistrée, alors que le serveur ne l'avait jamais reçue.
   async function ajouterPerf(exercice, valeur, statutInitial) {
     setMesPerfs((perfs) => ({ ...perfs, [exercice]: { valeur, statut: statutInitial } }));
-    if (!moiServeur) return;
     try {
       await api.ajouterPerformance(moiServeur.id, exercice, valeur);
       if (statutInitial !== 'non_verifie') {
         await api.verifierPerformance(moiServeur.id, exercice, statutInitial);
       }
+      return null;
     } catch (erreur) {
-      if (!(erreur instanceof api.ErreurAPI)) setEnLigne(false);
-    }
-  }
-
-  // Valide une perf par la communauté (vidéo) : mise à jour locale + synchro serveur.
-  // En ligne, le serveur refuse de valider SA PROPRE perf par la communauté
-  // (voir CLAUDE.md) — PerformancesScreen n'affiche d'ailleurs plus ce bouton
-  // dans ce cas, cette fonction ne sert donc en pratique qu'en mode hors-ligne.
-  async function validerPerf(exercice) {
-    setMesPerfs((perfs) => ({ ...perfs, [exercice]: { ...perfs[exercice], statut: 'communaute' } }));
-    if (!moiServeur) return;
-    try {
-      await api.verifierPerformance(moiServeur.id, exercice, 'communaute');
-    } catch (erreur) {
-      if (!(erreur instanceof api.ErreurAPI)) setEnLigne(false);
+      await rafraichirMonProfil(); // l'écran remontre ce que le serveur sait
+      // Un refus du serveur (ErreurAPI) se raconte tel quel ; une coupure
+      // réseau, elle, ne dit rien d'utile en anglais (« Failed to fetch »).
+      if (erreur instanceof api.ErreurAPI) return erreur.message;
+      return `le serveur n'a pas répondu (${erreur.message || 'raison inconnue'})`;
     }
   }
 
@@ -404,36 +394,20 @@ function AppInterne() {
     if (duel.statut === 'gagné') setMesPoints((pts) => pts + duel.recompense);
   }
 
-  // Jouer le round de départage d'un duel (simulation). Victoire → points.
-  function jouerDepartage(duelId) {
-    setMesDuels((duelsActuels) =>
-      duelsActuels.map((duel) => {
-        if (duel.id !== duelId || duel.statut !== 'en cours') return duel;
-        const joue = jouerRoundIA(duel, utilisateur.sexe);
-        if (joue.statut === 'gagné') setMesPoints((pts) => pts + duel.recompense);
-        return joue;
-      })
-    );
-  }
+  // LE DÉPARTAGE PAR L'IA A DISPARU AVEC LES FAUX DUELS : il ne servait qu'aux
+  // duels « en cours » des données de démonstration. Un duel en direct, lui,
+  // se joue jusqu'au
+  // bout sur le téléphone (il finit toujours gagné ou perdu), et un duel en
+  // ligne est arbitré par le serveur.
 
-  // Valider un défi récurrent : points gagnés, titre éventuel débloqué.
-  function validerDefi(defi) {
-    if (defisFaits[defi.id]) return; // déjà fait
-    setDefisFaits({ ...defisFaits, [defi.id]: true });
-    setMesPoints(mesPoints + defi.points);
-    if (defi.titreRecompense) setMesTitres([...mesTitres, defi.titreRecompense]);
-  }
-
-  // "moi" = l'utilisateur avec ses perfs À JOUR. En ligne, l'identité (pseudo,
-  // sexe, poids…) vient du VRAI compte serveur ; hors-ligne, de mockData.
-  // serieJours/stats/affilieSalle n'existent pas encore côté serveur (pas
-  // suivis pour un vrai compte) : on met des valeurs par défaut neutres.
-  const identite = moiServeur || utilisateur;
+  // « moi » = mon compte serveur, avec mes perfs À JOUR.
+  // serieJours/stats/affilieSalle ne sont pas encore suivis côté serveur :
+  // valeurs neutres, pour que les écrans ne plantent pas.
   const moi = {
     serieJours: 0,
     stats: { victoires: 0, defaites: 0 },
     affilieSalle: false,
-    ...identite,
+    ...(moiServeur || {}),
     performances: mesPerfs,
     seances: mesSeances,
     salle: maSalle,
@@ -448,24 +422,26 @@ function AppInterne() {
   // faut regarder, avant même de savoir quoi que ce soit du serveur — une
   // séance en cours vit sur le téléphone, pas côté serveur.
   useEffect(() => {
-    if (chargement) return;   // on attend de savoir QUI on est
+    if (!moiServeur) return undefined; // on attend de savoir QUI on est
     let annule = false;
     (async () => {
-      const seance = await stockageSeance.lireSeanceEnCours(idStockage ?? moi.id);
-      // Seulement au DÉMARRAGE : on ne rapatrie pas l'utilisateur de force
+      const seance = await stockageSeance.lireSeanceEnCours(moiServeur.id);
+      // Seulement à la connexion : on ne rapatrie pas l'utilisateur de force
       // s'il vient de quitter la séance pour aller voir autre chose.
       if (!annule && seance) setOngletActif('entrainement');
     })();
     return () => { annule = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargement, idStockage, moi.id]);
+  }, [moiServeur?.id]);
 
   const monId = moiServeur?.id ?? 0;
-  // Les autres joueurs viennent du serveur si on est en ligne, sinon des données locales.
-  const autresJoueursAffiches = enLigne && joueursServeur
-    ? joueursServeur.filter((j) => j.id !== monId)
-    : autresJoueurs;
-  const joueurs = [{ ...moi, id: monId, moi: true }, ...autresJoueursAffiches];
+  // Le classement vient du serveur, toujours (il y a au moins les joueurs de
+  // démonstration créés au premier démarrage du serveur, donc jamais de liste
+  // vide à afficher).
+  const joueurs = [
+    { ...moi, id: monId, moi: true },
+    ...(joueursServeur || []).filter((j) => j.id !== monId),
+  ];
 
   // L'écran d'un onglet, rangé par sa CLÉ (celle du tableau ONGLETS).
   // `actif` dit à l'écran s'il est celui qu'on regarde : ceux qui interrogent
@@ -480,7 +456,6 @@ function AppInterne() {
             joueurs={joueurs}
             seances={mesSeances}
             salle={maSalle}
-            estConnecte={!!moiServeur}
             seDeconnecter={seDeconnecter}
             allerA={allerA}
             rafraichir={rechargerDepuisServeur}
@@ -492,8 +467,6 @@ function AppInterne() {
             moi={moi}
             mesPerfs={mesPerfs}
             ajouterPerf={ajouterPerf}
-            validerPerf={validerPerf}
-            estConnecte={!!moiServeur}
             actif={actif}
           />
         );
@@ -501,9 +474,7 @@ function AppInterne() {
         return (
           <EntrainementScreen
             moi={moi}
-            estConnecte={!!moiServeur}
             ajouterSeanceLocale={ajouterSeanceLocale}
-            idStockage={idStockage ?? moi.id}
             actif={actif}
           />
         );
@@ -516,13 +487,8 @@ function AppInterne() {
             moi={moi}
             duels={mesDuels}
             terminerDuelDirect={terminerDuelDirect}
-            jouerDepartage={jouerDepartage}
-            defisRecurrents={[defiJournalier, defiHebdo]}
-            defisFaits={defisFaits}
-            validerDefi={validerDefi}
             etatDefis={etatDefis}
             verifierDefis={verifierDefis}
-            estConnecte={!!moiServeur}
             rafraichirMonProfil={rafraichirMonProfil}
             demandeDuel={demandeDuel}
             actif={actif}
@@ -535,7 +501,6 @@ function AppInterne() {
             joueurs={joueurs}
             salle={maSalle}
             setSalle={setMaSalle}
-            estConnecte={!!moiServeur}
             actif={actif}
           />
         );
@@ -564,9 +529,24 @@ function AppInterne() {
     );
   }
 
+  // LE SERVEUR N'A PAS RÉPONDU : on s'arrête ici et on le dit, avec de quoi
+  // réessayer. C'est ce qui remplace le mode hors-ligne — l'app ne fait plus
+  // semblant de fonctionner avec des données qui ne sont pas les tiennes.
+  if (erreurServeur) {
+    return (
+      <View style={styles.conteneur}>
+        <StatusBar style="light" />
+        <EcranChargement
+          erreur={erreurServeur}
+          adresse={api.adresseServeur()}
+          onReessayer={demarrer}
+        />
+      </View>
+    );
+  }
+
   // Serveur joignable mais pas de session valide : il faut se connecter/inscrire.
-  // (Si le serveur est injoignable, on saute cet écran — mode hors-ligne direct.)
-  if (enLigne && !moiServeur) {
+  if (!moiServeur) {
     return (
       <SafeAreaView style={styles.conteneur}>
         <StatusBar style="light" />
@@ -578,13 +558,6 @@ function AppInterne() {
   return (
     <SafeAreaView style={styles.conteneur}>
       <StatusBar style="light" />
-      {!enLigne && (
-        <View style={styles.banniereHorsLigne}>
-          <Text style={styles.banniereTexte}>
-            📡 Mode hors-ligne — données locales (tentative : {api.adresseServeur()})
-          </Text>
-        </View>
-      )}
       {/* LES ONGLETS SE PARCOURENT EN GLISSANT LE DOIGT (14/09/2026, demande de
           Hafiz : « pouvoir scroller horizontalement entre les onglets au lieu
           d'être obligé de cliquer »).
@@ -705,12 +678,4 @@ const styles = StyleSheet.create({
   // Même teinte que colors.or (#e8b23a), à 8 % : un voile, pas un bouton.
   ongletPastilleActive: { backgroundColor: 'rgba(232, 178, 58, 0.08)' },
   ongletLibelle: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.5 },
-  banniereHorsLigne: {
-    backgroundColor: colors.carteClaire,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.bordure,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  banniereTexte: { color: colors.texteGris, fontSize: 11, textAlign: 'center' },
 });

@@ -12,7 +12,7 @@
 //    « Profil » au milieu d'une séance effaçait toutes les séries saisies,
 //    sans le moindre avertissement. Fermer l'app faisait pire.
 //
-// 2. UNE SÉANCE TERMINÉE HORS-LIGNE n'était ajoutée qu'à l'état local. Au
+// 2. UNE SÉANCE TERMINÉE SANS RÉSEAU n'était ajoutée qu'à l'état local. Au
 //    retour du réseau, `chargerTout()` REMPLAÇAIT toute la liste par celle du
 //    serveur — qui ne l'avait jamais reçue. La séance disparaissait donc au
 //    moment précis où l'on se reconnectait, c'est-à-dire là où l'on croyait
@@ -116,38 +116,18 @@ export async function retirerSeanceEnAttente(idLocal) {
   }
 }
 
-// ----- QUI SUIS-JE QUAND LE SERVEUR NE RÉPOND PAS ? -----
+// ----- CE QUI A DISPARU ICI LE 26/09/2026 -----
 //
-// Tout ce qui précède est rangé PAR JOUEUR. Or si l'app est relancée SANS
-// réseau, elle n'a personne à qui demander qui est connecté : elle retombe sur
-// l'identité de démonstration (mockData, voir App.js). Une séance faite dans
-// cet état serait donc rangée sous un compte fictif, et resterait invisible —
-// donc jamais envoyée — au retour du réseau. C'est précisément le scénario
-// visé par la demande de Hafiz (« même si on est déconnecté du serveur, et si
-// on se reconnecte… »), donc on ne peut pas s'en contenter.
+// Deux fonctions (`memoriserJoueurConnecte` / `lireJoueurMemorise`) retenaient
+// le dernier compte connecté sur ce téléphone. Elles existaient pour UN SEUL
+// cas : l'app relancée SANS réseau retombait alors sur l'identité de
+// démonstration (mockData.js), et une séance faite dans cet état se rangeait
+// sous un compte fictif — donc invisible, donc jamais envoyée.
+// Le mode hors-ligne ayant été supprimé, ce cas n'existe plus : on n'entre pas
+// dans l'app sans serveur, donc le compte est toujours connu et `moi.id`
+// suffit partout.
 //
-// On se souvient donc du DERNIER COMPTE réellement connecté sur ce téléphone.
-// C'est un simple numéro, jamais une preuve d'identité : il ne donne aucun
-// accès (le serveur exige toujours le token et vérifie la propriété), il sert
-// uniquement à ranger les séances au bon endroit en attendant le réseau.
-const CLE_DERNIER_JOUEUR = 'fitnessRoyale.dernierJoueur';
-
-export async function memoriserJoueurConnecte(joueurId) {
-  try {
-    await AsyncStorage.setItem(CLE_DERNIER_JOUEUR, String(joueurId));
-  } catch {
-    // Sans ça, une séance faite hors-ligne après redémarrage restera sous
-    // l'identité de repli — récupérable à la main, jamais perdue.
-  }
-}
-
-export async function lireJoueurMemorise() {
-  try {
-    const brut = await AsyncStorage.getItem(CLE_DERNIER_JOUEUR);
-    if (!brut) return null;
-    const id = parseInt(brut, 10);
-    return Number.isFinite(id) ? id : null;
-  } catch {
-    return null;
-  }
-}
+// ⚠️ CE QUI RESTE VRAI : tout ci-dessus est rangé PAR JOUEUR, et la file
+// d'attente continue de couvrir le vrai cas de perte — une séance terminée que
+// le serveur refuse ou ne reçoit pas (coupure en pleine séance, base endormie).
+// Elle repart au prochain chargement réussi.

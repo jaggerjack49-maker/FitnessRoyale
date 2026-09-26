@@ -25,7 +25,7 @@ const DELAI_POLLING_MS = 4000;
 
 // `actif` : vrai quand cet onglet est celui qu'on regarde (voir App.js, les
 // onglets restent en place pour qu'on puisse glisser entre eux).
-export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte, actif = true }) {
+export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true }) {
   const [vue, setVue] = useState('membres'); // 'membres' | 'chat'
   // Retour Android (16/09/2026) : du chat, on revient aux membres.
   useRetour(actif && vue === 'chat', () => {
@@ -48,7 +48,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte,
   const intervalleRef = useRef(null);
   const scrollRef = useRef(null);
 
-  const peutDiscuter = estConnecte && !!moi.salle;
+  const peutDiscuter = !!moi.salle;
 
   // Les salles qui existent déjà, déduites des joueurs déjà chargés (aucun
   // appel serveur) — une par clé normalisée, dans l'orthographe la plus
@@ -84,7 +84,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte,
     setMessageSalle(null);
     setEnregistrementSalle(true);
     try {
-      if (estConnecte) await api.changerSalle(moi.id, nouvelle);
+      await api.changerSalle(moi.id, nouvelle);
       setSalle(nouvelle);
       setMessageSalle({
         texte: nouvelle
@@ -188,11 +188,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, estConnecte,
     return (
       <ScrollView style={styles.conteneur} contentContainerStyle={{ paddingBottom: espacement.l }}>
         <Text style={styles.titre}>💬 Clan</Text>
-        <Text style={styles.sousTitre}>
-          {!estConnecte
-            ? 'Connecte-toi avec un compte pour rejoindre un clan.'
-            : 'Choisis ta salle pour rejoindre son clan.'}
-        </Text>
+        <Text style={styles.sousTitre}>Choisis ta salle pour rejoindre son clan.</Text>
         {carteSalle}
       </ScrollView>
     );
