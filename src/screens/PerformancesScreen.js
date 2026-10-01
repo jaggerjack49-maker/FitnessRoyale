@@ -552,7 +552,7 @@ export default function PerformancesScreen({
                     seul. Sans ça, tester le classement obligerait à jongler
                     entre deux comptes pour chaque perf saisie. Le serveur
                     n'accepte cet auto-vote QUE pour un admin (403 sinon). */}
-                {moi.admin && (
+                {moi.admin ? (
                   <TouchableOpacity
                     style={styles.boutonAdmin}
                     onPress={() => validerAdmin(exo)}
@@ -564,7 +564,7 @@ export default function PerformancesScreen({
                       <Text style={styles.boutonAdminTexte}>🛠 Valider{'\n'}(admin)</Text>
                     )}
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
             )}
           </View>

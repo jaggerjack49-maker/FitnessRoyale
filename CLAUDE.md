@@ -3643,6 +3643,109 @@ lanceur (il a affiché tout l'environnement au lieu de définir la variable).
 Repli sur la méthode documentée : `apiUrl` à `null` le temps du test, restauré
 ensuite, `git diff app.json` vérifié AVANT le commit (vide).
 
+## Passe de design sur l'onglet Entraînement — 01/10/2026
+
+Première sortie de l'agent `designer-ux` (`.claude/agents/designer-ux.md`, créé
+le même jour) : un spécialiste UI/UX qui REGARDE l'app dans les trois formats
+(mobile 375 / tablette / grand écran) et corrige ce qui peut l'être.
+Périmètre : l'onglet Entraînement, sa carte Nutrition, et l'écran de séance.
+
+### ⚠️ LE BUG TROUVÉ EN CHEMIN : `{moi.admin && …}` affichait « 0 »
+
+Un « 0 » nu s'affichait sur la carte de chaque programme, entre « Voir le
+détail » et la croix rouge. Cause : **le drapeau `admin` arrive du serveur en
+ENTIER (0 ou 1), pas en booléen** — vérifié dans la réponse de `/auth/moi`.
+`{moi.admin && (…)}` vaut donc `0`, et React affiche ce nombre.
+
+POURQUOI PERSONNE NE L'AVAIT VU : les deux comptes de Hafiz sont `admin = 1`,
+donc la condition était toujours vraie chez lui. Il fallait un compte ORDINAIRE
+pour le déclencher — c'est le compte de test `SondeTest` qui l'a révélé.
+
+⚠️ ET CE N'EST PAS QU'UN DÉFAUT D'AFFICHAGE SUR TÉLÉPHONE : React Native crée
+un nœud de texte pour un enfant numérique, et un texte nu hors d'un `<Text>`
+lève « Text strings must be rendered within a `<Text>` component »
+(`ReactNativeRenderer-prod.js`, branche HostText). Sur l'APK, un compte NON
+admin aurait donc vu l'écran d'erreur (`LimiteErreur`) à la place de l'onglet —
+non vérifié sur téléphone faute de build, mais le code du moteur est explicite.
+
+Corrigé aux TROIS endroits, en `? … : null` comme le faisait déjà
+`ProfilScreen` : `EntrainementScreen` (carte de cycle, « Mes programmes
+partagés ») et `PerformancesScreen` (bouton « Valider (admin) »).
+RÈGLE À RETENIR : **jamais `&&` avec une valeur qui vient de la base** — SQLite
+et Postgres renvoient des 0/1, pas des booléens.
+
+### Cibles tactiles : de 26 px à 38-47 px
+
+Mesuré à l'écran (`getBoundingClientRect` sur tout ce qui est touchable) :
+presque toutes les actions de l'onglet faisaient **26 à 38 px de haut**, pour un
+minimum confortable de 44 (44 pt iOS / 48 dp Android). On s'entraîne debout,
+une main occupée : c'est l'écran de l'app où viser est le plus difficile.
+
+- « + Série » — LE bouton le plus pressé de l'app — : 36 → 46 px.
+- Les croix de suppression : 32 → 40 px, **plus un `hitSlop`** sur les deux qui
+  détruisent un programme entier (`ZONE_TACTILE`, défini une fois en tête de
+  fichier) : la zone touchée déborde du dessin sans grossir le visuel.
+  L'écart avec son voisin « Voir le détail » passe de 6 à 10 px — un geste
+  destructeur ne doit pas se prendre par erreur.
+- « ✏️ Modifier » / « ▼ Voir le détail » : 26 → 38 px ; flèches ◀ ▶ du
+  calendrier : 32 → 42 ; « Rattraper maintenant » : 32 → 40 ; « Ajouter une
+  séance », « Sortir de ce programme » : 35-36 → 42-43.
+- Les cases du calendrier étaient DÉJÀ bonnes (47 × 47) : rien touché.
+
+### L'écran de séance : la saisie passe devant le réglage
+
+- **Les deux champs portent un libellé** (« RÉPÉTITIONS », « CHARGE (KG) »).
+  Avant, « Reps » et « Kg » n'étaient que des PLACEHOLDERS : ils disparaissent
+  dès qu'on tape, donc à la troisième série on ne sait plus lequel est lequel.
+  Mêmes petites capitales espacées que l'onglet Perfs (maquette du 09/09/2026).
+  Les chiffres sont plus gros et centrés (16 px, gras) : c'est la valeur qu'on
+  relit en vitesse entre deux séries.
+- **Les puces « Faire progresser » ne crient plus.** Un réglage qu'on touche une
+  fois était en OR PLEIN, donc plus voyant que les champs remplis à chaque
+  série. L'or plein reste le signal des ACTIONS ; un réglage actif se marque
+  maintenant d'un voile or à 14 % + un contour or.
+- **La date était en format machine** : « 2026-10-01 » en sous-titre, alors que
+  la ligne juste en dessous — et tout le reste de l'app — écrit « jeudi
+  1 octobre ». Même ligne, deux langues. Corrigé avec `libelleDate`.
+- « 🚪 Sortir du programme (sans enregistrer) » s'affichait aussi en séance
+  LIBRE, où il n'y a aucun programme : devient « Quitter la séance » dans ce cas.
+
+### Nutrition : un bouton dit ce qu'il fait
+
+« 🖼 » et « ✍️ » étaient deux emojis NUS, posés à côté d'un bouton qui, lui,
+portait son texte : on ne pouvait que deviner. Ils passent sur leur propre
+ligne avec leur libellé (« 🖼 Depuis mes photos », « ✍️ À la main »), et
+l'action principale (« 📷 Photographier mon repas ») garde toute la largeur.
+Le lien « 🎯 Modifier mon objectif du jour » n'avait qu'une `marginTop` : une
+marge n'agrandit PAS la zone touchée, un `paddingVertical` si (26 → 42 px).
+
+### ⏳ SIGNALÉ, PAS CORRIGÉ — la largeur de lecture sur grand écran
+
+Mesuré en 1024 px : les paragraphes de l'onglet font **943 px de large**, soit
+environ 140 caractères par ligne, là où 60-75 est confortable. Le correctif
+tient en une ligne (une largeur maximale centrée sur le contenu), MAIS il
+engage les SIX onglets : n'en caper qu'un seul ferait sauter la largeur en
+glissant d'un onglet à l'autre, ce qui serait pire que le défaut. À décider
+par Hafiz, puis à appliquer partout d'un coup.
+(Le calendrier, lui, est déjà borné à 380 px depuis le 12/08/2026.)
+
+### Vérifié
+
+Trois formats × contenu réel (compte de test `SondeTest` : 3 programmes,
+6 séances, 2 jours à rattraper) + **contenu hostile** inséré exprès dans la base
+de dev : un nom de programme de 48 caractères et un nom d'exercice de 56. Le nom
+long se replie sur deux lignes sans rien écraser — le correctif du 03/09/2026
+(« le nom sur sa propre ligne ») tient. Aucun débordement horizontal réel aux
+trois formats ; zéro erreur console. Suite backend : **311 tests, tous OK.**
+
+⚠️ PIÈGE DE VÉRIFICATION, À CONNAÎTRE POUR LA PROCHAINE FOIS : dans le volet
+navigateur, **la capture d'écran est RECADRÉE** (elle ne montrait que ~300 px
+des 375 émulés). Deux « débordements » évidents à l'image — le sous-titre de
+l'onglet, le bouton « Sortir… » — n'existaient PAS : `getBoundingClientRect` et
+`document.body.scrollWidth` le prouvent. On juge l'esthétique à l'image, mais
+JAMAIS la géométrie : celle-là se mesure. (`computer zoom` sur une région n'est
+pas supporté par le volet, il renvoie la capture entière.)
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

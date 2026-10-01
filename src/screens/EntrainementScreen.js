@@ -58,6 +58,11 @@ function libelleDate(dateISO) {
   return `${jourDeLaDate(date)} ${date.getDate()} ${nomsMois[date.getMonth()]}`;
 }
 
+// La zone TOUCHÉE déborde du dessin : un cercle de 40 px se vise mal au pouce,
+// surtout quand il efface un programme entier. On vise les 44 px recommandés
+// (44 pt iOS / 48 dp Android) sans grossir le visuel.
+const ZONE_TACTILE = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const nomsMois = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
@@ -2147,7 +2152,7 @@ export default function EntrainementScreen({
         </Text>
         <Text style={styles.sousTitre}>
           {jourEnregistrement === jour
-            ? jour
+            ? libelleDate(jour)
             : `Sera enregistrée au ${libelleDate(jourEnregistrement)}`}
         </Text>
         {/* SÉANCE COMMENCÉE UN AUTRE JOUR (21/09/2026) : on le DIT, et on
@@ -2326,23 +2331,32 @@ export default function EntrainementScreen({
               )}
 
               <View style={styles.ligneAjoutSerie}>
-                <TextInput
-                  style={[styles.champ, styles.champCourt]}
-                  value={saisie.reps || ''}
-                  onChangeText={(v) => majChampSaisie(exercice, 'reps', v)}
-                  keyboardType="numeric"
-                  placeholder="Reps"
-                  placeholderTextColor={colors.texteGris}
-                />
-                <TextInput
-                  style={[styles.champ, styles.champCourt]}
-                  value={saisie.poids || ''}
-                  onChangeText={(v) => majChampSaisie(exercice, 'poids', v)}
-                  keyboardType="numeric"
-                  placeholder="Kg"
-                  placeholderTextColor={colors.texteGris}
-                />
-                <TouchableOpacity style={styles.boutonAjouterSerie} onPress={() => ajouterSerie(exercice)}>
+                <View style={styles.colonneChampSerie}>
+                  <Text style={styles.libelleChampSerie}>RÉPÉTITIONS</Text>
+                  <TextInput
+                    style={[styles.champ, styles.champSaisieSerie]}
+                    value={saisie.reps || ''}
+                    onChangeText={(v) => majChampSaisie(exercice, 'reps', v)}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={colors.texteGris}
+                  />
+                </View>
+                <View style={styles.colonneChampSerie}>
+                  <Text style={styles.libelleChampSerie}>CHARGE (KG)</Text>
+                  <TextInput
+                    style={[styles.champ, styles.champSaisieSerie]}
+                    value={saisie.poids || ''}
+                    onChangeText={(v) => majChampSaisie(exercice, 'poids', v)}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={colors.texteGris}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.boutonAjouterSerie, styles.boutonSerieAligne]}
+                  onPress={() => ajouterSerie(exercice)}
+                >
                   <Text style={styles.boutonAjouterSerieTexte}>+ Série</Text>
                 </TouchableOpacity>
               </View>
@@ -2377,7 +2391,11 @@ export default function EntrainementScreen({
         {/* Sortir SANS enregistrer. C'était un lien gris discret (« Abandonner »)
             que Hafiz n'a pas trouvé — c'est maintenant un vrai bouton. */}
         <TouchableOpacity style={styles.boutonSortir} onPress={abandonnerSeance}>
-          <Text style={styles.boutonSortirTexte}>🚪 Sortir du programme (sans enregistrer)</Text>
+          <Text style={styles.boutonSortirTexte}>
+            {programmeActif
+              ? '🚪 Sortir du programme (sans enregistrer)'
+              : '🚪 Quitter la séance (sans enregistrer)'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -3221,7 +3239,7 @@ export default function EntrainementScreen({
                 C'est ainsi qu'on alimente le catalogue — pas de formulaire
                 séparé, l'admin construit un programme normalement puis le
                 publie. */}
-            {moi.admin && (
+            {moi.admin ? (
               <TouchableOpacity
                 style={styles.boutonPublier}
                 onPress={() => publierCycle(cycle)}
@@ -3233,10 +3251,11 @@ export default function EntrainementScreen({
                   <Text style={styles.boutonPublierTexte}>🔑 Partager par code</Text>
                 )}
               </TouchableOpacity>
-            )}
+            ) : null}
             <TouchableOpacity
               onPress={() => demanderSuppression('cycle-' + cycle.id)}
               style={styles.boutonRetirer}
+              hitSlop={ZONE_TACTILE}
             >
               <Text style={styles.boutonRetirerTexte}>✕</Text>
             </TouchableOpacity>
@@ -3398,6 +3417,7 @@ export default function EntrainementScreen({
               <TouchableOpacity
                 onPress={() => demanderSuppression('prog-' + programme.id)}
                 style={styles.boutonRetirer}
+                hitSlop={ZONE_TACTILE}
               >
                 <Text style={styles.boutonRetirerTexte}>✕</Text>
               </TouchableOpacity>
@@ -3521,7 +3541,11 @@ export default function EntrainementScreen({
       </View>
 
       {/* ---- ADMIN : les programmes que J'AI partagés, avec leurs codes ---- */}
-      {moi.admin && (
+      {/* ⚠️ `? … : null` ET PAS `&& …` : `admin` arrive du serveur en ENTIER
+          (0 ou 1), pas en booléen. `{0 && …}` affiche le NOMBRE 0 — invisible
+          pour un compte admin, donc jamais vu en test. Voir CLAUDE.md,
+          section du 01/10/2026. */}
+      {moi.admin ? (
         <>
           <Text style={styles.sectionTitre}>🛠 Mes programmes partagés</Text>
           {messageOfficiel && (
@@ -3550,7 +3574,7 @@ export default function EntrainementScreen({
             </View>
           ))}
         </>
-      )}
+      ) : null}
 
       {/* ---- Modèles standards : Push Pull Legs, Full Body… ---- */}
       <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setModelesOuverts(!modelesOuverts)}>
@@ -3747,8 +3771,11 @@ const styles = StyleSheet.create({
   },
   champCourt: { width: 70 },
   ligneExoForm: { flexDirection: 'row', gap: 6, alignItems: 'center', marginBottom: espacement.s },
+  // 40 px (au lieu de 32) + `hitSlop` sur les deux croix les plus
+  // dangereuses : c'est un geste DESTRUCTEUR posé juste à côté d'un bouton
+  // inoffensif, il ne doit pas s'attraper par erreur.
   boutonRetirer: {
-    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.rouge,
   },
   boutonRetirerTexte: { color: colors.rouge, fontWeight: '800' },
@@ -3783,9 +3810,18 @@ const styles = StyleSheet.create({
   nomExercice: { color: colors.texte, fontWeight: '700', fontSize: 15 },
   indiceDerniere: { color: colors.texteGris, fontSize: 12, marginTop: 4, marginBottom: espacement.s },
   serieFaite: { color: colors.vert, fontSize: 13, marginTop: 2 },
-  ligneAjoutSerie: { flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: espacement.s },
+  // `flex-end` : les champs portent un libellé au-dessus, le bouton doit
+  // s'aligner sur le BAS des champs, pas sur le milieu de la colonne.
+  ligneAjoutSerie: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: espacement.s },
+  colonneChampSerie: { flex: 1 },
+  libelleChampSerie: {
+    color: colors.texteGris, fontSize: 10, fontWeight: '800',
+    letterSpacing: 1, marginBottom: 4,
+  },
+  champSaisieSerie: { textAlign: 'center', fontSize: 16, fontWeight: '700' },
+  boutonSerieAligne: { paddingVertical: 15 },
   boutonAjouterSerie: {
-    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12,
+    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 14,
   },
   boutonAjouterSerieTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
   lignePuces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -3822,13 +3858,13 @@ const styles = StyleSheet.create({
   jourSeanceCycle: { color: colors.or, fontWeight: '700', fontSize: 11, width: 62 },
   boutonModifier: {
     borderWidth: 1, borderColor: colors.accent, borderRadius: 8,
-    paddingVertical: 5, paddingHorizontal: 9,
+    paddingVertical: 13, paddingHorizontal: 14,
   },
-  boutonModifierTexte: { color: colors.accent, fontWeight: '700', fontSize: 11 },
+  boutonModifierTexte: { color: colors.accent, fontWeight: '700', fontSize: 12 },
   zoneDeroule: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   boutonSortir: {
     borderWidth: 1, borderColor: colors.texteGris, borderRadius: 8,
-    paddingVertical: 9, alignItems: 'center', marginTop: espacement.s,
+    paddingVertical: 12, alignItems: 'center', marginTop: espacement.s,
   },
   boutonSortirTexte: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
   ligneVolume: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: espacement.s },
@@ -3861,7 +3897,7 @@ const styles = StyleSheet.create({
   // « ➕ Ajouter une séance » sur la carte d'un programme (24/09/2026).
   boutonAjouterSeance: {
     borderWidth: 1, borderColor: colors.or, borderRadius: 8,
-    paddingVertical: 8, alignItems: 'center', marginTop: espacement.s,
+    paddingVertical: 12, alignItems: 'center', marginTop: espacement.s,
   },
   boutonAjouterSeanceTexte: { color: colors.or, fontWeight: '800', fontSize: 13 },
   blocNouvelleSeance: {
@@ -3877,11 +3913,13 @@ const styles = StyleSheet.create({
   libelleAxes: { color: colors.texteGris, fontSize: 11, marginRight: 6 },
   puceAxe: {
     borderWidth: 1, borderColor: colors.bordure, borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 3, marginRight: 6, marginTop: 2,
+    paddingHorizontal: 12, paddingVertical: 7, marginRight: 6, marginTop: 2,
   },
-  puceAxeActive: { backgroundColor: colors.or, borderColor: colors.or },
+  // Un réglage ACTIF se marque d'un voile + d'un contour, pas d'un aplat :
+  // l'or plein reste le signal des ACTIONS (voir « + Série » juste dessous).
+  puceAxeActive: { backgroundColor: 'rgba(232, 178, 58, 0.14)', borderColor: colors.or },
   puceAxeTexte: { color: colors.texteGris, fontSize: 11, fontWeight: '700' },
-  puceAxeTexteActif: { color: '#12100a' },
+  puceAxeTexteActif: { color: colors.or },
   raisonSuggestion: { color: colors.texteGris, fontSize: 11, fontWeight: '400' },
   record: { color: colors.texteGris, fontSize: 11, marginBottom: 3 },
   recordBattu: { color: colors.or, fontSize: 12, fontWeight: '800', marginBottom: 3 },
@@ -3899,7 +3937,7 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s,
   },
   boutonMois: {
-    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+    paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10,
     backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
   },
   flecheMois: { color: colors.or, fontWeight: '700' },
@@ -3954,7 +3992,7 @@ const styles = StyleSheet.create({
   // plutôt que d'écraser le titre ou de déborder de la carte.
   ligneActionsProgramme: {
     flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center',
-    gap: 6, marginTop: espacement.s,
+    gap: 10, marginTop: espacement.s,
   },
   detailGroupe: {
     backgroundColor: colors.carteClaire,
@@ -3990,7 +4028,7 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure,
   },
   boutonUtiliserModele: {
-    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 8,
+    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12,
     alignItems: 'center', marginTop: espacement.s,
   },
   messageRappel: { color: colors.vert, fontSize: 12, marginTop: espacement.s },

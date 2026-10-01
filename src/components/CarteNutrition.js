@@ -229,18 +229,27 @@ export default function CarteNutrition({ moi, actif = true }) {
       )}
 
       {/* ---- Ajouter un repas ---- */}
+      {/* UN BOUTON DIT CE QU'IL FAIT : « 🖼 » et « ✍️ » étaient deux emojis
+          nus, posés à côté d'un bouton qui, lui, portait son texte — on ne
+          pouvait que deviner. Ils sont maintenant sur leur propre ligne, avec
+          leur libellé, et l'action principale garde toute la largeur. */}
       {!brouillon && !analyseEnCours && !saisieManuelle && (
-        <View style={styles.ligne}>
+        <>
           <TouchableOpacity style={[styles.boutonOr, styles.boutonLarge]} onPress={() => analyser(false)}>
             <Text style={styles.boutonOrTexte}>📷 Photographier mon repas</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.boutonBord} onPress={() => analyser(true)}>
-            <Text style={styles.boutonBordTexte}>🖼</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.boutonBord} onPress={() => setSaisieManuelle({ nom: '', kcal: '', proteines: '' })}>
-            <Text style={styles.boutonBordTexte}>✍️</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.ligne}>
+            <TouchableOpacity style={[styles.boutonBord, styles.boutonLarge]} onPress={() => analyser(true)}>
+              <Text style={styles.boutonBordTexte}>🖼 Depuis mes photos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.boutonBord, styles.boutonLarge]}
+              onPress={() => setSaisieManuelle({ nom: '', kcal: '', proteines: '' })}
+            >
+              <Text style={styles.boutonBordTexte}>✍️ À la main</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
       {analyseEnCours && (
@@ -363,7 +372,9 @@ const styles = StyleSheet.create({
   remplissage: { height: 8, borderRadius: 4 },
   indice: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
   texte: { color: colors.texte, fontSize: 14 },
-  lien: { color: colors.or, fontWeight: '700', marginTop: espacement.s },
+  // `paddingVertical` ET PAS seulement `marginTop` : la marge n'agrandit pas
+  // la zone touchée, le rembourrage si (26 px mesurés avant, ~44 après).
+  lien: { color: colors.or, fontWeight: '700', marginTop: 4, paddingVertical: 10 },
   lienGris: { color: colors.texteGris, marginLeft: espacement.m, textDecorationLine: 'underline' },
   bloc: { marginTop: espacement.s, padding: espacement.s, backgroundColor: colors.carteClaire, borderRadius: 10 },
   ligne: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
@@ -376,11 +387,14 @@ const styles = StyleSheet.create({
   nomRepas: { fontWeight: '700' },
   aliment: { marginTop: espacement.s, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.bordure },
   croix: { color: colors.texteGris, fontSize: 16, paddingHorizontal: 8 },
-  boutonOr: { backgroundColor: colors.or, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center' },
+  boutonOr: { backgroundColor: colors.or, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 14, alignItems: 'center' },
   boutonLarge: { flex: 1 },
   boutonOrTexte: { color: colors.fond, fontWeight: '800' },
-  boutonBord: { borderWidth: 1, borderColor: colors.or, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12 },
-  boutonBordTexte: { fontSize: 16 },
+  boutonBord: {
+    borderWidth: 1, borderColor: colors.or, borderRadius: 10,
+    paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center',
+  },
+  boutonBordTexte: { color: colors.or, fontWeight: '700', fontSize: 13 },
   message: { color: colors.vert, marginTop: espacement.s },
   avertissement: { color: colors.texteGris, fontSize: 11, marginTop: espacement.s, fontStyle: 'italic' },
   repas: {
