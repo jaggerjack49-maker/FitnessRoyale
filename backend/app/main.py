@@ -181,6 +181,9 @@ class ExerciceProgramme(BaseModel):
     exercice: str = Field(min_length=1, max_length=100)
     series_cibles: int = Field(gt=0, le=20)
     reps_cibles: int = Field(gt=0, le=100)
+    # LE HAUT D'UNE FOURCHETTE (« 5 - 10 »), facultatif (04/10/2026) :
+    # `reps_cibles` reste le bas. None = objectif simple, comme avant.
+    reps_cibles_max: int | None = Field(default=None, gt=0, le=100)
 
 
 # Les jours acceptés pour un programme (toujours en minuscules).
@@ -771,6 +774,89 @@ def definir_progression_exercice(joueur_id: int, exercice: str, choix: Progressi
     return {"exercice": exercice, "modes": modes}
 
 
+# ----- LE TABLEAU DE PROGRESSION (04/10/2026) -----
+# Demande de Hafiz, image à l'appui : une grille semaine par semaine. Le
+# CALCUL vit côté app (src/logic/projectionProgramme.js) comme toutes les
+# aides d'entraînement ; le serveur ne garde que ce qu'on ne peut pas
+# recalculer — les cases CORRIGÉES à la main et les réglages du bloc.
+
+
+class CibleSemaine(BaseModel):
+    programme_id: int
+    exercice: str = Field(min_length=1, max_length=100)
+    # Du TEXTE : la colonne de décharge s'appelle 'decharge', pas un numéro.
+    semaine: str = Field(min_length=1, max_length=12)
+    series: int | None = Field(default=None, gt=0, le=20)
+    reps: int | None = Field(default=None, gt=0, le=100)
+    poids: float | None = Field(default=None, ge=0, le=1000)
+
+
+class BlocProgramme(BaseModel):
+    duree_semaines: int | None = Field(default=None, gt=0, le=12)
+    avec_deload: bool = False
+
+
+@app.get("/joueurs/{joueur_id}/cibles-semaine")
+def cibles_semaine(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Toutes mes cases corrigées à la main, d'un coup (le tableau les veut
+    toutes dès son ouverture)."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    return db.cibles_semaine_du_joueur(joueur_id)
+
+
+@app.put("/joueurs/{joueur_id}/cibles-semaine")
+def definir_cible_semaine(joueur_id: int, cible: CibleSemaine,
+                          courant: dict = Depends(auth.utilisateur_courant)):
+    auth.verifier_proprietaire(courant, joueur_id)
+    programme = db.lire_programme(cible.programme_id)
+    if programme is None or programme["joueur_id"] != joueur_id:
+        raise HTTPException(403, "Ce programme n'est pas le tien.")
+    if cible.series is None and cible.reps is None and cible.poids is None:
+        # Tout vider = rendre la case au calcul. Plus clair qu'enregistrer
+        # une correction qui ne corrige rien.
+        db.effacer_cible_semaine(cible.programme_id, cible.exercice, cible.semaine)
+        return {"efface": True}
+    db.definir_cible_semaine(joueur_id, cible.programme_id, cible.exercice,
+                             cible.semaine, cible.series, cible.reps, cible.poids)
+    return {"enregistre": True}
+
+
+@app.delete("/joueurs/{joueur_id}/cibles-semaine")
+def retirer_cible_semaine(joueur_id: int, programme_id: int, exercice: str, semaine: str,
+                          courant: dict = Depends(auth.utilisateur_courant)):
+    """Rend une case au CALCUL."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    programme = db.lire_programme(programme_id)
+    if programme is None or programme["joueur_id"] != joueur_id:
+        raise HTTPException(403, "Ce programme n'est pas le tien.")
+    db.effacer_cible_semaine(programme_id, exercice, semaine)
+    return {"efface": True}
+
+
+@app.put("/programmes/{programme_id}/bloc")
+def definir_bloc_programme(programme_id: int, bloc: BlocProgramme,
+                           courant: dict = Depends(auth.utilisateur_courant)):
+    """La durée du bloc et la semaine de décharge, pour une séance isolée."""
+    programme = db.lire_programme(programme_id)
+    if programme is None:
+        raise HTTPException(404, "Programme introuvable.")
+    auth.verifier_proprietaire(courant, programme["joueur_id"])
+    db.definir_bloc_programme(programme_id, bloc.duree_semaines, bloc.avec_deload)
+    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload}
+
+
+@app.put("/cycles/{cycle_id}/bloc")
+def definir_bloc_cycle(cycle_id: int, bloc: BlocProgramme,
+                       courant: dict = Depends(auth.utilisateur_courant)):
+    """Idem pour un programme COMPLET (le cas normal du tableau)."""
+    cycle = db.lire_cycle(cycle_id)
+    if cycle is None:
+        raise HTTPException(404, "Programme introuvable.")
+    auth.verifier_proprietaire(courant, cycle["joueur_id"])
+    db.definir_bloc_cycle(cycle_id, bloc.duree_semaines, bloc.avec_deload)
+    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload}
+
+
 @app.get("/joueurs/{joueur_id}/defis")
 def etat_des_defis(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
     """L'état des 2 défis : réussi ? déjà validé aujourd'hui / cette semaine ?"""
@@ -1046,7 +1132,8 @@ def creer_programme(joueur_id: int, programme: NouveauProgramme,
     )
     for ordre, exo in enumerate(programme.exercices, start=1):
         db.ajouter_exercice_programme(
-            programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles
+            programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
+            exo.reps_cibles_max
         )
     return db.lire_programme(programme_id)
 
@@ -1201,7 +1288,7 @@ def renommer_exercice(joueur_id: int, ancien: str, donnees: RenommageExercice,
     if not nouveau:
         raise HTTPException(400, "Le nouveau nom ne peut pas être vide.")
     if nouveau == ancien:
-        return {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
+        return dict(db.RENOMMAGE_VIDE)
     return db.renommer_exercice_partout(joueur_id, ancien, nouveau)
 
 
@@ -1387,7 +1474,8 @@ def creer_cycle(joueur_id: int, cycle: NouveauCycle,
         programme_id = db.creer_programme(joueur_id, seance.nom, maintenant, seance.jours)
         for ordre, exo in enumerate(seance.exercices, start=1):
             db.ajouter_exercice_programme(
-                programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles
+                programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
+            exo.reps_cibles_max
             )
         db.rattacher_programme_au_cycle(cycle_id, programme_id)
     return db.lire_cycle(cycle_id)
@@ -1435,7 +1523,8 @@ def ajouter_seance_au_cycle(cycle_id: int, seance: SeanceCycle,
     )
     for ordre, exo in enumerate(seance.exercices, start=1):
         db.ajouter_exercice_programme(
-            programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles
+            programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
+            exo.reps_cibles_max
         )
     db.rattacher_programme_au_cycle(cycle_id, programme_id)
     return db.lire_cycle(cycle_id)

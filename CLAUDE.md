@@ -3746,6 +3746,197 @@ l'onglet, le bouton « Sortir… » — n'existaient PAS : `getBoundingClientRec
 JAMAIS la géométrie : celle-là se mesure. (`computer zoom` sur une région n'est
 pas supporté par le volet, il renvoie la capture entière.)
 
+## Tableau de progression semaine par semaine — 04/10/2026
+
+Demande de Hafiz, image à l'appui (`icones/IMG_1703.PNG`, déposée dans le
+dossier versionné comme les maquettes d'arènes) : « je veux qu'on puisse
+visualiser les programmes de cette façon ». L'image est une grille de
+périodisation — une ligne par exercice groupée par JOUR, une colonne par
+SEMAINE (1 à 4 puis Deload), et dans chaque semaine séries / charge / cible.
+
+### Ce qui a été tranché avec lui AVANT d'écrire une ligne
+
+L'image contenait beaucoup de choses que l'app n'a pas. Deux questions posées,
+deux réponses :
+- **« L'app propose, je corrige »** — le tableau est PRÉ-REMPLI par le calcul,
+  et chaque case reste modifiable à la main ; la valeur écrite prime.
+- **Colonnes retenues** : Séries · Reps · Charge, **fourchettes de reps**
+  (« 5 - 10 »), **semaine de décharge**. Le **RIR** de l'image est ÉCARTÉ —
+  il n'existe nulle part dans l'app et demanderait de le saisir à chaque série
+  pour servir à quelque chose.
+
+### ⚠️ LA RÈGLE N'EST PAS RÉÉCRITE — c'est tout le sujet
+
+`src/logic/projectionProgramme.js` ne contient AUCUNE règle de progression. Il
+**rejoue `suggererProchaineSerie`** (surchargeProgressive.js) semaine après
+semaine, en lui réinjectant la semaine projetée COMME SI elle avait été faite :
+
+```
+semaine 1 = suggestion(historique réel)
+semaine 2 = suggestion(historique réel + semaine 1 projetée)
+…
+```
+
+C'est le seul moyen d'être certain que le tableau et le « 🎯 Attendu » de
+l'écran de séance ne se contrediront jamais. Ce projet a déjà payé une SECONDE
+DÉFINITION divergente de la même idée (`cycleEnService`, bug du 28/08/2026) —
+on ne recommence pas. Le premier cas du harnais verrouille cette égalité noir
+sur blanc, et elle a été revérifiée DANS L'APP (voir « Vérifié » plus bas).
+
+### Les règles ajoutées (et pourquoi)
+
+- **Une fourchette de reps se grimpe par le HAUT** : avec « 5 - 10 », on monte
+  les reps à charge égale jusqu'à 10, et on ne charge qu'ensuite. C'est la
+  double progression classique, et c'est ce qui donne au tableau sa forme
+  lisible : des semaines de reps, puis un saut de charge.
+  `cibleDeReps(5, 10)` → 10 ; `cibleDeReps(8, null)` → 8 (comportement actuel
+  inchangé pour un objectif simple).
+- **La décharge par défaut** : moitié moins de séries, et la charge de la
+  SEMAINE 1. Un protocole courant (on garde le mouvement, on enlève le volume),
+  explicable en une phrase — ce qui suffit, puisque chaque case est corrigeable.
+  Dans l'image, les décharges ne suivent aucune règle unique (une ligne revient
+  à la charge de départ, une autre descend de moitié) : c'est un choix de coach,
+  pas un calcul.
+- **On n'invente jamais une charge de départ** : un exercice jamais loggé n'a
+  AUCUNE ligne, et la case dit « jamais fait — rien à projeter ». Même règle que
+  les « 🎯 Attendu » depuis le 01/09/2026.
+- **Bornes** : 1 à 12 semaines. Au-delà, une projection qui suppose chaque
+  semaine réussie exactement comme prévu ne veut plus rien dire. Une valeur
+  absurde (0, null) retombe sur le défaut de 4 semaines.
+
+### L'écran (`src/components/TableauProgression.js`)
+
+Une VUE À PART ENTIÈRE (`vue === 'tableau'`), ouverte par un bouton
+« 📊 Tableau » sur la carte d'un programme complet ou d'une séance isolée —
+une grille n'aurait jamais tenu dans une carte.
+
+⚠️ **LA COLONNE DES EXERCICES EST FIGÉE** à gauche pendant que les semaines
+défilent horizontalement : sans ça, à la troisième semaine on ne sait plus de
+quel exercice parle la ligne qu'on lit. Conséquence directe : ce sont DEUX
+listes séparées, donc elles ne s'alignent que si chaque ligne fait exactement
+la même hauteur des deux côtés — d'où les constantes `HAUTEUR_LIGNE`,
+`HAUTEUR_JOUR`, `HAUTEUR_ENTETE`. Ne pas les remplacer par des hauteurs
+automatiques : les deux colonnes se décaleraient.
+
+Le bandeau de jour reprend la barre rouge de l'image en couleur de marque (or
+voilé), la CHARGE est mise en avant (or, chasse fixe) parce que c'est le chiffre
+qu'on vient chercher avant de s'approcher de la barre, et la colonne de décharge
+a son propre fond. Une case corrigée à la main aura un fond bleuté — le style
+existe déjà, la saisie arrive à l'étape suivante.
+
+### Étape 2, faite le 05/10/2026 : « je corrige » devient vrai
+
+Les trois manques de l'étape 1 sont comblés. Tout ce qui suit est ADDITIF :
+un programme écrit avant ce jour se comporte exactement comme avant.
+
+**1. Les cases se corrigent** — table `cibles_semaine` (joueur, programme,
+exercice, semaine → séries / reps / charge), `GET/PUT/DELETE
+/joueurs/{id}/cibles-semaine`. Toucher une case ouvre un éditeur PRÉ-REMPLI
+avec la valeur calculée (on ne redemande pas de retaper ce qui est juste), et
+« ↺ Rendre au calcul » efface la correction au lieu de la mettre à zéro.
+- `semaine` est du **TEXTE** : la colonne de décharge porte la clé `'decharge'`
+  à côté de `'1'`, `'2'`… — un entier n'aurait pas pu la nommer.
+- Les trois valeurs sont FACULTATIVES : corriger la seule charge laisse les
+  séries et les reps au calcul. Les trois vides = la case retourne au calcul.
+- ⚠️ `renommer_exercice_partout` traite cette **CINQUIÈME** table : sans ça, un
+  exercice renommé perdrait silencieusement toutes ses corrections (le bug du
+  04/09/2026, une table plus loin). Vu échouer en retirant la ligne.
+- UNE CORRECTION NE SE PROPAGE PAS aux semaines suivantes : corriger la
+  semaine 2 ne recalcule pas les semaines 3 et 4, qui continuent de découler du
+  CALCUL. C'est ce que dit l'écran (« ta valeur remplace cette case »), et
+  c'est prévisible — mais c'est un choix, pas une évidence : à revoir si Hafiz
+  attend que le reste du bloc suive sa correction.
+
+**2. La fourchette de reps se saisit** — colonne `reps_cibles_max` sur
+`programme_exercices` (NULL = objectif simple), un second champ de reps dans
+l'éditeur de séance (« 8 → 12 »), facultatif. Une fourchette à l'envers (10 → 5)
+ou égale au bas est rangée en objectif simple plutôt que refusée : ce n'est pas
+une erreur qui mérite de bloquer une saisie.
+
+**3. Les réglages du bloc sont enregistrés** — `duree_semaines` + `avec_deload`
+sur `cycles` (programme complet) et sur `programmes` (séance isolée), via
+`PUT /cycles/{id}/bloc` et `PUT /programmes/{id}/bloc`. Ouvrir le tableau
+repart des réglages DE CE programme, pas du dernier consulté.
+
+### ⚠️ UNE DIVERGENCE TROUVÉE PAR LA SUITE DE TESTS, ET SA VRAIE CAUSE
+
+Ajouter la clé `cibles` au résultat du renommage a fait rougir un test
+existant — et c'était justifié : **la forme de cette réponse était écrite à
+DEUX endroits**. `main.py` renvoyait un dictionnaire de zéros écrit à la main
+quand le nouveau nom est identique à l'ancien, pendant que
+`basededonnees.py` en produisait un autre. Les deux ont divergé d'une clé.
+
+Corrigé à la racine, pas en recopiant la clé : `db.RENOMMAGE_VIDE` est
+désormais la SEULE définition de cette forme, et `main.py` la renvoie telle
+quelle. C'est exactement le motif que ce projet paie en boucle (voir
+`cycleEnService` le 28/08, `estVerifiee` le 04/09) — une seconde écriture de la
+même idée finit toujours par mentir.
+
+### Vérifié (étape 2)
+
+Tests : `backend/tests/test_api_tableau.py` — **14 cas** (fourchette
+enregistrée et relue, un programme sans fourchette inchangé, fourchette
+absurde refusée en 422, case corrigée relue telle quelle, décharge traitée
+comme une case ordinaire, case rendue au calcul, case vide qui efface, double
+correction qui remplace, renommage qui emporte les cases, propriété en lecture
+ET en écriture, bloc d'un programme, bloc d'un cycle). **Mutation vue
+échouer** : retirer le renommage des cases casse exactement
+`test_renommer_un_exercice_emporte_ses_cases`, et rien d'autre.
+Suite complète : **326 tests, tous OK.**
+
+DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, format mobile 375) :
+- toucher la case « semaine 2 » du développé couché ouvre l'éditeur
+  **pré-rempli** (2 / 8 / 107.5) ; charge passée à 140 → la case affiche 140,
+  **les autres semaines restent calculées** (110, 112.5) ;
+- la correction est bien **en base** (`cibles_semaine`), elle revient telle
+  quelle après un **rechargement complet** de la page ;
+- « ↺ Rendre au calcul » rend la case à 107.5 ;
+- bloc passé à 6 semaines + décharge → `programmes.duree_semaines = 6`,
+  `avec_deload = 1` en base, et la grille affiche 6 semaines puis la décharge
+  (1 × 8 à 105 : moitié des séries, charge de la semaine 1) ;
+- fourchette « 8 → 12 » saisie dans l'éditeur → enregistrée
+  (`reps_cibles_max = 12`), le tableau affiche « 8 - 12 reps » et **monte les
+  reps avant de charger** : 9, 10, 11, 12 à 102,5 kg, PUIS 12 à 105, 12 à
+  107,5. C'est la forme exacte de l'image de référence.
+
+⚠️ PIÈGE DE VÉRIFICATION rencontré (encore le volet masqué) : `computer
+left_click` sur un onglet de la barre ne déclenchait rien, et la page du pager
+restait à `scrollLeft = 0` — le défilement ANIMÉ ne tourne pas dans le volet
+(même famille que le piège du 14/09). Le clic par le DOM (`element.click()`)
+fonctionne, et on place la page en affectant `scrollLeft` directement.
+
+### Vérifié
+
+Tests : `backend/tests/test_projection.py` + `harnais/harnais_projection.mjs` —
+16 cas. **Cinq mutations, cinq échecs au bon endroit** : viser le bas de la
+fourchette casse les deux cas de fourchette ; ne pas réinjecter la semaine
+projetée casse 8 cas (toutes les semaines deviendraient identiques) ; la case
+manuelle qui ne prime plus casse son cas et lui seul ; la décharge retirée
+casse le sien ; inventer une projection pour un exercice jamais fait casse les
+deux cas qui l'interdisent. Suite complète : **312 tests, tous OK.**
+
+⚠️ INCIDENT DE MÉTHODE, à retenir : la première passe de mutations a LAISSÉ UNE
+MUTATION SUR LE DISQUE (les écritures Python n'étaient pas refermées, la
+restauration n'a jamais atteint le fichier). Le test est repassé au vert avec
+du code faux, et je ne l'ai vu que parce que deux mutations cassaient des cas
+qu'elles n'auraient PAS dû toucher. Depuis : `with` à chaque écriture, et un
+contrôle `fichier == propre` après chaque restauration. Un test vert ne prouve
+rien si on ne sait pas quel code tournait.
+
+DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, format mobile 375) :
+- le tableau de « Push » s'ouvre, colonne EXERCICE figée, semaines qui
+  défilent ; semaine 1 → 2 × 8 à **105 kg**, semaine 4 → **112,5 kg** ;
+- **la promesse centrale vérifiée à l'écran** : dans « Mes programmes », le
+  même exercice affiche « 🎯 Attendu : 8 reps à 105 kg », et face pull
+  « 15 reps à 35 kg » — exactement les semaines 1 du tableau ;
+- un exercice jamais fait (« elevations laterales ») affiche bien
+  « jamais fait — rien à projeter » au lieu d'un chiffre inventé ;
+- la décharge cochée ajoute sa colonne : 1 série × 8 reps à 105 kg (moitié des
+  séries, charge de la semaine 1) ;
+- un programme dont AUCUN exercice n'a d'historique (« Mon PPL ») affiche
+  l'explication au lieu d'une grille vide ;
+- aucune erreur console, aucun débordement horizontal en 768 px.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3758,7 +3949,7 @@ pas supporté par le volet, il renvoie la capture entière.)
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (311 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (326 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

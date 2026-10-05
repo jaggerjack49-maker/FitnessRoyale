@@ -499,6 +499,15 @@ def initialiser():
             conn.execute("ALTER TABLE programmes ADD COLUMN duree_semaines INTEGER")
         if not _colonne_existe(conn, "programmes", "date_debut"):
             conn.execute("ALTER TABLE programmes ADD COLUMN date_debut TEXT")
+        # LE TABLEAU DE PROGRESSION (04/10/2026) — trois ajouts, tous additifs.
+        # 1) Une FOURCHETTE de reps (« 5 - 10 ») : `reps_cibles` reste le bas,
+        #    `reps_cibles_max` le haut. NULL = objectif simple, comportement
+        #    strictement inchangé pour tous les programmes existants.
+        if not _colonne_existe(conn, "programme_exercices", "reps_cibles_max"):
+            conn.execute("ALTER TABLE programme_exercices ADD COLUMN reps_cibles_max INTEGER")
+        # 2) La séance isolée peut finir par une semaine de DÉCHARGE.
+        if not _colonne_existe(conn, "programmes", "avec_deload"):
+            conn.execute("ALTER TABLE programmes ADD COLUMN avec_deload INTEGER DEFAULT 0")
         # CYCLE = un programme COMPLET sur la semaine (ex. « Mon PPL ») : il
         # groupe plusieurs SÉANCES, une par jour travaillé, chacune avec ses
         # propres exercices. Une séance est un `programme` classique portant le
@@ -511,6 +520,32 @@ def initialiser():
                 joueur_id INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
                 nom       TEXT NOT NULL,
                 cree_le   TEXT NOT NULL
+            )
+        """)
+        # 3) Les réglages du BLOC, sur le programme complet : combien de
+        #    semaines, et faut-il finir par une décharge. Sans ça, le tableau
+        #    repartait à 4 semaines sans décharge à chaque ouverture.
+        if not _colonne_existe(conn, "cycles", "duree_semaines"):
+            conn.execute("ALTER TABLE cycles ADD COLUMN duree_semaines INTEGER")
+        if not _colonne_existe(conn, "cycles", "avec_deload"):
+            conn.execute("ALTER TABLE cycles ADD COLUMN avec_deload INTEGER DEFAULT 0")
+        # LES CASES CORRIGÉES À LA MAIN (« l'app propose, je corrige »).
+        # Une case = (la SÉANCE, l'exercice, la semaine). `semaine` est du
+        # TEXTE parce que la colonne de décharge porte la clé 'decharge' à
+        # côté de '1', '2'… — un entier n'aurait pas pu la nommer.
+        # ⚠️ Le NOM de l'exercice est la clé ici aussi : `renommer_exercice_partout`
+        # traite donc cette table (voir « Le NOM d'un exercice est son identifiant »).
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS cibles_semaine (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                joueur_id     INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
+                programme_id  INTEGER NOT NULL REFERENCES programmes(id) ON DELETE CASCADE,
+                exercice      TEXT NOT NULL,
+                semaine       TEXT NOT NULL,
+                series        INTEGER,
+                reps          INTEGER,
+                poids         REAL,
+                UNIQUE (programme_id, exercice, semaine)
             )
         """)
         _executer_creation_table(conn, """
@@ -816,6 +851,75 @@ def definir_progression_exercice(joueur_id: int, exercice: str, modes: list) -> 
         )
 
 
+# ----- LE TABLEAU DE PROGRESSION : les cases corrigées à la main -----
+
+def cibles_semaine_du_joueur(joueur_id: int) -> list:
+    """Toutes mes cases corrigées, d'un coup — UNE SEULE requête.
+
+    Le tableau en a besoin en entier dès son ouverture : les demander case par
+    case rejouerait le motif N+1 qui a fait disparaître l'onglet Entraînement
+    le 23/09/2026."""
+    with connexion() as conn:
+        return [dict(l) for l in conn.execute(
+            "SELECT programme_id, exercice, semaine, series, reps, poids "
+            "FROM cibles_semaine WHERE joueur_id = ?",
+            (joueur_id,),
+        )]
+
+
+def definir_cible_semaine(joueur_id: int, programme_id: int, exercice: str,
+                          semaine: str, series, reps, poids) -> None:
+    """Écrit (ou réécrit) UNE case du tableau. Les trois valeurs peuvent être
+    None : une case où l'on ne corrige que la charge garde les séries et les
+    reps calculées."""
+    with connexion() as conn:
+        conn.execute(
+            "DELETE FROM cibles_semaine WHERE programme_id = ? AND exercice = ? AND semaine = ?",
+            (programme_id, exercice, semaine),
+        )
+        conn.execute(
+            "INSERT INTO cibles_semaine "
+            "(joueur_id, programme_id, exercice, semaine, series, reps, poids) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (joueur_id, programme_id, exercice, semaine, series, reps, poids),
+        )
+
+
+def effacer_cible_semaine(programme_id: int, exercice: str, semaine: str) -> None:
+    """Rend la case au CALCUL : on efface la correction, on ne la remet pas à zéro."""
+    with connexion() as conn:
+        conn.execute(
+            "DELETE FROM cibles_semaine WHERE programme_id = ? AND exercice = ? AND semaine = ?",
+            (programme_id, exercice, semaine),
+        )
+
+
+def definir_bloc_programme(programme_id: int, duree_semaines, avec_deload: bool) -> None:
+    with connexion() as conn:
+        conn.execute(
+            "UPDATE programmes SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
+            (duree_semaines, 1 if avec_deload else 0, programme_id),
+        )
+
+
+def definir_bloc_cycle(cycle_id: int, duree_semaines, avec_deload: bool) -> None:
+    with connexion() as conn:
+        conn.execute(
+            "UPDATE cycles SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
+            (duree_semaines, 1 if avec_deload else 0, cycle_id),
+        )
+
+
+# Le résultat d'un renommage qui n'a RIEN touché. UNE SEULE DÉFINITION de la
+# forme de cette réponse : `main.py` la renvoie telle quelle quand le nouveau
+# nom est identique à l'ancien, au lieu de réécrire les clés à la main.
+# Les deux copies avaient déjà divergé le 04/10/2026, à l'ajout des cases du
+# tableau de progression — une clé de plus ici, pas là.
+RENOMMAGE_VIDE = {
+    "programmes": 0, "series": 0, "groupes": 0, "progressions": 0, "cibles": 0,
+}
+
+
 def renommer_exercice_partout(joueur_id: int, ancien: str, nouveau: str) -> dict:
     """Renomme un exercice dans TOUT ce qui appartient à ce joueur.
 
@@ -893,8 +997,26 @@ def renommer_exercice_partout(joueur_id: int, ancien: str, nouveau: str) -> dict
             )
             progressions = curseur.rowcount
 
+        # LES CASES DU TABLEAU suivent le nom elles aussi — sinon un exercice
+        # renommé perdrait silencieusement toutes ses corrections (le bug du
+        # 04/09/2026, une table plus loin). La contrainte UNIQUE porte ici sur
+        # (programme_id, exercice, semaine) : si le NOUVEAU nom a déjà une
+        # correction sur la même case, c'est elle qui fait autorité.
+        conn.execute(
+            "DELETE FROM cibles_semaine WHERE joueur_id = ? AND exercice = ? "
+            "AND (programme_id, semaine) IN "
+            "(SELECT programme_id, semaine FROM cibles_semaine "
+            " WHERE joueur_id = ? AND exercice = ?)",
+            (joueur_id, ancien, joueur_id, nouveau),
+        )
+        curseur = conn.execute(
+            "UPDATE cibles_semaine SET exercice = ? WHERE joueur_id = ? AND exercice = ?",
+            (nouveau, joueur_id, ancien),
+        )
+        cibles = curseur.rowcount
+
     return {"programmes": programmes, "series": series, "groupes": groupes,
-            "progressions": progressions}
+            "progressions": progressions, "cibles": cibles}
 
 
 def creer_joueur(pseudo: str, sexe: str, poids: float, salle: str | None,
@@ -1365,12 +1487,16 @@ def creer_programme(joueur_id: int, nom: str, cree_le: str,
 
 
 def ajouter_exercice_programme(programme_id: int, exercice: str, ordre: int,
-                               series_cibles: int, reps_cibles: int) -> None:
+                               series_cibles: int, reps_cibles: int,
+                               reps_cibles_max: int | None = None) -> None:
+    """`reps_cibles_max` = le HAUT d'une fourchette (« 5 - 10 »). None = objectif
+    simple, comme avant — aucun programme existant ne change de comportement."""
     with connexion() as conn:
         conn.execute(
-            "INSERT INTO programme_exercices (programme_id, exercice, ordre, series_cibles, reps_cibles) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (programme_id, exercice, ordre, series_cibles, reps_cibles),
+            "INSERT INTO programme_exercices "
+            "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max),
         )
 
 
@@ -1397,7 +1523,7 @@ def _programmes_par_ids(conn, ids: list) -> dict:
         p["exercices"] = []
         programmes[p["id"]] = p
     for ligne in conn.execute(
-        "SELECT programme_id, exercice, ordre, series_cibles, reps_cibles "
+        "SELECT programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max "
         f"FROM programme_exercices WHERE programme_id IN ({_marques(len(ids))}) ORDER BY ordre",
         tuple(ids),
     ):
@@ -1459,9 +1585,11 @@ def remplacer_exercices_programme(programme_id: int, exercices: list) -> None:
         conn.execute("DELETE FROM programme_exercices WHERE programme_id = ?", (programme_id,))
         for ordre, exo in enumerate(exercices, start=1):
             conn.execute(
-                "INSERT INTO programme_exercices (programme_id, exercice, ordre, series_cibles, reps_cibles) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (programme_id, exo["exercice"], ordre, exo["series_cibles"], exo["reps_cibles"]),
+                "INSERT INTO programme_exercices "
+                "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (programme_id, exo["exercice"], ordre, exo["series_cibles"],
+                 exo["reps_cibles"], exo.get("reps_cibles_max")),
             )
 
 

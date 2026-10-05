@@ -159,9 +159,9 @@ class TestRenommageExercice(unittest.TestCase):
         self._programme(h, joueur_id, "Push", "Dips")
         r = self._renommer(h, joueur_id, "Dips", "Dips")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(
-            r.json(), {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
-        )
+        # Une CINQUIÈME table suit le nom depuis le 04/10/2026 : les cases
+        # corrigées du tableau de progression (`cibles`).
+        self.assertEqual(r.json(), dict(db.RENOMMAGE_VIDE))
 
     def test_un_nom_vide_est_refuse(self):
         h, joueur_id = self._inscrire("NomVide")
@@ -172,9 +172,9 @@ class TestRenommageExercice(unittest.TestCase):
         h, joueur_id = self._inscrire("Inexistant")
         r = self._renommer(h, joueur_id, "Exercice jamais fait", "Autre chose")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(
-            r.json(), {"programmes": 0, "series": 0, "groupes": 0, "progressions": 0}
-        )
+        # Une CINQUIÈME table suit le nom depuis le 04/10/2026 : les cases
+        # corrigées du tableau de progression (`cibles`).
+        self.assertEqual(r.json(), dict(db.RENOMMAGE_VIDE))
 
     def test_le_renommage_ne_touche_pas_les_performances_du_bareme(self):
         """Les perfs du barème Fitness Royale sont un AUTRE espace de noms :

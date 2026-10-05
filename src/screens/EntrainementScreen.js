@@ -35,6 +35,7 @@ import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
 import useRetour from '../useRetour';
 import CarteNutrition from '../components/CarteNutrition';
+import TableauProgression from '../components/TableauProgression';
 import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
 } from '../logic/rattrapage';
@@ -263,8 +264,11 @@ function EditeurSeance({
           exercice: exo.exercice,
           series: String(exo.series_cibles),
           reps: String(exo.reps_cibles),
+          // Le HAUT d'une fourchette (« 5 - 10 »), facultatif : vide = objectif
+          // simple, comme avant (04/10/2026, pour le tableau de progression).
+          repsMax: exo.reps_cibles_max ? String(exo.reps_cibles_max) : '',
         }))
-      : [{ exercice: '', series: '3', reps: '10' }]
+      : [{ exercice: '', series: '3', reps: '10', repsMax: '' }]
   );
   const [message, setMessage] = useState(null);
 
@@ -277,11 +281,19 @@ function EditeurSeance({
     const nomFinal = nom.trim() || nomParDefaut || 'Séance';
     const exercices = lignes
       .filter((ligne) => ligne.exercice.trim())
-      .map((ligne) => ({
-        exercice: ligne.exercice.trim(),
-        series_cibles: Math.max(1, parseInt(ligne.series, 10) || 1),
-        reps_cibles: Math.max(1, parseInt(ligne.reps, 10) || 1),
-      }));
+      .map((ligne) => {
+        const bas = Math.max(1, parseInt(ligne.reps, 10) || 1);
+        const haut = parseInt(ligne.repsMax, 10);
+        return {
+          exercice: ligne.exercice.trim(),
+          series_cibles: Math.max(1, parseInt(ligne.series, 10) || 1),
+          reps_cibles: bas,
+          // Une fourchette à l'envers (10 - 5) ou égale au bas n'en est pas
+          // une : on la range en objectif simple plutôt que de refuser la
+          // saisie pour si peu.
+          reps_cibles_max: Number.isFinite(haut) && haut > bas ? haut : null,
+        };
+      });
     if (exercices.length === 0) {
       setMessage("Ajoute au moins un exercice (avec son nom).");
       return;
@@ -303,6 +315,11 @@ function EditeurSeance({
       />
 
       <Text style={stylesEditeur.libelle}>Exercices (nom · séries × reps)</Text>
+      <Text style={stylesEditeur.aide}>
+        Le second champ de reps est une FOURCHETTE, facultative : « 5 → 10 »
+        veut dire qu'on monte les reps jusqu'à 10 avant d'ajouter de la charge.
+        Laissé vide, l'objectif reste un seul nombre.
+      </Text>
       {lignes.map((ligne, i) => (
         <View key={i} style={stylesEditeur.ligne}>
           <TextInput
@@ -325,6 +342,15 @@ function EditeurSeance({
             onChangeText={(v) => modifier(i, 'reps', v)}
             keyboardType="numeric"
           />
+          <Text style={stylesEditeur.croix}>→</Text>
+          <TextInput
+            style={stylesEditeur.champ}
+            value={ligne.repsMax}
+            onChangeText={(v) => modifier(i, 'repsMax', v)}
+            keyboardType="numeric"
+            placeholder="—"
+            placeholderTextColor={colors.texteGris}
+          />
           {lignes.length > 1 && (
             <TouchableOpacity
               style={stylesEditeur.retirer}
@@ -338,7 +364,7 @@ function EditeurSeance({
 
       <TouchableOpacity
         style={stylesEditeur.boutonAjout}
-        onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10' }])}
+        onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10', repsMax: '' }])}
       >
         <Text style={stylesEditeur.boutonAjoutTexte}>+ Ajouter un exercice</Text>
       </TouchableOpacity>
@@ -379,6 +405,7 @@ const stylesEditeur = StyleSheet.create({
     borderWidth: 1, borderColor: colors.bordure, fontSize: 12,
   },
   croix: { color: colors.texteGris, fontSize: 12 },
+  aide: { color: colors.texteGris, fontSize: 11, lineHeight: 16, marginBottom: 6 },
   retirer: {
     width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.rouge,
@@ -630,6 +657,77 @@ export default function EntrainementScreen({
   const [programmeTrouve, setProgrammeTrouve] = useState(null);
   const [erreurCode, setErreurCode] = useState(null);
 
+  // LE TABLEAU DE PROGRESSION (04/10/2026, demande de Hafiz avec image) :
+  // `tableauDe` = { nom, seances } du programme affiché en grille, null sinon.
+  // Les réglages du bloc (durée, décharge) vivent ICI pour l'instant : ils ne
+  // sont pas encore enregistrés côté serveur — voir CLAUDE.md.
+  const [tableauDe, setTableauDe] = useState(null);
+  const [semainesTableau, setSemainesTableau] = useState(4);
+  const [dechargeTableau, setDechargeTableau] = useState(false);
+  // Les cases CORRIGÉES à la main : { "7|squat|2": { series, reps, poids } }.
+  const [ciblesSemaine, setCiblesSemaine] = useState({});
+
+  // Ouvrir le tableau d'un programme : on repart de SES réglages de bloc
+  // enregistrés (et non du dernier programme consulté).
+  function ouvrirTableau(nom, seances, cible) {
+    setTableauDe({ nom, seances, cible });
+    setSemainesTableau(cible?.duree_semaines || 4);
+    setDechargeTableau(!!cible?.avec_deload);
+    setVue('tableau');
+  }
+
+  // Les réglages du bloc sont enregistrés tout de suite : sans ça, le tableau
+  // repartait à 4 semaines sans décharge à chaque ouverture.
+  async function enregistrerBloc(semaines, decharge) {
+    const cible = tableauDe?.cible;
+    if (!cible) return;
+    try {
+      if (cible.type === 'cycle') {
+        await api.definirBlocCycle(cible.id, semaines, decharge);
+        setCycles((liste) => liste.map((c) => (c.id === cible.id
+          ? { ...c, duree_semaines: semaines, avec_deload: decharge ? 1 : 0 } : c)));
+      } else {
+        await api.definirBlocProgramme(cible.id, semaines, decharge);
+        setProgrammes((liste) => liste.map((p) => (p.id === cible.id
+          ? { ...p, duree_semaines: semaines, avec_deload: decharge ? 1 : 0 } : p)));
+      }
+    } catch (err) {
+      setErreur(
+        'Réglage NON enregistré côté serveur '
+        + `(${err.message || 'aucune réponse'}) — il vaut pour cet affichage seulement.`
+      );
+    }
+  }
+
+  // UNE CASE CORRIGÉE À LA MAIN (« l'app propose, je corrige »). Trois champs
+  // vides = on rend la case au calcul, on ne la met pas à zéro.
+  async function corrigerCase(programmeId, exercice, semaine, valeurs) {
+    const cle = `${programmeId}|${exercice}|${semaine}`;
+    const vide = valeurs === null
+      || (!valeurs.series && !valeurs.reps && valeurs.poids === null);
+    setCiblesSemaine((actuelles) => {
+      const suivantes = { ...actuelles };
+      if (vide) delete suivantes[cle];
+      else suivantes[cle] = { programme_id: programmeId, exercice, semaine, ...valeurs };
+      return suivantes;
+    });
+    try {
+      if (vide) {
+        await api.effacerCibleSemaine(moi.id, programmeId, exercice, semaine);
+      } else {
+        await api.definirCibleSemaine(moi.id, {
+          programme_id: programmeId, exercice, semaine: String(semaine), ...valeurs,
+        });
+      }
+    } catch (err) {
+      setErreur(
+        'Case NON enregistrée côté serveur '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
+    }
+  }
+
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
 
@@ -674,8 +772,10 @@ export default function EntrainementScreen({
   // formulaire de nouveau programme (sa saisie est gardée, contrairement à
   // « Annuler »). JAMAIS la séance en cours : le retour passe alors à App.js,
   // qui ramène au Profil — la séance reste intacte dans cet onglet.
-  useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'), () => {
+  useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'
+    || vue === 'tableau'), () => {
     if (vue === 'historiqueDetail') setEntrainementSelectionne(null);
+    if (vue === 'tableau') setTableauDe(null);
     setVue('accueil');
     return true;
   });
@@ -797,9 +897,10 @@ export default function EntrainementScreen({
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
         api.progressionsExercices(moi.id),
+        api.ciblesSemaine(moi.id),
       ]);
       toutReussi = resultats.every((r) => r.status === 'fulfilled');
-      const [p, e, pl, c, obj, grp, prog] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
+      const [p, e, pl, c, obj, grp, prog, cib] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
       if (p) setProgrammes(p);
       if (e) {
         // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
@@ -815,6 +916,13 @@ export default function EntrainementScreen({
       if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
       if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
       if (prog) setProgressions(prog);
+      // Les cases corrigées à la main, rangées par la clé que lit le tableau :
+      // « programme | exercice | semaine ».
+      if (cib) {
+        setCiblesSemaine(Object.fromEntries(cib.map((c2) => [
+          `${c2.programme_id}|${c2.exercice}|${c2.semaine}`, c2,
+        ])));
+      }
       // Seul l'admin a une liste à voir : celle de SES propres partages, avec
       // leurs codes. Personne d'autre ne peut lister quoi que ce soit.
       if (moi.admin) {
@@ -1963,6 +2071,30 @@ export default function EntrainementScreen({
   }
 
   // ---- Vue : détail d'une séance passée ----
+  // LE TABLEAU DE PROGRESSION — une vue à part entière : la grille a besoin
+  // de toute la largeur, elle ne tiendrait pas dans une carte de programme.
+  if (vue === 'tableau' && tableauDe) {
+    return (
+      <TableauProgression
+        nom={tableauDe.nom}
+        seances={tableauDe.seances}
+        entrainements={entrainements}
+        progressions={progressions}
+        cibles={ciblesSemaine}
+        nbSemaines={semainesTableau}
+        avecDeload={dechargeTableau}
+        onChangerSemaines={(n) => { setSemainesTableau(n); enregistrerBloc(n, dechargeTableau); }}
+        onBasculerDecharge={() => {
+          const suivant = !dechargeTableau;
+          setDechargeTableau(suivant);
+          enregistrerBloc(semainesTableau, suivant);
+        }}
+        onCorriger={corrigerCase}
+        onFermer={() => { setTableauDe(null); setVue('accueil'); }}
+      />
+    );
+  }
+
   if (vue === 'historiqueDetail' && entrainementSelectionne) {
     // Regroupe les séries par exercice, dans l'ordre où elles ont été loggées.
     const parExercice = [];
@@ -3235,6 +3367,13 @@ export default function EntrainementScreen({
                 {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.boutonModifier}
+              onPress={() => ouvrirTableau(cycle.nom, cycle.seances,
+                { type: 'cycle', id: cycle.id, ...cycle })}
+            >
+              <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
+            </TouchableOpacity>
             {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
                 C'est ainsi qu'on alimente le catalogue — pas de formulaire
                 séparé, l'admin construit un programme normalement puis le
@@ -3413,6 +3552,13 @@ export default function EntrainementScreen({
                 onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
               >
                 <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.boutonModifier}
+                onPress={() => ouvrirTableau(programme.nom, [programme],
+                  { type: 'programme', id: programme.id, ...programme })}
+              >
+                <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => demanderSuppression('prog-' + programme.id)}

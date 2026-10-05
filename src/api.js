@@ -372,6 +372,49 @@ export async function definirProgressionExercice(joueurId, exercice, modes) {
   });
 }
 
+// ----- LE TABLEAU DE PROGRESSION (04/10/2026) -----
+// Le CALCUL du tableau vit côté app (src/logic/projectionProgramme.js) : le
+// serveur ne garde que ce qui ne peut PAS se recalculer — les cases corrigées
+// à la main et les réglages du bloc.
+
+// Toutes mes cases corrigées, d'un coup : le tableau les veut toutes dès son
+// ouverture (une par une rejouerait le N+1 du 23/09/2026).
+export async function ciblesSemaine(joueurId) {
+  return get(`/joueurs/${joueurId}/cibles-semaine`);
+}
+
+// Écrit UNE case. Les trois valeurs sont facultatives : corriger la seule
+// charge laisse les séries et les reps au calcul. Tout vider efface la
+// correction et rend la case au calcul.
+export async function definirCibleSemaine(joueurId, cible) {
+  return appel(`/joueurs/${joueurId}/cibles-semaine`, {
+    method: 'PUT', body: JSON.stringify(cible),
+  });
+}
+
+export async function effacerCibleSemaine(joueurId, programmeId, exercice, semaine) {
+  const params = new URLSearchParams({
+    programme_id: String(programmeId), exercice, semaine: String(semaine),
+  });
+  return appel(`/joueurs/${joueurId}/cibles-semaine?${params.toString()}`, { method: 'DELETE' });
+}
+
+// La durée du bloc et la semaine de décharge — sur un programme complet
+// (cycle) ou sur une séance isolée.
+export async function definirBlocCycle(cycleId, dureeSemaines, avecDeload) {
+  return appel(`/cycles/${cycleId}/bloc`, {
+    method: 'PUT',
+    body: JSON.stringify({ duree_semaines: dureeSemaines, avec_deload: avecDeload }),
+  });
+}
+
+export async function definirBlocProgramme(programmeId, dureeSemaines, avecDeload) {
+  return appel(`/programmes/${programmeId}/bloc`, {
+    method: 'PUT',
+    body: JSON.stringify({ duree_semaines: dureeSemaines, avec_deload: avecDeload }),
+  });
+}
+
 // Ajoute une séance (un jour) à un programme DÉJÀ créé.
 export async function ajouterSeanceAuCycle(cycleId, seance) {
   return post(`/cycles/${cycleId}/seances`, seance);
