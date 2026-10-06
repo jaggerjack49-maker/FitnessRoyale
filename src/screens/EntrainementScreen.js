@@ -191,8 +191,28 @@ function LigneExercicePrevu({ exo, entrainements, progressions = {} }) {
 // Un jour bouclé montre le RÉALISÉ — les séries vraiment faites, regroupées
 // par exercice — au lieu de l'attendu : après coup, « 🎯 Attendu : 102,5 kg »
 // n'a plus rien à dire, c'est ce qu'on a soulevé qui compte.
+// LE TYPE D'UNE SÉANCE FAITE : le nom du programme suivi ce jour-là, ou
+// « Séance libre ». Demande de Hafiz du 06/10/2026 : « au niveau de
+// l'historique on doit voir le type de la séance réalisé en plus de la date ».
+//
+// ⚠️ UNE SEULE DÉFINITION, utilisée par les TROIS endroits qui nomment une
+// séance passée (le résumé du calendrier, la liste de l'historique, le détail
+// d'une séance). Ce `find` tenait sur une ligne, ce qui est précisément
+// pourquoi il aurait été recopié trois fois — et le projet paie en boucle les
+// secondes définitions de la même idée (voir `cycleEnService`, 28/08/2026).
+//
+// ⚠️ UN PROGRAMME SUPPRIMÉ REDEVIENT « Séance libre », et c'est assumé : la
+// table `entrainements` porte `programme_id ... ON DELETE SET NULL` (le lien
+// est coupé, les séries sont gardées — voir « Entraînement v5 »). Le NOM n'est
+// stocké nulle part, donc on ne peut pas l'inventer après coup. Mieux vaut
+// « Séance libre » qu'un nom faux.
+function typeDeSeance(entrainement, programmes) {
+  if (!entrainement || !entrainement.programme_id) return 'Séance libre';
+  const programme = (programmes || []).find((p) => p.id === entrainement.programme_id);
+  return programme ? programme.nom : 'Séance libre';
+}
+
 function ResumeSeanceFaite({ entrainement, programmes }) {
-  const programme = programmes.find((p) => p.id === entrainement.programme_id);
   const parExercice = [];
   (entrainement.series || []).forEach((s) => {
     if (!s) return;
@@ -203,7 +223,7 @@ function ResumeSeanceFaite({ entrainement, programmes }) {
   return (
     <View style={styles.detailJour}>
       <Text style={[styles.nomProgrammeTexte, { color: colors.vert }]}>
-        ✅ {programme ? programme.nom : 'Séance libre'} <Text style={styles.indice}>(faite)</Text>
+        ✅ {typeDeSeance(entrainement, programmes)} <Text style={styles.indice}>(faite)</Text>
       </Text>
       {parExercice.map((g) => (
         <Text key={g.exercice} style={styles.exerciceDetailJour}>
@@ -2272,7 +2292,10 @@ export default function EntrainementScreen({
     });
     return (
       <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-        <Text style={styles.titre}>📅 Séance du {entrainementSelectionne.date}</Text>
+        <Text style={styles.titre}>
+          📅 {typeDeSeance(entrainementSelectionne, programmes)}
+        </Text>
+        <Text style={styles.sousTitre}>{libelleDate(entrainementSelectionne.date)}</Text>
         {parExercice.map((groupe) => (
           <View key={groupe.exercice} style={styles.carteExercice}>
             <Text style={styles.nomExercice}>{groupe.exercice}</Text>
@@ -4056,9 +4079,16 @@ export default function EntrainementScreen({
             style={styles.carteHistorique}
             onPress={() => { setEntrainementSelectionne(e); setVue('historiqueDetail'); }}
           >
-            <Text style={styles.dateHistorique}>{e.date}</Text>
+            {/* La date reste le repère principal — c'est par elle qu'on
+                retrouve une séance. Le TYPE la complète sur la ligne
+                d'en dessous : mis à côté de la date, un nom de programme long
+                (48 caractères déjà vus en test) se serait battu pour la
+                largeur, et c'est toujours le texte qui perd (bug du
+                03/09/2026). Là, il passe simplement à la ligne. */}
+            <Text style={styles.dateHistorique}>{libelleDate(e.date)}</Text>
             <Text style={styles.indice}>
-              {exercicesUniques.length} exercice{exercicesUniques.length > 1 ? 's' : ''} · {nbSeries} série{nbSeries > 1 ? 's' : ''}
+              <Text style={styles.typeHistorique}>{typeDeSeance(e, programmes)}</Text>
+              {' · '}{exercicesUniques.length} exercice{exercicesUniques.length > 1 ? 's' : ''} · {nbSeries} série{nbSeries > 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
         );
@@ -4079,6 +4109,10 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s,
   },
   texteBandeauBloc: { color: colors.or, fontSize: 12, fontWeight: '700', lineHeight: 18 },
+
+  // Le type de séance dans l'historique : en or, comme les repères de
+  // progression — c'est une information, pas une action.
+  typeHistorique: { color: colors.or, fontWeight: '800' },
 
   bandeauJourSeance: {
     backgroundColor: '#1d1a12',

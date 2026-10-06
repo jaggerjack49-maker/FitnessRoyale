@@ -4194,6 +4194,71 @@ bandeaux honnêtes de l'Entraînement (16/09 et 23/09), la passe de design du
 01/10. Et les **notifications locales** (rappels d'entraînement et de suivi)
 n'ont toujours jamais été vérifiées en réel : c'est la première occasion.
 
+## Historique : le TYPE de la séance, et une date lisible — 06/10/2026
+
+Demande de Hafiz : « au niveau de l'historique on doit voir le type de la
+séance réalisé en plus de la date ».
+
+La liste n'affichait que `2026-10-06` et « 3 exercices · 8 séries » : impossible
+de savoir si c'était un Push, un Pull ou une séance libre sans ouvrir chaque
+carte. Elle affiche maintenant, sur deux lignes :
+
+```
+mardi 6 octobre
+Push · 1 exercice · 1 série          ← « Push » en or
+```
+
+Et le détail d'une séance passée titre « 📅 Push » avec la date en sous-titre,
+comme l'écran de séance.
+
+- **UNE SEULE DÉFINITION du type** : `typeDeSeance(entrainement, programmes)`,
+  utilisée par les TROIS endroits qui nomment une séance passée (le résumé du
+  calendrier `ResumeSeanceFaite`, la liste de l'historique, le détail). Ce
+  `find` tient sur une ligne — c'est précisément pourquoi il aurait été recopié
+  trois fois, et ce projet paie en boucle les secondes écritures de la même
+  idée (voir `cycleEnService` le 28/08, `estVerifiee` le 04/09).
+- **LE TYPE VA SOUS LA DATE, PAS À CÔTÉ.** Un nom de programme de 46 caractères
+  a été posé exprès en base pour vérifier : mis sur la même ligne que la date,
+  il se serait battu pour la largeur, et c'est toujours le texte qui perd (bug
+  du 03/09/2026, « pourquoi ces espaces ? »). Là il passe simplement à la ligne,
+  et aucun débordement horizontal n'est mesuré.
+- ⚠️ **UN PROGRAMME SUPPRIMÉ REDEVIENT « Séance libre »**, et c'est assumé :
+  `entrainements` porte `programme_id … ON DELETE SET NULL` (le lien est coupé,
+  les séries sont gardées — voir « Entraînement v5 »). Le NOM n'est stocké
+  nulle part, donc on ne peut pas l'inventer après coup. Mieux vaut
+  « Séance libre » qu'un nom faux.
+
+**AU PASSAGE, un second défaut corrigé au même endroit** : les deux vues
+affichaient la date en FORMAT MACHINE (`2026-10-06`) alors que tout le reste de
+l'app écrit « mardi 6 octobre ». C'est exactement le défaut que le designer
+avait relevé le 01/10 dans l'écran de séance — il en restait deux occurrences à
+une ligne d'ici, que sa passe n'avait pas couvertes. Les deux passent par
+`libelleDate`.
+
+### Vérifié
+
+Dans l'app (navigateur, backend LOCAL, compte `SondeTest`, format 420 px) :
+l'historique affiche « mardi 6 octobre / Push · 1 exercice · 1 série » puis
+« jeudi 24 septembre / Séance libre · 1 exercice · 3 séries » — les deux cas
+(programme suivi et séance libre) sont présents dans les données de test ;
+le détail titre « 📅 Push » avec « mardi 6 octobre » en dessous ; un nom de
+46 caractères ne déborde pas. Suite backend : **343 tests, tous OK.**
+
+⚠️ **PIÈGE DE VÉRIFICATION QUI M'A COÛTÉ DU TEMPS, à retenir** : en pleine
+vérification, l'app a cessé d'accepter le jeton de session injecté — elle
+l'effaçait au démarrage, écran de connexion. J'ai d'abord soupçonné une
+régression de `api.js`, puis un jeton périmé (il répondait 200 en `curl`, et un
+jeton NEUF créé en base échouait pareil). LA VRAIE CAUSE était la mienne :
+j'avais remis `expo.extra.apiUrl` sur l'adresse Render « par prudence » pendant
+le test, et la reconstruction Metro suivante a réinliné cette adresse — l'app
+interrogeait donc le serveur EN LIGNE avec un jeton qui n'existe que dans la
+base SQLite locale → 401 → jeton effacé.
+C'est le piège du 25/08 sous un autre visage : **le bundle contenait les DEUX
+adresses**, donc chercher la chaîne dedans ne prouvait rien. La bonne méthode
+est celle déjà écrite : `apiUrl` à `null`, **vider `node_modules/.cache` et
+`%TEMP%/metro-cache`**, redémarrer Metro, et seulement restaurer `app.json` une
+fois le test fini (`git diff app.json` vide avant tout commit).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
