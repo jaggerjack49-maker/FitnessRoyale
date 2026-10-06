@@ -791,9 +791,38 @@ class CibleSemaine(BaseModel):
     poids: float | None = Field(default=None, ge=0, le=1000)
 
 
+class PlanDuBloc(BaseModel):
+    """LE PLAN FIGÉ au démarrage d'un bloc : toutes ses cases, d'un coup.
+
+    ⚠️ Un seul appel, pas un par case. Figer 6 semaines × 10 exercices fait
+    60 cases : 60 requêtes vers Neon dépasseraient le délai d'attente de
+    l'app, le motif exact qui a fait disparaître l'onglet Entraînement le
+    23/09/2026. Le maximum protège aussi la base d'un envoi absurde.
+    """
+    cases: list[CibleSemaine] = Field(min_length=1, max_length=400)
+
+
 class BlocProgramme(BaseModel):
     duree_semaines: int | None = Field(default=None, gt=0, le=12)
     avec_deload: bool = False
+    # DÉMARRER le bloc = lui donner une date de début. À None, la date
+    # existante n'est pas touchée : régler la durée ne déplace pas un bloc
+    # déjà commencé.
+    date_debut: str | None = None
+    # ARRÊTER le bloc = effacer sa date. Un drapeau à part, parce que « ne pas
+    # toucher à la date » et « enlever la date » sont deux demandes
+    # différentes, et que None ne peut pas dire les deux.
+    arreter: bool = False
+
+
+def _verifier_date_debut(valeur):
+    """Même contrôle que partout ailleurs (création de programme, planning)."""
+    if valeur is None:
+        return
+    try:
+        date.fromisoformat(valeur)
+    except ValueError:
+        raise HTTPException(400, "Date de début invalide : utilise le format AAAA-MM-JJ.")
 
 
 @app.get("/joueurs/{joueur_id}/cibles-semaine")
@@ -821,6 +850,31 @@ def definir_cible_semaine(joueur_id: int, cible: CibleSemaine,
     return {"enregistre": True}
 
 
+@app.put("/joueurs/{joueur_id}/cibles-semaine/lot")
+def definir_cibles_lot(joueur_id: int, plan: PlanDuBloc,
+                       courant: dict = Depends(auth.utilisateur_courant)):
+    """Écrit tout le plan d'un bloc (ou la suite recalculée) en UN appel.
+
+    ⚠️ LES CORRECTIONS MANUELLES SONT PRÉSERVÉES, et c'est la base de données
+    qui le garantit (`definir_cibles_lot`), pas l'écran : une case que Hafiz a
+    corrigée à la main survit à un recalcul de la suite du bloc.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
+    # Les programmes concernés doivent TOUS être à moi : sans cette
+    # vérification, un seul appel pourrait réécrire le plan de n'importe qui.
+    for programme_id in {c.programme_id for c in plan.cases}:
+        programme = db.lire_programme(programme_id)
+        if programme is None or programme["joueur_id"] != joueur_id:
+            raise HTTPException(403, "Ce programme n'est pas le tien.")
+    cases = [
+        {"programme_id": c.programme_id, "exercice": c.exercice,
+         "semaine": c.semaine, "series": c.series, "reps": c.reps,
+         "poids": c.poids, "origine": "plan"}
+        for c in plan.cases
+    ]
+    return db.definir_cibles_lot(joueur_id, cases)
+
+
 @app.delete("/joueurs/{joueur_id}/cibles-semaine")
 def retirer_cible_semaine(joueur_id: int, programme_id: int, exercice: str, semaine: str,
                           courant: dict = Depends(auth.utilisateur_courant)):
@@ -841,8 +895,11 @@ def definir_bloc_programme(programme_id: int, bloc: BlocProgramme,
     if programme is None:
         raise HTTPException(404, "Programme introuvable.")
     auth.verifier_proprietaire(courant, programme["joueur_id"])
-    db.definir_bloc_programme(programme_id, bloc.duree_semaines, bloc.avec_deload)
-    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload}
+    _verifier_date_debut(bloc.date_debut)
+    db.definir_bloc_programme(programme_id, bloc.duree_semaines, bloc.avec_deload,
+                              bloc.date_debut, bloc.arreter)
+    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload,
+            "date_debut": bloc.date_debut}
 
 
 @app.put("/cycles/{cycle_id}/bloc")
@@ -853,8 +910,11 @@ def definir_bloc_cycle(cycle_id: int, bloc: BlocProgramme,
     if cycle is None:
         raise HTTPException(404, "Programme introuvable.")
     auth.verifier_proprietaire(courant, cycle["joueur_id"])
-    db.definir_bloc_cycle(cycle_id, bloc.duree_semaines, bloc.avec_deload)
-    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload}
+    _verifier_date_debut(bloc.date_debut)
+    db.definir_bloc_cycle(cycle_id, bloc.duree_semaines, bloc.avec_deload,
+                          bloc.date_debut, bloc.arreter)
+    return {"duree_semaines": bloc.duree_semaines, "avec_deload": bloc.avec_deload,
+            "date_debut": bloc.date_debut}
 
 
 @app.get("/joueurs/{joueur_id}/defis")

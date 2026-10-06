@@ -37,6 +37,9 @@ import useRetour from '../useRetour';
 import CarteNutrition from '../components/CarteNutrition';
 import TableauProgression from '../components/TableauProgression';
 import {
+  semaineDuBloc, ecartsDuBlocComplet, semainesARecalculer, ciblePrevueDansBloc,
+} from '../logic/bloc';
+import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
 } from '../logic/rattrapage';
 
@@ -664,8 +667,13 @@ export default function EntrainementScreen({
   const [tableauDe, setTableauDe] = useState(null);
   const [semainesTableau, setSemainesTableau] = useState(4);
   const [dechargeTableau, setDechargeTableau] = useState(false);
-  // Les cases CORRIGÉES à la main : { "7|squat|2": { series, reps, poids } }.
+  // Les cases ENREGISTRÉES : { "7|squat|2": { series, reps, poids, origine } }.
+  // ⚠️ Depuis le 05/10/2026 elles ne sont plus seulement des corrections :
+  // démarrer un bloc FIGE tout le plan dedans, avec `origine: 'plan'`.
   const [ciblesSemaine, setCiblesSemaine] = useState({});
+  // Vrai pendant qu'on écrit un plan (figer, recalculer) : le bouton le dit,
+  // au lieu de rester muet pendant l'aller-retour serveur.
+  const [blocOccupe, setBlocOccupe] = useState(false);
 
   // Ouvrir le tableau d'un programme : on repart de SES réglages de bloc
   // enregistrés (et non du dernier programme consulté).
@@ -725,6 +733,148 @@ export default function EntrainementScreen({
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
+    }
+  }
+
+  // À QUEL BLOC APPARTIENT CETTE SÉANCE ?
+  //
+  // Une séance peut être démarrée comme bloc à elle seule, ou appartenir à un
+  // programme complet (un « cycle ») qui porte la date pour toutes ses
+  // séances. On regarde donc le cycle D'ABORD : c'est lui qui commande quand
+  // les deux existent, sinon un « Push » gardant une vieille date de son
+  // temps de séance isolée contredirait le bloc en cours.
+  function blocDeLaSeance(programmeId) {
+    if (!programmeId) return null;
+    const cycle = (cycles || []).find((c) => (c.seances || [])
+      .some((seance) => seance.id === programmeId));
+    if (cycle && cycle.date_debut && cycle.duree_semaines) {
+      return { date_debut: cycle.date_debut, duree_semaines: cycle.duree_semaines,
+        avec_deload: !!cycle.avec_deload };
+    }
+    const programme = (programmes || []).find((p) => p.id === programmeId);
+    if (programme && programme.date_debut && programme.duree_semaines) {
+      return { date_debut: programme.date_debut, duree_semaines: programme.duree_semaines,
+        avec_deload: !!programme.avec_deload };
+    }
+    return null;
+  }
+
+  // LE BLOC actuellement affiché dans le tableau, sous la forme attendue par
+  // les règles : la DATE et la DURÉE viennent du bloc, les NUMÉROS viennent
+  // de ses séances (voir `ecartsDuBlocComplet`).
+  function blocDuTableau() {
+    const cible = tableauDe?.cible;
+    if (!cible) return null;
+    return {
+      id: cible.id,
+      date_debut: cible.date_debut || null,
+      duree_semaines: semainesTableau,
+      avec_deload: dechargeTableau,
+    };
+  }
+
+  // Ce qui s'est VRAIMENT passé par rapport au plan figé.
+  function ecartsDuTableau() {
+    const bloc = blocDuTableau();
+    if (!bloc || !bloc.date_debut) return { semainesSautees: [], chargesDifferentes: [] };
+    return ecartsDuBlocComplet(
+      bloc,
+      (tableauDe.seances || []).map((seance) => seance.id),
+      entrainements, ciblesSemaine, aujourdhui(),
+    );
+  }
+
+  // DÉMARRER LE BLOC = FIGER LE PLAN.
+  //
+  // Jusqu'ici le tableau était une projection, recalculée à chaque ouverture.
+  // On écrit maintenant toutes ses cases en base : elles DEVIENNENT le plan,
+  // et la séance peut enfin annoncer « semaine 2 sur 4 ». Les cases viennent
+  // du COMPOSANT (ce que Hafiz a sous les yeux), jamais d'un second calcul.
+  async function demarrerBloc(dateISO, cases) {
+    const cible = tableauDe?.cible;
+    if (!cible) return;
+    if (!cases || cases.length === 0) {
+      setErreur(
+        'Rien à figer : aucun exercice de ce programme n\'a encore été fait, '
+        + "donc l'app n'a aucune charge de départ à proposer."
+      );
+      return;
+    }
+    setBlocOccupe(true);
+    try {
+      await api.definirCiblesLot(moi.id, cases);
+      if (cible.type === 'cycle') {
+        await api.definirBlocCycle(cible.id, semainesTableau, dechargeTableau, dateISO);
+      } else {
+        await api.definirBlocProgramme(cible.id, semainesTableau, dechargeTableau, dateISO);
+      }
+      await chargerTout();
+      // Le tableau reste ouvert : on garde sa cible à jour pour que le
+      // panneau passe tout de suite à « semaine 1 sur 4 ».
+      setTableauDe((t) => (t ? { ...t, cible: { ...t.cible, date_debut: dateISO } } : t));
+    } catch (err) {
+      setErreur(
+        'Bloc NON démarré : le serveur n\'a pas pu enregistrer le plan '
+        + `(${err.message || 'aucune réponse'}).`
+      );
+      await chargerTout();
+    } finally {
+      setBlocOccupe(false);
+    }
+  }
+
+  // ARRÊTER le bloc : on efface sa date de début, SANS toucher aux cases.
+  // Le plan reste donc écrit — on peut le relire, et le redémarrer plus tard.
+  async function arreterBloc() {
+    const cible = tableauDe?.cible;
+    if (!cible) return;
+    setBlocOccupe(true);
+    try {
+      await api.arreterBloc(cible.type, cible.id, semainesTableau, dechargeTableau);
+      await chargerTout();
+      setTableauDe((t) => (t ? { ...t, cible: { ...t.cible, date_debut: null } } : t));
+    } catch (err) {
+      setErreur(`Bloc NON arrêté (${err.message || 'aucune réponse'}).`);
+      await chargerTout();
+    } finally {
+      setBlocOccupe(false);
+    }
+  }
+
+  // RECALCULER LA SUITE (choix de Hafiz : « le plan, mais qui se rattrape »).
+  //
+  // ⚠️ ON NE RÉÉCRIT JAMAIS LE PASSÉ : seules la semaine EN COURS et les
+  // suivantes sont remplacées. Les semaines déjà faites restent telles
+  // qu'elles étaient prévues — c'est la trace de l'écart qu'on vient de
+  // signaler, l'effacer reviendrait à prétendre que tout s'est passé comme
+  // prévu. Les cases corrigées à la main sont préservées par le SERVEUR.
+  async function recalculerLaSuite(cases) {
+    const cible = tableauDe?.cible;
+    if (!cible || !cible.date_debut) return;
+    // Les semaines déjà entraînées sont ÉPARGNÉES : c'est pour ça que la règle
+    // a besoin des séances et des numéros de séance du bloc.
+    const aGarder = new Set(semainesARecalculer(
+      blocDuTableau(),
+      (tableauDe.seances || []).map((seance) => seance.id),
+      entrainements, aujourdhui(),
+    ).map(String));
+    const suite = (cases || []).filter((c) => aGarder.has(String(c.semaine)));
+    if (suite.length === 0) {
+      setErreur('Rien à recalculer : il ne reste aucune semaine dans ce bloc.');
+      return;
+    }
+    setBlocOccupe(true);
+    try {
+      await api.definirCiblesLot(moi.id, suite);
+      await chargerTout();
+    } catch (err) {
+      setErreur(
+        'Suite du bloc NON recalculée '
+        + `(${err.message || 'aucune réponse'}) — le plan n'a pas changé.`
+      );
+      await chargerTout();
+    } finally {
+      setBlocOccupe(false);
     }
   }
 
@@ -1980,6 +2130,12 @@ export default function EntrainementScreen({
     : (jourDeLaSeance(seriesDeLaSeance, {
         dateDebut: dateDebutSeance, jourJ: aujourdhui(),
       }) || aujourdhui());
+  // LE BLOC de la séance en cours, s'il y en a un — UNE SEULE définition,
+  // partagée par le bandeau d'en-tête et la cible de chaque exercice. Les
+  // deux ne peuvent donc pas annoncer deux semaines différentes.
+  const blocSeance = blocDeLaSeance(programmeActif?.id);
+  const semaineSeance = blocSeance
+    ? semaineDuBloc(blocSeance, jourEnregistrement) : null;
 
   async function terminerSeance() {
     // On retire le `jour` de chaque série : il est propre à l'app (il a
@@ -2091,6 +2247,17 @@ export default function EntrainementScreen({
         }}
         onCorriger={corrigerCase}
         onFermer={() => { setTableauDe(null); setVue('accueil'); }}
+        // ---- LE BLOC (05/10/2026) ----
+        dateDebut={tableauDe.cible?.date_debut || null}
+        aujourdhui={aujourdhui()}
+        // Les écarts ne se calculent QUE sur le programme complet affiché :
+        // une séance isolée du tableau porte son propre numéro de programme,
+        // et `ecartsDuBloc` compare séance par séance.
+        ecarts={ecartsDuTableau()}
+        onDemarrer={demarrerBloc}
+        onArreter={arreterBloc}
+        onRecalculer={recalculerLaSuite}
+        occupe={blocOccupe}
       />
     );
   }
@@ -2287,6 +2454,19 @@ export default function EntrainementScreen({
             ? libelleDate(jour)
             : `Sera enregistrée au ${libelleDate(jourEnregistrement)}`}
         </Text>
+        {/* LE BLOC EN COURS (05/10/2026) : où j'en suis dans mon plan. On
+            l'affiche AVANT tout le reste — c'est le cadre dans lequel la
+            séance se fait, pas un détail. */}
+        {semaineSeance !== null && (
+          <View style={styles.bandeauBloc}>
+            <Text style={styles.texteBandeauBloc}>
+              📋 {semaineSeance === 'decharge'
+                ? 'Semaine de DÉCHARGE de ton bloc'
+                : `Semaine ${semaineSeance} sur ${blocSeance.duree_semaines} de ton bloc`}
+              {' '}— les charges ci-dessous viennent de ton plan.
+            </Text>
+          </View>
+        )}
         {/* SÉANCE COMMENCÉE UN AUTRE JOUR (21/09/2026) : on le DIT, et on
             laisse le choix — l'app ne décide pas dans le dos de personne. */}
         {jourEnregistrement !== jour && (
@@ -2347,6 +2527,16 @@ export default function EntrainementScreen({
           const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles, {
             modes: progressions[exercice], seriesCibles: cibleExo?.series_cibles,
           });
+          // ---- LE PLAN DU BLOC (05/10/2026) ----
+          // Si un bloc est en cours, c'est SON plan qui dit quoi faire — pas
+          // un recalcul. C'est tout l'intérêt d'avoir figé le tableau : le
+          // plan tient sa parole même après une semaine ratée, au lieu de se
+          // réajuster en silence. Rien n'est écrit pour cet exercice (ou pas
+          // de bloc) : on retombe sur la suggestion calculée, comme avant.
+          const cibleDuPlan = blocSeance
+            ? ciblePrevueDansBloc(blocSeance, programmeActif?.id, exercice,
+              jourEnregistrement, ciblesSemaine)
+            : null;
           const record = recordPersonnel(entrainements, exercice);
           const nouveauRecord = bat_le_record(seriesFaites, record);
           const stagnation = detecterStagnation(entrainements, exercice, 3);
@@ -2364,14 +2554,27 @@ export default function EntrainementScreen({
                 )}
               </Text>
 
-              {/* Quoi tenter aujourd'hui pour progresser */}
-              {suggestion && (
+              {/* Quoi faire aujourd'hui : LE PLAN s'il existe, sinon le calcul */}
+              {cibleDuPlan ? (
+                <Text style={styles.suggestion}>
+                  📋 {cibleDuPlan.semaine === 'decharge' ? 'Décharge'
+                    : `Semaine ${cibleDuPlan.semaine}`} :{' '}
+                  {cibleDuPlan.series
+                    ? `${cibleDuPlan.series} série${cibleDuPlan.series > 1 ? 's' : ''} × `
+                    : ''}
+                  {cibleDuPlan.reps} reps
+                  {cibleDuPlan.poids > 0 ? ` à ${cibleDuPlan.poids} kg` : ''}
+                  <Text style={styles.raisonSuggestion}>
+                    {cibleDuPlan.corrigee ? ' — ta valeur' : ' — ton plan'}
+                  </Text>
+                </Text>
+              ) : suggestion ? (
                 <Text style={styles.suggestion}>
                   🎯 Aujourd'hui : {suggestion.series ? `${suggestion.series} séries × ` : ''}
                   {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
                   <Text style={styles.raisonSuggestion}> — {suggestion.raison}</Text>
                 </Text>
-              )}
+              ) : null}
               <ChoixAxesProgression
                 exercice={exercice}
                 modes={progressions[exercice]}
@@ -3868,6 +4071,15 @@ export default function EntrainementScreen({
 
 const styles = StyleSheet.create({
   // Bandeau « cette séance sera enregistrée au … » (21/09/2026).
+  // Le bandeau du bloc : discret mais en or, comme les repères de progression.
+  bandeauBloc: {
+    borderWidth: 1, borderColor: colors.or, borderRadius: 10,
+    backgroundColor: 'rgba(232, 178, 58, 0.10)',
+    paddingVertical: 10, paddingHorizontal: 12,
+    marginBottom: espacement.s,
+  },
+  texteBandeauBloc: { color: colors.or, fontSize: 12, fontWeight: '700', lineHeight: 18 },
+
   bandeauJourSeance: {
     backgroundColor: '#1d1a12',
     borderLeftWidth: 3,

@@ -399,19 +399,51 @@ export async function effacerCibleSemaine(joueurId, programmeId, exercice, semai
   return appel(`/joueurs/${joueurId}/cibles-semaine?${params.toString()}`, { method: 'DELETE' });
 }
 
-// La durée du bloc et la semaine de décharge — sur un programme complet
-// (cycle) ou sur une séance isolée.
-export async function definirBlocCycle(cycleId, dureeSemaines, avecDeload) {
-  return appel(`/cycles/${cycleId}/bloc`, {
-    method: 'PUT',
-    body: JSON.stringify({ duree_semaines: dureeSemaines, avec_deload: avecDeload }),
+// ÉCRIT TOUT UN PLAN D'UN COUP — démarrer un bloc, ou recalculer sa suite.
+// ⚠️ UN SEUL APPEL, jamais une case à la fois : figer 6 semaines × 10 exercices
+// fait 60 cases, et 60 requêtes dépasseraient le délai d'attente de l'app
+// (le motif qui a fait disparaître l'onglet Entraînement le 23/09/2026).
+// Le serveur préserve les cases corrigées à la main, l'app n'a pas à les trier.
+export async function definirCiblesLot(joueurId, cases) {
+  return appel(`/joueurs/${joueurId}/cibles-semaine/lot`, {
+    method: 'PUT', body: JSON.stringify({ cases }),
   });
 }
 
-export async function definirBlocProgramme(programmeId, dureeSemaines, avecDeload) {
+// La durée du bloc, la semaine de décharge, et la DATE DE DÉBUT — sur un
+// programme complet (cycle) ou sur une séance isolée.
+// `dateDebut` à null (ou omis) laisse la date telle quelle : changer la durée
+// d'un bloc ne doit pas le déplacer dans le temps.
+export async function definirBlocCycle(cycleId, dureeSemaines, avecDeload, dateDebut = null) {
+  return appel(`/cycles/${cycleId}/bloc`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      duree_semaines: dureeSemaines, avec_deload: avecDeload, date_debut: dateDebut,
+    }),
+  });
+}
+
+export async function definirBlocProgramme(programmeId, dureeSemaines, avecDeload,
+                                           dateDebut = null) {
   return appel(`/programmes/${programmeId}/bloc`, {
     method: 'PUT',
-    body: JSON.stringify({ duree_semaines: dureeSemaines, avec_deload: avecDeload }),
+    body: JSON.stringify({
+      duree_semaines: dureeSemaines, avec_deload: avecDeload, date_debut: dateDebut,
+    }),
+  });
+}
+
+// ARRÊTER un bloc en cours : on efface sa date de début.
+// ⚠️ C'est un drapeau À PART, et pas `dateDebut = null` : « ne touche pas à la
+// date » et « enlève la date » sont deux demandes différentes, et `null` ne
+// peut pas dire les deux. Les cases du plan, elles, ne sont PAS effacées.
+export async function arreterBloc(type, id, dureeSemaines, avecDeload) {
+  const chemin = type === 'cycle' ? `/cycles/${id}/bloc` : `/programmes/${id}/bloc`;
+  return appel(chemin, {
+    method: 'PUT',
+    body: JSON.stringify({
+      duree_semaines: dureeSemaines, avec_deload: avecDeload, arreter: true,
+    }),
   });
 }
 

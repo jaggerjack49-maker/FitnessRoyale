@@ -3937,6 +3937,196 @@ DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, format mobile 375) :
   l'explication au lieu d'une grille vide ;
 - aucune erreur console, aucun débordement horizontal en 768 px.
 
+## Le BLOC : le tableau devient un plan daté — 06/10/2026
+
+Demande de Hafiz : « il faut qu'on puisse maintenant créer des cycles… un cycle
+sur un mois, avec des exercices comme un programme. Et vu qu'on peut déjà créer
+des programmes, à partir du programme on peut faire le cycle qui sera visualisé
+en tableau. »
+
+⚠️ VOCABULAIRE — ON DIT **BLOC**, PAS « CYCLE ». Dans ce projet, `cycles` est
+déjà le nom interne d'un programme complet qui groupe plusieurs séances
+(« Mon PPL » et ses jours). Garder le mot « cycle » pour les deux aurait recréé
+le piège « arène / ligue » du 20/08/2026 : un même mot pour deux choses, et des
+écrans qui semblent se contredire. Un BLOC = un programme + une DATE DE DÉBUT +
+N semaines (+ une décharge).
+
+### Ce qui a été tranché avec lui AVANT d'écrire une ligne
+
+- **« Le plan, mais qui se rattrape »** : le bloc est daté et suivi semaine par
+  semaine, MAIS si on s'en écarte (semaine sautée, charge différente de ce qui
+  était prévu), l'app le DIT et propose de recalculer la suite. Elle ne
+  recalcule jamais dans le dos.
+- **La fin de bloc : « on verra plus tard »** — rien n'est fait quand les
+  N semaines sont passées, sinon que le bloc n'est plus « en cours ». Pas de
+  bilan, pas de reconduction automatique.
+
+### ⚠️ LA CONSÉQUENCE QUI COMMANDE TOUT : démarrer un bloc FIGE le plan
+
+Jusqu'ici le tableau était une PROJECTION : il se recalculait depuis
+l'historique à chaque ouverture. Pour qu'une séance puisse annoncer
+« semaine 2 sur 4 — 8 reps à 105 kg », cette ligne doit EXISTER quelque part et
+ne plus bouger — sinon elle se réajuste en silence et il n'y a plus de plan du
+tout. Démarrer un bloc écrit donc TOUTES les cases dans `cibles_semaine`, et le
+tableau cesse d'inventer : il LIT.
+
+- **Une case enregistrée n'est donc plus forcément une correction.** D'où la
+  colonne **`origine`** sur `cibles_semaine` : `'plan'` (écrite par le démarrage
+  ou un recalcul) ou `'manuel'` (corrigée à la main). Sans elle, toutes les
+  cases porteraient la marque bleue « tu l'as écrite » et cette marque ne
+  voudrait plus rien dire. `DEFAULT 'manuel'` : les cases écrites AVANT ce jour
+  étaient toutes des corrections, et elles doivent rester protégées.
+- **UN SEUL APPEL pour tout le plan** (`PUT /joueurs/{id}/cibles-semaine/lot`,
+  `db.definir_cibles_lot`). Figer 6 semaines × 10 exercices fait 60 cases :
+  60 requêtes vers Neon dépasseraient le délai de l'app — le motif exact qui a
+  fait disparaître l'onglet Entraînement le 23/09/2026. Un test COMPTE LES
+  EMPRUNTS de connexion : 4 cases et 40 cases doivent coûter pareil.
+- **La règle qui protège le travail de Hafiz vit CÔTÉ SERVEUR**
+  (`respecter_les_corrections` dans `definir_cibles_lot`) : une case `'manuel'`
+  n'est JAMAIS écrasée par un plan recalculé. Mise dans l'écran, elle aurait été
+  trop facile à oublier dans un appelant.
+- **`date_debut` ajoutée aux `cycles`** (les `programmes` l'avaient déjà) : c'est
+  le programme complet qu'on démarre comme un bloc.
+- **TROIS états pour la date**, et il faut les trois : `date_debut` à None = ne
+  touche pas à la date (régler la durée ne doit pas déplacer un bloc déjà
+  commencé) ; une date = démarrer ; `arreter: true` = effacer la date. Sans le
+  troisième, un bloc démarré par erreur aurait été impossible à arrêter.
+  Arrêter n'efface PAS les cases : le plan reste écrit, relisible, redémarrable.
+
+### Les deux échelles qu'il ne faut pas confondre
+
+Un programme complet porte la DATE et la DURÉE, mais ce sont ses SÉANCES
+(« Push », « Pull ») qui portent les numéros sous lesquels vivent les cases du
+plan. D'où `ecartsDuBlocComplet(bloc, idsSeances, …)` et
+`ciblePrevueDansBloc(bloc, programmeId, …)` ; `ecartsDuBloc` et `ciblePrevue`
+n'en sont que le cas particulier « une seule séance ». UNE SEULE définition de
+chaque règle — deux écritures de « qu'est-ce qu'un écart » finiraient par se
+contredire.
+
+### Ce que « s'écarter » veut dire (il fallait le décider)
+
+Deux sortes d'écart, et seulement deux, sinon l'app alerterait sur tout et
+plus personne ne la croirait :
+1. une **semaine PASSÉE** du bloc sans aucune séance de ce programme ;
+2. une **charge différente** de celle prévue sur un exercice — plus lourde
+   comme plus légère : les deux rendent la suite du plan fausse.
+La semaine EN COURS n'est jamais signalée comme sautée (elle n'est pas finie),
+et on ne compte qu'UN écart par exercice et par semaine.
+
+### ⚠️ LE DÉFAUT TROUVÉ À L'ÉCRAN, et pas dans les tests
+
+Première version de `semainesARecalculer` : « la semaine en cours et toutes
+celles d'après ». Vérifié dans l'app, le scénario réel l'a cassée tout de suite :
+séance faite en semaine 1 à **120 kg** au lieu des 105 prévus → « recalculer »
+réécrivait la semaine 1 à **122,5**, et l'app signalait aussitôt un NOUVEL
+écart (« 120 kg, le plan disait 122,5 ») **qu'on ne pouvait plus jamais
+résoudre**. Le recalcul fabriquait exactement le problème qu'il devait régler.
+
+Pire : mon propre commentaire au-dessus de la fonction affirmait « on ne
+réécrit jamais le passé » — le code ne le tenait pas, parce que la semaine en
+cours peut DÉJÀ être entraînée. La règle compare donc maintenant aux séances
+réellement enregistrées : **une semaine déjà entraînée n'est jamais réécrite**,
+même la semaine en cours, même la décharge. Une semaine faite est de
+l'HISTOIRE ; sa ligne de plan est la trace de ce qui avait été demandé, pas une
+prévision à rafraîchir.
+LEÇON : les 43 cas du harnais étaient tous verts AVANT ce correctif. Aucun ne
+jouait « la semaine en cours est déjà faite » — c'est le parcours à l'écran qui
+l'a montré. Quatre cas ont été ajoutés, et la mutation qui remet l'ancienne
+règle les fait bien rougir.
+
+### Côté écran
+
+- Le tableau porte un **panneau à trois états, jamais deux à la fois** :
+  pas démarré (on propose « Aujourd'hui » / « Lundi prochain » puis
+  « Démarrer le mardi 6 octobre ») · en cours (« 📍 SEMAINE 1 SUR 4 », dates de
+  début et de fin en français) · en cours ET écarté (les écarts en clair, puis
+  « ↻ Recalculer la suite du bloc »).
+- **C'est le COMPOSANT qui fabrique les cases à figer** (`casesDuTableau`), pas
+  l'écran : figer doit enregistrer EXACTEMENT ce que Hafiz a sous les yeux. Si
+  l'écran refaisait le calcul de son côté, les deux pourraient divergir.
+- ⚠️ **Recalculer ignore volontairement le plan en place** (`cibles: {}`) et
+  repart de l'historique RÉEL. Sans ça on rejouerait le plan figé sur lui-même
+  et le « recalcul » ne changerait jamais rien.
+- La durée et la décharge sont **verrouillées** pendant qu'un bloc tourne (on
+  l'arrête pour les changer) : les modifier en cours de route décalerait des
+  semaines déjà entraînées.
+- La colonne de la semaine en cours est marquée **📍** dans la grille, et la
+  note de bas de tableau change de discours : « PROJECTION » avant le
+  démarrage, « ton PLAN » après.
+- **L'écran de séance LIT le plan** : bandeau « 📋 Semaine 1 sur 4 de ton bloc —
+  les charges ci-dessous viennent de ton plan », puis sous chaque exercice
+  « 📋 Semaine 1 : 2 séries × 8 reps à 105 kg — ton plan » (ou « — ta valeur »
+  pour une case corrigée à la main). Le « 🎯 Aujourd'hui » calculé reste le
+  comportement quand AUCUN bloc ne tourne, ou pour un exercice sans case.
+- `blocDeLaSeance` regarde **le cycle D'ABORD**, le programme ensuite : sinon
+  un « Push » gardant une vieille date de son temps de séance isolée
+  contredirait le bloc en cours.
+
+### Dates : tout le calcul est en UTC, volontairement
+
+Une date ISO est un JOUR, pas un instant. `semaineDuBloc` et `finDuBloc`
+travaillent en `Date.UTC`, pour éviter deux pièges déjà payés ici : le décalage
+UTC/local du 03/09/2026, et le changement d'heure — un intervalle de 21 jours
+mesure 503 ou 505 heures selon la saison et peut basculer d'une semaine.
+⚠️ `test_bloc.py` RELANCE LE HARNAIS SOUS TROIS FUSEAUX
+(Africa/Ouagadougou, Europe/Paris, Pacific/Auckland) et vérifie en plus que les
+trois donnent le MÊME résultat. Raison : la machine de dev est en UTC+0 sans
+changement d'heure, donc **le bug y est totalement invisible**. Vérifié en
+mutant le calcul en heure locale — Ouagadougou reste tout vert, Paris casse le
+cas du changement d'heure, Auckland casse les deux cas de fin de bloc. Un seul
+fuseau de test n'aurait rien prouvé.
+
+### Vérifié
+
+Tests : `backend/tests/test_bloc.py` + `harnais/harnais_bloc.mjs` (**47 cas**
+× 3 fuseaux) et `backend/tests/test_api_bloc.py` (**15 cas** : date de début
+posée et relue, régler la durée ne déplace pas un bloc commencé, arrêter efface
+la date sans perdre la durée, date invalide refusée, plan écrit en un appel,
+**coût indépendant du nombre de cases**, correction manuelle qui survit à un
+recalcul, case du plan bien remplacée, case d'avant la colonne `origine`
+protégée, propriété en lecture et en écriture, renommage qui emporte les cases).
+**Douze mutations vues échouer**, chacune sur son cas : le lot qui écrase les
+corrections, l'origine mal posée, le `DEFAULT` changé, une connexion par case,
+la date effacée par un réglage de durée, la propriété non vérifiée, le format de
+date non contrôlé, et les quatre de la règle de recalcul.
+Suite complète : **343 tests, tous OK.**
+
+DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, format 420 px) —
+parcours complet joué :
+- tableau de « Push » → « ▶️ DÉMARRER CE BLOC », « Aujourd'hui » →
+  « Démarrer le mardi 6 octobre » ; **deux appels seulement** (le plan en lot,
+  puis les réglages), et en base **8 cases en `origine='plan'`** avec
+  `date_debut = 2026-10-06` ;
+- le panneau passe à « 📍 SEMAINE 1 SUR 4 — démarré le mardi 6 octobre,
+  jusqu'au lundi 2 novembre » et la colonne 1 porte son 📍 ;
+- séance démarrée depuis le calendrier → bandeau « 📋 Semaine 1 sur 4 » et
+  « 📋 Semaine 1 : 2 séries × 8 reps à 105 kg — ton plan » (les « 🎯 Aujourd'hui »
+  ont bien cédé la place) ; un exercice jamais fait n'affiche RIEN ;
+- série saisie à **120 kg** (le plan disait 105), séance terminée → le tableau
+  affiche « ⚠️ developpe couche : 120 kg en semaine 1, le plan disait 105 kg »
+  et propose « ↻ Recalculer la suite du bloc » ;
+- semaine 3 corrigée à la main à **150 kg**, puis recalcul → **la correction
+  survit** (150 intacte), les semaines 2 et 4 repartent des 120 kg réels
+  (125 / 130), et **la semaine 1, déjà faite, reste à 105** — le défaut décrit
+  plus haut a été rejoué AVANT et APRÈS correctif pour le prouver ;
+- un programme sans aucun historique (« Mon PPL ») refuse de figer du vide et
+  garde son explication.
+Aucune erreur console applicative.
+
+⚠️ PIÈGES DE VÉRIFICATION rencontrés (volet navigateur), à connaître :
+- **le volet replié donne `window.innerWidth === 0`** : toute la mise en page
+  est dégénérée, aucun clic ni défilement ne fonctionne. Il faut imposer un
+  format (`resize_window`) **puis RECHARGER** — React Native Web mesure sa
+  largeur au montage et ne la recalcule pas tout seul ;
+- **ce `TouchableOpacity` ne rend AUCUN `role="button"`** dans cette version de
+  react-native-web : `closest('[role=button]')` ne trouve rien. Le touchable se
+  reconnaît à son `tabIndex === 0`, et un simple `.click()` ne suffit pas — il
+  faut la séquence `pointerdown / mousedown / pointerup / mouseup / click` ;
+- **changer d'onglet demande un évènement de défilement explicite** :
+  affecter `scrollLeft` ne réveille pas `surDefilementPages`, donc l'écran visé
+  n'est jamais monté (`ongletsVisites`). Un
+  `dispatchEvent(new Event('scroll'))` le déclenche.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -3949,7 +4139,7 @@ DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, format mobile 375) :
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (326 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (343 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

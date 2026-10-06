@@ -529,6 +529,11 @@ def initialiser():
             conn.execute("ALTER TABLE cycles ADD COLUMN duree_semaines INTEGER")
         if not _colonne_existe(conn, "cycles", "avec_deload"):
             conn.execute("ALTER TABLE cycles ADD COLUMN avec_deload INTEGER DEFAULT 0")
+        # DÉMARRER UN BLOC = poser une DATE DE DÉBUT sur le programme complet.
+        # `programmes` avait déjà la sienne (planification au calendrier) ;
+        # `cycles` en manquait, or c'est le cycle qu'on démarre comme un bloc.
+        if not _colonne_existe(conn, "cycles", "date_debut"):
+            conn.execute("ALTER TABLE cycles ADD COLUMN date_debut TEXT")
         # LES CASES CORRIGÉES À LA MAIN (« l'app propose, je corrige »).
         # Une case = (la SÉANCE, l'exercice, la semaine). `semaine` est du
         # TEXTE parce que la colonne de décharge porte la clé 'decharge' à
@@ -548,6 +553,16 @@ def initialiser():
                 UNIQUE (programme_id, exercice, semaine)
             )
         """)
+        # D'OÙ VIENT CETTE CASE ? 'plan' = écrite par l'app au démarrage du
+        # bloc (ou par un recalcul de la suite) ; 'manuel' = corrigée à la main.
+        # ⚠️ LA DISTINCTION EST INDISPENSABLE depuis que démarrer un bloc FIGE
+        # tout le tableau : sans elle, toutes les cases seraient « corrigées à
+        # la main » et un recalcul de la suite écraserait les vraies
+        # corrections de Hafiz. Les lignes écrites AVANT cette colonne étaient
+        # toutes des corrections manuelles, d'où ce DEFAULT.
+        if not _colonne_existe(conn, "cibles_semaine", "origine"):
+            conn.execute(
+                "ALTER TABLE cibles_semaine ADD COLUMN origine TEXT DEFAULT 'manuel'")
         _executer_creation_table(conn, """
             CREATE TABLE IF NOT EXISTS cycle_programmes (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -861,28 +876,77 @@ def cibles_semaine_du_joueur(joueur_id: int) -> list:
     le 23/09/2026."""
     with connexion() as conn:
         return [dict(l) for l in conn.execute(
-            "SELECT programme_id, exercice, semaine, series, reps, poids "
+            "SELECT programme_id, exercice, semaine, series, reps, poids, origine "
             "FROM cibles_semaine WHERE joueur_id = ?",
             (joueur_id,),
         )]
 
 
 def definir_cible_semaine(joueur_id: int, programme_id: int, exercice: str,
-                          semaine: str, series, reps, poids) -> None:
+                          semaine: str, series, reps, poids,
+                          origine: str = "manuel") -> None:
     """Écrit (ou réécrit) UNE case du tableau. Les trois valeurs peuvent être
     None : une case où l'on ne corrige que la charge garde les séries et les
     reps calculées."""
     with connexion() as conn:
-        conn.execute(
-            "DELETE FROM cibles_semaine WHERE programme_id = ? AND exercice = ? AND semaine = ?",
-            (programme_id, exercice, semaine),
-        )
-        conn.execute(
-            "INSERT INTO cibles_semaine "
-            "(joueur_id, programme_id, exercice, semaine, series, reps, poids) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (joueur_id, programme_id, exercice, semaine, series, reps, poids),
-        )
+        _ecrire_case(conn, joueur_id, programme_id, exercice, semaine,
+                     series, reps, poids, origine)
+
+
+def _ecrire_case(conn, joueur_id, programme_id, exercice, semaine,
+                 series, reps, poids, origine):
+    """Le DELETE + INSERT d'une case, sur une connexion DÉJÀ ouverte.
+
+    Extrait exprès : l'écriture en lot doit pouvoir poser 60 cases sans
+    emprunter 60 connexions (le motif N+1 du 23/09/2026)."""
+    conn.execute(
+        "DELETE FROM cibles_semaine WHERE programme_id = ? AND exercice = ? AND semaine = ?",
+        (programme_id, exercice, semaine),
+    )
+    conn.execute(
+        "INSERT INTO cibles_semaine "
+        "(joueur_id, programme_id, exercice, semaine, series, reps, poids, origine) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (joueur_id, programme_id, exercice, semaine, series, reps, poids, origine),
+    )
+
+
+def definir_cibles_lot(joueur_id: int, cases: list,
+                       respecter_les_corrections: bool = True) -> dict:
+    """Écrit TOUT UN PLAN d'un coup — UNE SEULE connexion, quel que soit le
+    nombre de cases (figer un bloc de 6 semaines x 10 exercices en fait 60).
+
+    ⚠️ `respecter_les_corrections` EST LA RÈGLE QUI PROTÈGE LE TRAVAIL DE
+    L'UTILISATEUR, et elle vit ICI, côté serveur, pas dans l'écran : une case
+    qu'il a corrigée à la main n'est JAMAIS écrasée par un plan recalculé.
+    Elle serait trop facile à oublier dans un appelant.
+    """
+    if not cases:
+        return {"ecrites": 0, "preservees": 0}
+    with connexion() as conn:
+        manuelles = set()
+        if respecter_les_corrections:
+            programmes = sorted({int(c["programme_id"]) for c in cases})
+            trous = ", ".join("?" for _ in programmes)
+            requete = (
+                "SELECT programme_id, exercice, semaine FROM cibles_semaine "
+                "WHERE joueur_id = ? AND origine = 'manuel' "
+                "AND programme_id IN (" + trous + ")"
+            )
+            for ligne in conn.execute(requete, (joueur_id, *programmes)):
+                manuelles.add((int(ligne["programme_id"]), ligne["exercice"],
+                               str(ligne["semaine"])))
+        ecrites = preservees = 0
+        for case in cases:
+            cle = (int(case["programme_id"]), case["exercice"], str(case["semaine"]))
+            if cle in manuelles:
+                preservees += 1
+                continue
+            _ecrire_case(conn, joueur_id, cle[0], cle[1], cle[2],
+                         case.get("series"), case.get("reps"), case.get("poids"),
+                         case.get("origine") or "plan")
+            ecrites += 1
+    return {"ecrites": ecrites, "preservees": preservees}
 
 
 def effacer_cible_semaine(programme_id: int, exercice: str, semaine: str) -> None:
@@ -894,19 +958,56 @@ def effacer_cible_semaine(programme_id: int, exercice: str, semaine: str) -> Non
         )
 
 
-def definir_bloc_programme(programme_id: int, duree_semaines, avec_deload: bool) -> None:
+def definir_bloc_programme(programme_id: int, duree_semaines, avec_deload: bool,
+                           date_debut=None, arreter: bool = False) -> None:
+    """TROIS états pour la date, et il faut les trois :
+    - `date_debut` à None et `arreter` faux : la date n'est PAS touchée (régler
+      la durée ne doit pas déplacer un bloc déjà commencé) ;
+    - une date : on démarre le bloc ce jour-là ;
+    - `arreter` vrai : on efface la date, le bloc n'est plus en cours.
+    Sans le troisième, un bloc démarré par erreur serait impossible à arrêter.
+    """
     with connexion() as conn:
+        if arreter:
+            conn.execute(
+                "UPDATE programmes SET duree_semaines = ?, avec_deload = ?, "
+                "date_debut = NULL WHERE id = ?",
+                (duree_semaines, 1 if avec_deload else 0, programme_id),
+            )
+            return
+        if date_debut is None:
+            conn.execute(
+                "UPDATE programmes SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
+                (duree_semaines, 1 if avec_deload else 0, programme_id),
+            )
+            return
         conn.execute(
-            "UPDATE programmes SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
-            (duree_semaines, 1 if avec_deload else 0, programme_id),
+            "UPDATE programmes SET duree_semaines = ?, avec_deload = ?, date_debut = ? "
+            "WHERE id = ?",
+            (duree_semaines, 1 if avec_deload else 0, date_debut, programme_id),
         )
 
 
-def definir_bloc_cycle(cycle_id: int, duree_semaines, avec_deload: bool) -> None:
+def definir_bloc_cycle(cycle_id: int, duree_semaines, avec_deload: bool,
+                       date_debut=None, arreter: bool = False) -> None:
     with connexion() as conn:
+        if arreter:
+            conn.execute(
+                "UPDATE cycles SET duree_semaines = ?, avec_deload = ?, "
+                "date_debut = NULL WHERE id = ?",
+                (duree_semaines, 1 if avec_deload else 0, cycle_id),
+            )
+            return
+        if date_debut is None:
+            conn.execute(
+                "UPDATE cycles SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
+                (duree_semaines, 1 if avec_deload else 0, cycle_id),
+            )
+            return
         conn.execute(
-            "UPDATE cycles SET duree_semaines = ?, avec_deload = ? WHERE id = ?",
-            (duree_semaines, 1 if avec_deload else 0, cycle_id),
+            "UPDATE cycles SET duree_semaines = ?, avec_deload = ?, date_debut = ? "
+            "WHERE id = ?",
+            (duree_semaines, 1 if avec_deload else 0, date_debut, cycle_id),
         )
 
 

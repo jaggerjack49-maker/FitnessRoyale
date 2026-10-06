@@ -138,6 +138,29 @@ verifier('une case saisie à la main PRIME sur le calcul, et elle seule',
   },
   [[1, 3, 8, 102.5, 'calcul'], [2, 5, 6, 140, 'manuel'], [3, 3, 8, 107.5, 'calcul']]);
 
+// ---- UNE CASE DU PLAN FIGÉ N'EST PAS UNE CORRECTION (05/10/2026) ----
+// Démarrer un bloc écrit TOUTES les cases en base. Si elles passaient pour
+// des corrections à la main, la marque « tu l'as écrite » couvrirait le
+// tableau entier et ne voudrait plus rien dire. C'est `origine` qui tranche.
+verifier("le plan figé s'affiche comme un plan, pas comme une correction",
+  () => {
+    const seances = [{
+      id: 7, nom: 'Push', jours: ['lundi'],
+      exercices: [{ exercice: 'Squat', series_cibles: 3, reps_cibles: 8 }],
+    }];
+    const tableau = projeterProgramme(seances, troisHuit, {
+      nbSemaines: 3,
+      cibles: {
+        '7|Squat|1': { series: 3, reps: 8, poids: 100, origine: 'plan' },
+        '7|Squat|2': { series: 3, reps: 8, poids: 105, origine: 'plan' },
+        // Celle-là, Hafiz l'a corrigée APRÈS avoir démarré le bloc.
+        '7|Squat|3': { series: 4, reps: 6, poids: 130, origine: 'manuel' },
+      },
+    });
+    return tableau[0].lignes[0].semaines.map((l) => [l.semaine, l.poids, l.source]);
+  },
+  [[1, 100, 'plan'], [2, 105, 'plan'], [3, 130, 'manuel']]);
+
 verifier('le tableau groupe les exercices PAR SÉANCE (donc par jour)',
   () => {
     const seances = [

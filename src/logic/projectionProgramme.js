@@ -168,14 +168,24 @@ export function projeterProgramme(seances, entrainements, options = {}) {
 // « L'app propose, je corrige » (choix de Hafiz du 04/10/2026) : la valeur
 // saisie à la main remplace la valeur calculée, case par case — on ne remplace
 // que ce qui a été écrit, le reste continue d'être calculé.
+// ⚠️ DEPUIS LE 05/10/2026, UNE CASE ENREGISTRÉE N'EST PLUS FORCÉMENT UNE
+// CORRECTION. Démarrer un bloc FIGE tout le tableau : chaque case est écrite
+// en base avec `origine: 'plan'`. Sans distinguer les deux, toutes les cases
+// porteraient la marque « tu l'as écrite à la main » et cette marque ne
+// voudrait plus rien dire. Une case sans `origine` est une correction manuelle
+// (c'est le cas de l'écriture optimiste de l'écran, et de toutes les cases
+// écrites avant cette date).
 export function appliquerCorrection(ligne, programmeId, exercice, cibles) {
-  const manuelle = (cibles || {})[`${programmeId}|${exercice}|${ligne.semaine}`];
-  if (!manuelle) return { ...ligne, source: 'calcul' };
+  const enregistree = (cibles || {})[`${programmeId}|${exercice}|${ligne.semaine}`];
+  if (!enregistree) return { ...ligne, source: 'calcul' };
+  const series = Number.isFinite(enregistree.series) && enregistree.series > 0
+    ? enregistree.series : ligne.series;
+  const reps = Number.isFinite(enregistree.reps) && enregistree.reps > 0
+    ? enregistree.reps : ligne.reps;
+  const poids = Number.isFinite(enregistree.poids) && enregistree.poids >= 0
+    ? enregistree.poids : ligne.poids;
   return {
-    ...ligne,
-    series: Number.isFinite(manuelle.series) && manuelle.series > 0 ? manuelle.series : ligne.series,
-    reps: Number.isFinite(manuelle.reps) && manuelle.reps > 0 ? manuelle.reps : ligne.reps,
-    poids: Number.isFinite(manuelle.poids) && manuelle.poids >= 0 ? manuelle.poids : ligne.poids,
-    source: 'manuel',
+    ...ligne, series, reps, poids,
+    source: enregistree.origine === 'plan' ? 'plan' : 'manuel',
   };
 }
