@@ -2911,7 +2911,7 @@ les vrais angles.
   signal plus fiable de face — la distance verticale épaule-poignet rapportée à
   la longueur du bras. À décider sur données réelles.
 
-### ⚠️ Plus de build APK gratuit jusqu'au 01/10/2026
+### ⚠️ Quota de build EAS épuisé — RÉSOLU le 06/10/2026 (section historique)
 
 Le 16/09/2026, EAS a refusé le build : « This account has used its Android
 builds from the Free plan this month », remise à zéro le **1er octobre 2026**.
@@ -2927,6 +2927,12 @@ diagnostic des pompes) sont commités mais PAS dans un APK.
   mais lourd (outils Android), et un APK signé avec une AUTRE clé ne s'installe
   pas par-dessus l'actuel : il faudrait désinstaller, ce qui effacerait les
   séances pas encore envoyées au serveur.
+
+✅ **LE QUOTA S'EST BIEN REMIS À ZÉRO** : un APK a été construit le 06/10/2026
+sans rien payer (voir « APK du 06/10/2026 » plus bas). Les trois semaines de
+correctifs décrites dans les sections 16/09 → 06/10 comme « pas encore dans un
+APK » Y SONT donc. Tout ce qui suit dans cette section reste vrai pour la
+prochaine fois que le quota mensuel sera atteint.
 
 ## Nutrition : journal alimentaire + calories estimées par l'IA en photo — 18/09/2026
 
@@ -3021,8 +3027,8 @@ l'analyse sans clé répond bien 503 avec le message prévu. Aucune erreur conso
 appel coûte) et la prise de photo elle-même (boîte de dialogue du système,
 impossible à piloter depuis le navigateur de vérification). Premier essai réel
 = quand Hafiz aura posé `ANTHROPIC_API_KEY` sur Render. Et comme toutes les
-nouveautés depuis le 16/09, pas d'APK avant le 01/10/2026 (quota EAS) : Expo Go
-ou la version web en attendant.
+nouveautés depuis le 16/09, il a fallu attendre le 06/10/2026 pour un APK
+(quota EAS) — Expo Go ou la version web entre-temps. C'est DANS l'APK depuis.
 
 ## Une séance est datée du jour où elle a été FAITE — 21/09/2026
 
@@ -3293,7 +3299,7 @@ données. C'est un bug **de serveur** : aucune version d'app n'y échappait.
   3.3.1) que `check_connection` existe bien, et pas seulement dans la doc.
 - ⚠️ BONNE NOUVELLE POUR L'APK : c'est un correctif **côté serveur**. Il vaut
   donc immédiatement pour l'APK du 15/09 comme pour le site web — aucun build
-  nécessaire (impossible avant le 01/10, quota EAS).
+  nécessaire (et il était de toute façon impossible avant le 01/10, quota EAS).
 
 ### Deux défauts secondaires corrigés au passage
 
@@ -3363,9 +3369,9 @@ le bandeau nomme bien le compte ; serveur coupé → un seul message hors-ligne,
 celui qui dit la vérité (les deux étaient empilés au premier jet, fusionnés
 depuis).
 
-⚠️ CES BANDEAUX N'EXISTENT QUE DANS LA VERSION WEB tant que l'APK n'est pas
-refait (quota EAS jusqu'au 01/10/2026) : c'est donc sur le site hébergé qu'il
-faut regarder pour diagnostiquer.
+⚠️ CES BANDEAUX N'ONT EXISTÉ QUE DANS LA VERSION WEB jusqu'à l'APK du
+06/10/2026 (quota EAS) : avant cette date, c'était sur le site hébergé qu'il
+fallait regarder pour diagnostiquer.
 
 ### LA VRAIE CAUSE : une connexion par séance (23/09/2026)
 
@@ -4126,6 +4132,67 @@ Aucune erreur console applicative.
   affecter `scrollLeft` ne réveille pas `surDefilementPages`, donc l'écran visé
   n'est jamais monté (`ongletsVisites`). Un
   `dispatchEvent(new Event('scroll'))` le déclenche.
+
+## APK du 06/10/2026 : trois semaines de travail arrivent sur le téléphone
+
+Demande de Hafiz, en deux mots : « crée un build ». Le quota mensuel gratuit
+d'EAS s'étant remis à zéro le 1er octobre, le build est passé sans rien payer.
+
+- `npx eas-cli build --platform android --profile preview --non-interactive --no-wait`
+  → APK `preview`, construit en **5 min 49 s**.
+  Build `54b2a7f6-4856-49b2-b4b6-4c4e56c465da`, app 0.1.0, runtime 54.0.0.
+- Il réutilise la clé de signature existante (`Build Credentials JxY-3dtjYa`),
+  donc il **s'installe par-dessus l'APK du 15/09** : rien n'est effacé, et les
+  séances encore dans la file d'attente locale repartent normalement.
+- ⚠️ `npx eas-cli` N'EST PAS INSTALLÉ dans le projet et `npx` refuse de le
+  télécharger sans accord : il faut `npx --yes eas-cli@latest …`. Sans le
+  `--yes`, la commande échoue sur « npx canceled due to missing packages ».
+  Le compte Expo était déjà connecté (`jaggerjack49`), aucun mot de passe à
+  saisir.
+- Pour SURVEILLER le build : `eas build:view <id> --json` (il n'accepte
+  toujours pas `--non-interactive`, piège du 25/08/2026), dans une boucle de
+  tâche de fond plutôt qu'en attente bloquante.
+
+### ⚠️ POURQUOI IL A FALLU POUSSER AVANT DE CONSTRUIRE
+
+L'APK embarque le BLOC du 06/10, qui appelle des endpoints neufs
+(`/joueurs/{id}/cibles-semaine/lot`, `arreter`, `date_debut` sur un cycle).
+Construire sans déployer le serveur d'abord aurait livré une fonctionnalité qui
+échoue sur le téléphone — exactement le genre de panne silencieuse qui a déjà
+fait croire deux fois à une perte de données (16/09 et 23/09). D'où l'ordre :
+`git push` (Render redéploie le backend ET le site web), puis le build.
+
+RÈGLE À RETENIR : **un build n'a de sens qu'après le déploiement du serveur**
+dès que la nouveauté touche à l'API. Le push lance un déploiement de quelques
+minutes, le build en prend 10 à 20 : les lancer dans cet ordre les fait
+travailler en parallèle.
+
+Déploiement VÉRIFIÉ avant d'annoncer quoi que ce soit, sur le vrai serveur :
+- `/sante-base` → `{"statut":"ok"}` en 3,0 s ;
+- `PUT /joueurs/1/cibles-semaine/lot` → **401** (donc la route EXISTE et elle
+  est protégée ; un 404 aurait dit « pas déployée ») ;
+- `/openapi.json` : les quatre routes du bloc présentes, `BlocProgramme`
+  expose bien `arreter` et `date_debut`, le schéma `PlanDuBloc` existe ;
+- `/joueurs` renvoie 8 comptes dont `Jaggerjack` — donc les migrations
+  Postgres (`origine` sur `cibles_semaine`, `date_debut` sur `cycles`) sont
+  passées sans faire échouer le démarrage, comme l'avait fait l'`AUTOINCREMENT`
+  du 25/08/2026.
+
+### Ce que cet APK débloque enfin
+
+Deux MODULES NATIFS ajoutés depuis le 15/09 ne pouvaient pas marcher sans
+nouveau build — c'est ce qui rendait ce build nécessaire, pas seulement utile :
+- `react-native-webview` (15/09) → le compteur de pompes devient essayable,
+  avec ses seuils auto-étalonnés du 21/09. ⚠️ TOUJOURS PAS VÉRIFIÉ sur une
+  vraie personne : c'est à Hafiz de trancher, le volet de dev n'a pas de caméra.
+- `expo-image-manipulator` (18/09) → la photo de repas de la nutrition.
+  ⚠️ L'analyse répondra « pas encore configurée sur le serveur » (503) tant que
+  `ANTHROPIC_API_KEY` n'est pas posée dans les variables Render.
+Plus, non natif mais jamais arrivé sur le téléphone : le bloc, le tableau de
+progression, la date de séance corrigée (21/09), le retour Android (16/09), les
+bandeaux honnêtes de l'Entraînement (16/09 et 23/09), la passe de design du
+01/10. Et les **notifications locales** (rappels d'entraînement et de suivi)
+n'ont toujours jamais été vérifiées en réel : c'est la première occasion.
 
 ## Backend (backend/) — Python + FastAPI + SQLite
 
