@@ -18,6 +18,7 @@ export const colors = {
   vert: '#3DDC84',           // progression positive
   rouge: '#ff5470',          // défaite / négatif (rouge de la maquette)
   texte: da.texte,           // blanc cassé, plus doux qu'un blanc pur
+  texteDoux: da.texteDoux,   // entre le blanc et le gris : du texte de lecture
   texteGris: da.texteGris,
   bordure: da.bordure,
 };

@@ -24,6 +24,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './src/theme';
+import { largeurMaxContenu } from './src/designSystem';
 import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
 import useRetour from './src/useRetour';
@@ -595,7 +596,14 @@ function AppInterne() {
             key={o.cle}
             style={hauteurPage > 0 ? { width: largeurPage, height: hauteurPage } : { width: largeurPage, flex: 1 }}
           >
-            {ongletsVisites.includes(o.cle) && renduEcran(o.cle)}
+            {/* LARGEUR DE LECTURE BORNÉE (26/10/2026) — voir designSystem.js.
+                La page elle-même GARDE la largeur de la fenêtre : c'est elle
+                que le défilement « page par page » cale, la borner casserait
+                le glissement entre onglets. C'est le CONTENU qui est borné et
+                centré, à l'intérieur. */}
+            <View style={styles.colonneContenu}>
+              {ongletsVisites.includes(o.cle) && renduEcran(o.cle)}
+            </View>
           </View>
         ))}
       </ScrollView>
@@ -642,6 +650,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.fond,
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
+  // La colonne de lecture : pleine largeur sur téléphone (375 < 560), bornée
+  // et centrée dès qu'on a plus de place (tablette, ordinateur).
+  colonneContenu: {
+    flex: 1,
+    width: '100%',
+    maxWidth: largeurMaxContenu,
+    alignSelf: 'center',
   },
   avertissementQuitter: {
     position: 'absolute', left: 0, right: 0, bottom: 90, alignItems: 'center',

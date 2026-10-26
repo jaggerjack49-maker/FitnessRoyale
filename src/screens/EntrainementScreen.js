@@ -496,6 +496,153 @@ const stylesConfirmation = StyleSheet.create({
   texteAnnuler: { color: colors.texteGris, fontSize: 12 },
 });
 
+// ---------------------------------------------------------------------------
+// REFONTE DU 26/10/2026 — « trop chargé, trop long » (Hafiz).
+// L'onglet empilait huit sections dans une seule page. Il s'ouvre désormais
+// sur un ACCUEIL court (deux actions, la séance du jour, le calendrier) et
+// range le reste dans des SOUS-ÉCRANS, atteignables en un geste.
+// Les trois petits composants ci-dessous sont les briques de cette mise en
+// page ; ils ne portent AUCUNE règle de calcul.
+// ---------------------------------------------------------------------------
+
+// L'en-tête d'un sous-écran : une flèche ronde de retour, un titre, un
+// sous-titre. Le bouton fait 44 px (cible tactile minimale iOS/Android).
+function EnteteSousEcran({ titre, sousTitre, onRetour }) {
+  return (
+    <View style={stylesHub.enteteSousEcran}>
+      <TouchableOpacity
+        style={stylesHub.boutonRetour}
+        onPress={onRetour}
+        accessibilityLabel="Retour"
+      >
+        <Text style={stylesHub.flecheRetour}>‹</Text>
+      </TouchableOpacity>
+      <View style={{ flex: 1 }}>
+        <Text style={stylesHub.titreSousEcran}>{titre}</Text>
+        {sousTitre ? <Text style={stylesHub.sousTitreSousEcran}>{sousTitre}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+// Une ligne de navigation vers un sous-écran : libellé, résumé chiffré, chevron.
+// Le résumé est ce qui évite d'avoir à ouvrir pour savoir où on en est — même
+// principe que les puces de volume et le résumé des perfs.
+function LigneRaccourci({ icone, titre, resume, alerte, onPress }) {
+  return (
+    <TouchableOpacity style={stylesHub.ligneRaccourci} onPress={onPress}>
+      <Text style={stylesHub.iconeRaccourci}>{icone}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={stylesHub.titreRaccourci}>{titre}</Text>
+        <Text style={[stylesHub.resumeRaccourci, alerte && { color: colors.rouge }]}>
+          {resume}
+        </Text>
+      </View>
+      <Text style={stylesHub.chevronRaccourci}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+const stylesHub = StyleSheet.create({
+  enteteSousEcran: {
+    flexDirection: 'row', alignItems: 'center', gap: espacement.s,
+    marginBottom: espacement.m,
+  },
+  boutonRetour: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.carte, borderWidth: 1, borderColor: colors.bordure,
+  },
+  // Le chevron « ‹ » est petit dans la plupart des polices : on le grossit et
+  // on le remonte d'un cheveu pour qu'il tombe au centre optique du rond.
+  flecheRetour: { color: colors.texte, fontSize: 26, fontWeight: '800', lineHeight: 28, marginTop: -3 },
+  titreSousEcran: { color: colors.texte, fontSize: 20, fontWeight: '800', letterSpacing: 0.3 },
+  sousTitreSousEcran: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
+
+  // Les deux grandes entrées de l'accueil, côte à côte.
+  ligneActionsPrincipales: { flexDirection: 'row', gap: espacement.s },
+  grandeAction: {
+    flex: 1, borderRadius: 16, padding: espacement.m,
+    minHeight: 96, justifyContent: 'center',
+  },
+  grandeActionOr: { backgroundColor: colors.or },
+  grandeActionBordee: {
+    backgroundColor: colors.carte, borderWidth: 1, borderColor: colors.bordure,
+  },
+  pastilleAction: {
+    width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  pastilleActionOr: { backgroundColor: 'rgba(0,0,0,0.18)' },
+  pastilleActionBordee: { backgroundColor: colors.carteClaire },
+  symboleAction: { fontSize: 16 },
+  titreActionOr: { color: '#141319', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  sousTitreActionOr: { color: 'rgba(20,19,25,0.72)', fontSize: 11, marginTop: 2, lineHeight: 15 },
+  titreAction: { color: colors.texte, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  sousTitreAction: { color: colors.texteGris, fontSize: 11, marginTop: 2, lineHeight: 15 },
+
+  // Le bandeau de section : un petit titre en capitales espacées, comme les
+  // libellés de l'onglet Perfs (maquette du 09/09/2026).
+  bandeauSection: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: espacement.l, marginBottom: espacement.s,
+  },
+  libelleSection: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
+  },
+  lienSection: { color: colors.or, fontSize: 12, fontWeight: '800' },
+
+  // La carte « la séance du jour » (modèle : la carte de séance des maquettes).
+  carteJour: {
+    backgroundColor: colors.carte, borderRadius: 16, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.s,
+    borderLeftWidth: 3, borderLeftColor: colors.or,
+  },
+  carteJourFaite: { borderLeftColor: colors.vert },
+  nomSeanceJour: { color: colors.texte, fontSize: 17, fontWeight: '800' },
+  metaSeanceJour: { color: colors.texteGris, fontSize: 12, marginTop: 3 },
+  exercicesSeanceJour: { color: colors.texteDoux, fontSize: 13, marginTop: 8, lineHeight: 19 },
+  boutonDemarrerJour: {
+    backgroundColor: colors.or, borderRadius: 12, paddingVertical: 13,
+    alignItems: 'center', marginTop: espacement.m,
+  },
+  texteDemarrerJour: { color: '#141319', fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
+
+  // Jour sans séance : on le dit en une ligne, sans occuper un écran.
+  carteJourVide: {
+    backgroundColor: colors.carte, borderRadius: 16, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.s,
+    alignItems: 'center',
+  },
+  texteJourVide: { color: colors.texteGris, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+
+  // Les liens sous une journée bouclée. Un `paddingVertical` (et non une
+  // simple marge) : c'est lui qui agrandit la zone qu'on touche.
+  ligneLiensJour: { flexDirection: 'row', flexWrap: 'wrap', gap: espacement.m, marginTop: 4 },
+  lienJour: { paddingVertical: 11 },
+  texteLienJour: { color: colors.or, fontSize: 13, fontWeight: '700' },
+
+  // Les raccourcis vers les sous-écrans.
+  ligneRaccourci: {
+    flexDirection: 'row', alignItems: 'center', gap: espacement.s,
+    backgroundColor: colors.carte, borderRadius: 14, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.s,
+    minHeight: 64,
+  },
+  // L'action principale du sous-écran « Mes programmes » : pleine largeur,
+  // en or, en haut — c'est ce qu'on vient y faire quand on n'a encore rien.
+  boutonCreer: {
+    backgroundColor: colors.or, borderRadius: 14, paddingVertical: 15,
+    alignItems: 'center', marginBottom: espacement.m,
+  },
+  texteBoutonCreer: { color: '#141319', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
+
+  iconeRaccourci: { fontSize: 18, width: 24, textAlign: 'center' },
+  titreRaccourci: { color: colors.texte, fontSize: 15, fontWeight: '700' },
+  resumeRaccourci: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
+  chevronRaccourci: { color: colors.texteGris, fontSize: 22, fontWeight: '700' },
+});
+
 // `idLocal` : sous quel compte ranger la séance en cours et la file d'attente
 // sur CE téléphone (voir src/stockageSeance.js). C'est simplement `moi.id`
 // depuis le 26/09/2026 : il n'existe plus d'identité de démonstration sous
@@ -506,7 +653,11 @@ export default function EntrainementScreen({
   moi, ajouterSeanceLocale, actif = true,
 }) {
   const idLocal = moi.id;
-  const [vue, setVue] = useState('accueil'); // 'accueil' | 'nouveauProgramme' | 'seance'
+  // Les vues de cet onglet. Depuis la refonte du 26/10/2026, l'accueil n'est
+  // plus qu'un HUB : les sections lourdes vivent dans leur propre sous-écran.
+  // 'accueil' | 'programmes' | 'suivi' | 'historique' | 'nutrition'
+  // | 'nouveauProgramme' | 'seance' | 'historiqueDetail' | 'tableau'
+  const [vue, setVue] = useState('accueil');
 
   // ---- Garder sa place dans l'accueil (14/09/2026, demande de Hafiz) ----
   // Chaque vue (détail d'une séance passée, nouveau programme, séance) est un
@@ -514,6 +665,12 @@ export default function EntrainementScreen({
   // neuve… qui repartait tout en haut. Ouvrir une séance de l'historique, tout
   // en bas, obligeait à tout redescendre en sortant. Voir usePlaceDefilement.
   const placeAccueil = usePlaceDefilement('accueil');
+  // Chaque sous-écran garde SA propre place : revenir sur « Mes programmes »
+  // après avoir ouvert un tableau ne doit pas tout remonter en haut.
+  const placeProgrammes = usePlaceDefilement('programmes');
+  const placeSuivi = usePlaceDefilement('suivi');
+  const placeHistorique = usePlaceDefilement('historique');
+  const placeNutrition = usePlaceDefilement('nutrition');
   const [programmes, setProgrammes] = useState([]);
   const [entrainements, setEntrainements] = useState([]);
   const [chargement, setChargement] = useState(false);
@@ -623,7 +780,13 @@ export default function EntrainementScreen({
   // Changer de jour referme ce « prévu » : revenir plus tard sur le jour
   // bouclé doit remontrer le réalisé, pas l'attendu. (Ranger la date ne
   // suffisait pas : aller sur un autre jour puis revenir le rouvrait.)
-  useEffect(() => { setPrevuAfficheLe(null); }, [jourOuvert]);
+  // ⚠️ On garde la date SI c'est celle qu'on vient d'ouvrir : le lien « Faire
+  // une autre séance » de l'accueil (26/10/2026) pose les deux états d'un
+  // coup, et un reset aveugle effacerait sa demande au rendu suivant.
+  // Changer vraiment de jour continue, lui, de refermer le prévu.
+  useEffect(() => {
+    setPrevuAfficheLe((actuel) => (actuel === jourOuvert ? actuel : null));
+  }, [jourOuvert]);
   // Séance en cours de retouche DANS le calendrier (id du programme) — permet
   // de corriger exercices/séries/reps sans repasser par la semaine type.
   const [programmeEnEdition, setProgrammeEnEdition] = useState(null);
@@ -942,10 +1105,28 @@ export default function EntrainementScreen({
   // formulaire de nouveau programme (sa saisie est gardée, contrairement à
   // « Annuler »). JAMAIS la séance en cours : le retour passe alors à App.js,
   // qui ramène au Profil — la séance reste intacte dans cet onglet.
+  // Depuis la refonte du 26/10/2026, les SOUS-ÉCRANS (programmes, suivi,
+  // historique, nutrition) se ferment de la même façon : le retour ramène à
+  // l'accueil de l'onglet avant de sortir de l'onglet.
+  // ⚠️ Toujours JAMAIS la séance en cours ni l'accueil lui-même : le retour
+  // passe alors à App.js, qui ramène au Profil.
   useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'
-    || vue === 'tableau'), () => {
-    if (vue === 'historiqueDetail') setEntrainementSelectionne(null);
-    if (vue === 'tableau') setTableauDe(null);
+    || vue === 'tableau' || vue === 'programmes' || vue === 'suivi'
+    || vue === 'historique' || vue === 'nutrition'), () => {
+    if (vue === 'historiqueDetail') {
+      // Le détail d'une séance s'ouvre DEPUIS l'historique : on y revient,
+      // pas à l'accueil.
+      setEntrainementSelectionne(null);
+      setVue('historique');
+      return true;
+    }
+    if (vue === 'tableau') {
+      // Le tableau s'ouvre depuis « Mes programmes ».
+      setTableauDe(null);
+      setVue('programmes');
+      return true;
+    }
+    if (vue === 'nouveauProgramme') { setVue('programmes'); return true; }
     setVue('accueil');
     return true;
   });
@@ -1675,7 +1856,9 @@ export default function EntrainementScreen({
     setCycles((c) => [cycleLocal, ...c]);
     setProgrammes((p) => [...cycleLocal.seances, ...p]);
     reinitialiserFormulaireProgramme();
-    setVue('accueil');
+    // On revient à « Mes programmes » (et non à l'accueil) : c'est là que le
+    // programme qu'on vient de créer apparaît.
+    setVue('programmes');
 
     try {
       const cree = await api.creerCycle(moi.id, nom, seances);
@@ -2266,7 +2449,7 @@ export default function EntrainementScreen({
           enregistrerBloc(semainesTableau, suivant);
         }}
         onCorriger={corrigerCase}
-        onFermer={() => { setTableauDe(null); setVue('accueil'); }}
+        onFermer={() => { setTableauDe(null); setVue('programmes'); }}
         // ---- LE BLOC (05/10/2026) ----
         dateDebut={tableauDe.cible?.date_debut || null}
         aujourdhui={aujourdhui()}
@@ -2306,7 +2489,7 @@ export default function EntrainementScreen({
             ))}
           </View>
         ))}
-        <TouchableOpacity onPress={() => { setVue('accueil'); setEntrainementSelectionne(null); }}>
+        <TouchableOpacity onPress={() => { setVue('historique'); setEntrainementSelectionne(null); }}>
           <Text style={styles.lienAnnuler}>← Retour à l'historique</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -2439,7 +2622,7 @@ export default function EntrainementScreen({
         <TouchableOpacity style={styles.boutonPrincipal} onPress={enregistrerProgramme}>
           <Text style={styles.boutonPrincipalTexte}>Enregistrer le programme</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => { reinitialiserFormulaireProgramme(); setVue('accueil'); }}>
+        <TouchableOpacity onPress={() => { reinitialiserFormulaireProgramme(); setVue('programmes'); }}>
           <Text style={styles.lienAnnuler}>Annuler</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -2851,18 +3034,18 @@ export default function EntrainementScreen({
     ...programmesStandards,
   ];
 
-  return (
-    <ScrollView
-      // La `key` est indispensable pour garder sa place (voir usePlaceDefilement).
-      key="accueil"
-      {...placeAccueil}
-      style={styles.conteneur}
-      contentContainerStyle={{ padding: espacement.m }}
-    >
-      <Text style={styles.titre}>💪 Entraînement</Text>
-      <Text style={styles.sousTitre}>
-        Tes programmes et ton journal de séance — indépendant des paliers Fitness Royale.
-      </Text>
+  // ------------------------------------------------------------------
+  // REFONTE DU 26/10/2026 : l'accueil n'empile plus tout.
+  // Les sous-écrans ci-dessous contiennent EXACTEMENT les sections qui
+  // vivaient avant dans la page d'accueil — rien n'a été retiré, ni aucune
+  // règle de calcul touchée : seul l'endroit où on les trouve a changé.
+  // ------------------------------------------------------------------
+
+  // L'état du chargement, dit EN HAUT (bug du 16/09/2026) : un écran vide
+  // sans explication faisait croire que tout avait été effacé. Il est repris
+  // dans les sous-écrans qui montrent des listes, pour la même raison.
+  const bandeauEtat = (
+    <>
       {/* LA BANNIÈRE « 📡 Hors-ligne… » A DISPARU LE 26/09/2026 : l'app
           n'entre plus sans serveur, donc cet écran ne montre plus jamais un
           profil de démonstration. Si le serveur ne répond pas, c'est dit
@@ -2907,192 +3090,799 @@ export default function EntrainementScreen({
           </Text>
         </View>
       )}
+    </>
+  );
 
+  // La séance du jour, au centre de l'accueil : c'est la question qu'on se
+  // pose en ouvrant l'onglet. Aucun calcul nouveau — `programmesPlanifiesLe`
+  // est celui du calendrier, et « fait » reste « une séance enregistrée à
+  // cette date » (la règle du ✅ et du rattrapage).
+  const dateDuJour = aujourdhui();
+  const planDuJour = programmesPlanifiesLe(dateDuJour);
+  const seancesDuJour = [];
+  [...planDuJour.recurrents, ...planDuJour.precis].forEach(({ programme }) => {
+    if (programme && !seancesDuJour.some((p) => p.id === programme.id)) {
+      seancesDuJour.push(programme);
+    }
+  });
+  const seancesFaitesAujourdhui = entrainements.filter((e) => e && e.date === dateDuJour);
 
-      {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
-          (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
-      <CarteNutrition moi={moi} actif={actif} />
+  // ================= SOUS-ÉCRAN : MES PROGRAMMES =================
+  if (vue === 'programmes') {
+    return (
+      <ScrollView
+        key="programmes"
+        {...placeProgrammes}
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m }}
+      >
+        <EnteteSousEcran
+          titre="Mes programmes"
+          sousTitre="Créer, modifier, partager. Pour démarrer, reviens à l'accueil."
+          onRetour={() => setVue('accueil')}
+        />
+        {bandeauEtat}
+        <TouchableOpacity
+          style={stylesHub.boutonCreer}
+          onPress={() => setVue('nouveauProgramme')}
+        >
+          <Text style={stylesHub.texteBoutonCreer}>+  NOUVEAU PROGRAMME</Text>
+        </TouchableOpacity>
+        {!donneesIncertaines && cycles.length === 0 && programmesSeuls.length === 0 && (
+          <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
+        )}
 
-      {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
-      <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>
-        <Text style={styles.sectionTitre}>
-          🎯 Séries par groupe musculaire {volumeOuvert ? '▲' : '▼'}
-        </Text>
-      </TouchableOpacity>
-      <Text style={styles.totalSeries}>
-        {totalSeriesSemaine} série{totalSeriesSemaine > 1 ? 's' : ''} cette semaine
-        {seancesDeLaSemaine > 0
-          ? ` · ${seancesDeLaSemaine} séance${seancesDeLaSemaine > 1 ? 's' : ''}`
-          : ' · aucune séance encore'}
-      </Text>
-      {/* Résumé visible SANS déplier : on doit voir où on en est d'un coup d'œil. */}
-      {!volumeOuvert && nbNonClasses > 0 && (
-        <Text style={styles.alerteNonClasses}>
-          ❓ {nbNonClasses} exercice{nbNonClasses > 1 ? 's' : ''} n'{nbNonClasses > 1 ? 'ont' : 'a'} pas
-          de groupe — leurs séries ne sont comptées nulle part. Déplie pour les classer.
-        </Text>
-      )}
-      {!volumeOuvert && groupesSuivis.length > 0 && (
-        <View style={styles.resumeVolume}>
-          {groupesSuivis.map((groupe) => {
-            const fait = seriesFaites[groupe] || 0;
-            const cible = objectifsSeries[groupe] || 0;
-            const atteint = cible > 0 && fait >= cible;
-            return (
-              // Toucher une puce OUVRE la section sur ce groupe : c'est le
-              // chemin le plus court entre « Pectoraux 3/12 » et « lesquelles ? ».
+        {/* « Mes programmes » est l'endroit où l'on MODIFIE (27/08/2026, demande
+            de Hafiz) : le calendrier, lui, ne fait que montrer et démarrer.
+            D'où « ✏️ Modifier » ici à la place de « Démarrer ». */}
+        {(cycles.length > 0 || programmesSeuls.length > 0) && (
+          <Text style={styles.indice}>
+            C'est ici qu'on retouche une séance. Pour en démarrer une, retourne
+            à l'accueil de l'onglet — elle t'y attend si elle est prévue
+            aujourd'hui, sinon touche son jour dans le calendrier.
+          </Text>
+        )}
+
+        {/* Les PROGRAMMES COMPLETS (cycles) : un nom + une séance par jour. */}
+        {cycles.map((cycle) => {
+          const detailOuvert = cyclesDeroules.includes(cycle.id);
+          return (
+          <View key={cycle.id} style={styles.carteModele}>
+            {/* Le nom sur SA PROPRE LIGNE : avec trois boutons à côté de lui sur
+                la même ligne, il était comprimé à une largeur nulle et se
+                repliait sur des dizaines de lignes invisibles (d'où les grands
+                vides de la capture), pendant que la croix débordait à droite. */}
+            <Text style={styles.nomProgrammeTexte}>📋 {cycle.nom}</Text>
+            <View style={styles.ligneActionsProgramme}>
               <TouchableOpacity
-                key={groupe}
-                style={[styles.pucheVolume, atteint && { borderColor: colors.vert }]}
-                onPress={() => { setVolumeOuvert(true); setGroupeDeploye(groupe); }}
+                style={styles.boutonModifier}
+                onPress={() => basculerDetailCycle(cycle.id)}
               >
-                <Text style={styles.pucheGroupe}>{groupe}</Text>
-                <Text style={[styles.pucheCompte, atteint && { color: colors.vert }]}>
-                  {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
+                <Text style={styles.boutonModifierTexte}>
+                  {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-      {volumeOuvert && (
+              <TouchableOpacity
+                style={styles.boutonModifier}
+                onPress={() => ouvrirTableau(cycle.nom, cycle.seances,
+                  { type: 'cycle', id: cycle.id, ...cycle })}
+              >
+                <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
+              </TouchableOpacity>
+              {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
+                  C'est ainsi qu'on alimente le catalogue — pas de formulaire
+                  séparé, l'admin construit un programme normalement puis le
+                  publie. */}
+              {moi.admin ? (
+                <TouchableOpacity
+                  style={styles.boutonPublier}
+                  onPress={() => publierCycle(cycle)}
+                  disabled={publicationEnCours !== null}
+                >
+                  {publicationEnCours === cycle.id ? (
+                    <ActivityIndicator color={colors.rouge} size="small" />
+                  ) : (
+                    <Text style={styles.boutonPublierTexte}>🔑 Partager par code</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                onPress={() => demanderSuppression('cycle-' + cycle.id)}
+                style={styles.boutonRetirer}
+                hitSlop={ZONE_TACTILE}
+              >
+                <Text style={styles.boutonRetirerTexte}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ConfirmationSuppression
+              actif={suppressionAConfirmer === 'cycle-' + cycle.id}
+              question={`Supprimer « ${cycle.nom} » et ses ${cycle.seances.length} séances ?`}
+              onConfirmer={() => { setSuppressionAConfirmer(null); supprimerCycle(cycle); }}
+              onAnnuler={() => setSuppressionAConfirmer(null)}
+            />
+            {/* DÉTAIL REPLIÉ = juste le nom du programme et un résumé.
+                La v4 ne repliait que les EXERCICES : les séances, elles,
+                restaient listées, donc « on voit toujours le détail »
+                (retour de Hafiz du 02/09/2026 sur l'APK). */}
+            {!detailOuvert && (
+              <Text style={styles.indice}>
+                {cycle.seances.length} séance{cycle.seances.length > 1 ? 's' : ''}
+                {joursDuCycle(cycle) ? ` · ${joursDuCycle(cycle)}` : ''}
+              </Text>
+            )}
+            {detailOuvert && cycle.seances.map((seance) => {
+              const enEdition = programmeEnEdition === seance.id;
+              const deroulee = seanceDeroulee === seance.id;
+              return (
+                <View key={seance.id}>
+                  <View style={styles.ligneSeanceCycle}>
+                    {/* Toucher la ligne DÉROULE la séance : on voit ses exercices
+                        sans ouvrir l'éditeur (27/08/2026, demande de Hafiz). */}
+                    <TouchableOpacity
+                      style={styles.zoneDeroule}
+                      onPress={() => setSeanceDeroulee(deroulee ? null : seance.id)}
+                    >
+                      <Text style={styles.jourSeanceCycle}>
+                        {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
+                      </Text>
+                      <Text style={styles.contenuCalendrier}>
+                        {deroulee ? '▲' : '▼'} {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.boutonModifier}
+                      onPress={() => setProgrammeEnEdition(enEdition ? null : seance.id)}
+                    >
+                      <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {deroulee && !enEdition && (
+                    <View style={styles.detailJour}>
+                      <Text style={styles.libelleJoursSeance}>
+                        Jours de la semaine (projetés sur tout le calendrier) :
+                      </Text>
+                      <ChoixJoursSeance programme={seance} onBasculer={basculerJourProgramme} />
+                      {seance.exercices.length === 0 ? (
+                        <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
+                      ) : seance.exercices.map((exo, i) => (
+                        <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
+                      progressions={progressions} />
+                      ))}
+                    </View>
+                  )}
+                  {enEdition && (
+                    <EditeurSeance
+                      key={`edition-${seance.id}`}
+                      programme={seance}
+                      placeholderNom="Nom de la séance"
+                      nomParDefaut={seance.nom}
+                      libelleBouton="💾 Enregistrer les modifications"
+                      note={noteReutilisation(seance)}
+                      onSauvegarder={(nom, exercices) => {
+                        sauvegarderProgramme(seance, nom, exercices);
+                        setProgrammeEnEdition(null);
+                      }}
+                    />
+                  )}
+                </View>
+              );
+            })}
+            {/* AJOUTER UNE SÉANCE à ce programme (24/09/2026). */}
+            {cycleQuiRecoit === cycle.id ? (
+              <View style={styles.blocNouvelleSeance}>
+                <Text style={styles.titreNouvelleSeance}>➕ Nouvelle séance de « {cycle.nom} »</Text>
+                <Text style={styles.aideNouvelleSeance}>
+                  Choisis son ou ses jours, puis écris ses exercices.
+                </Text>
+                {messageAjoutSeance && (
+                  <Text style={styles.messageAjoutSeance}>{messageAjoutSeance}</Text>
+                )}
+                <ChoixJoursSeance
+                  programme={{ jours: joursNouvelleSeance }}
+                  onBasculer={(_, jour) => setJoursNouvelleSeance((actuels) => (
+                    actuels.includes(jour)
+                      ? actuels.filter((j) => j !== jour)
+                      : [...actuels, jour]
+                  ))}
+                />
+                <EditeurSeance
+                  programme={null}
+                  placeholderNom="Nom de la séance (ex. Épaules)"
+                  libelleBouton="Ajouter cette séance"
+                  onSauvegarder={(nom, exercices) => ajouterSeanceAuCycle(cycle.id, nom, exercices)}
+                />
+                <TouchableOpacity onPress={() => { setCycleQuiRecoit(null); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}>
+                  <Text style={styles.lienAnnuler}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.boutonAjouterSeance}
+                onPress={() => { setCycleQuiRecoit(cycle.id); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}
+              >
+                <Text style={styles.boutonAjouterSeanceTexte}>➕ Ajouter une séance</Text>
+              </TouchableOpacity>
+            )}
+            {cycleEnService(cycle) && (
+              <>
+                <TouchableOpacity
+                  style={styles.boutonSortir}
+                  onPress={() => demanderSuppression('sortie-cycle-' + cycle.id)}
+                >
+                  <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+                </TouchableOpacity>
+                <ConfirmationSuppression
+                  actif={suppressionAConfirmer === 'sortie-cycle-' + cycle.id}
+                  question={`Sortir de « ${cycle.nom} » ? Il libère la semaine et ses dates du calendrier, mais reste ici : tu pourras le reposer quand tu veux.`}
+                  libelleConfirmer="Oui, sortir"
+                  couleur={colors.accent}
+                  onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme(cycle.seances); }}
+                  onAnnuler={() => setSuppressionAConfirmer(null)}
+                />
+              </>
+            )}
+          </View>
+          );
+        })}
+
+        {/* Les séances isolées (créées depuis la semaine type, hors cycle). */}
+        {programmesSeuls.map((programme) => {
+          const enEdition = programmeEnEdition === programme.id;
+          const deroulee = seanceDeroulee === programme.id;
+          return (
+            <View key={programme.id} style={styles.carteModele}>
+              <TouchableOpacity onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}>
+                <Text style={styles.nomProgrammeTexte}>
+                  {deroulee ? '▲' : '▼'} {programme.nom}
+                </Text>
+                <Text style={styles.indice}>
+                  {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
+                  {(programme.jours || []).length > 0 &&
+                    ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.ligneActionsProgramme}>
+                <TouchableOpacity
+                  style={styles.boutonModifier}
+                  onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
+                >
+                  <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.boutonModifier}
+                  onPress={() => ouvrirTableau(programme.nom, [programme],
+                    { type: 'programme', id: programme.id, ...programme })}
+                >
+                  <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => demanderSuppression('prog-' + programme.id)}
+                  style={styles.boutonRetirer}
+                  hitSlop={ZONE_TACTILE}
+                >
+                  <Text style={styles.boutonRetirerTexte}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ConfirmationSuppression
+                actif={suppressionAConfirmer === 'prog-' + programme.id}
+                question={`Supprimer « ${programme.nom} » ?`}
+                onConfirmer={() => { setSuppressionAConfirmer(null); supprimerProgramme(programme); }}
+                onAnnuler={() => setSuppressionAConfirmer(null)}
+              />
+              {deroulee && !enEdition && (
+                <View style={styles.detailJour}>
+                  <Text style={styles.libelleJoursSeance}>
+                    Jours de la semaine (projetés sur tout le calendrier) :
+                  </Text>
+                  <ChoixJoursSeance programme={programme} onBasculer={basculerJourProgramme} />
+                  {programme.exercices.length === 0 ? (
+                    <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
+                  ) : programme.exercices.map((exo, i) => (
+                    <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
+                      progressions={progressions} />
+                  ))}
+                </View>
+              )}
+              {enEdition && (
+                <EditeurSeance
+                  key={`edition-${programme.id}`}
+                  programme={programme}
+                  placeholderNom="Nom de la séance"
+                  nomParDefaut={programme.nom}
+                  libelleBouton="💾 Enregistrer les modifications"
+                  note={noteReutilisation(programme)}
+                  onSauvegarder={(nom, exercices) => {
+                    sauvegarderProgramme(programme, nom, exercices);
+                    setProgrammeEnEdition(null);
+                  }}
+                />
+              )}
+              {cycleEnService({ seances: [programme] }) && (
+                <>
+                  <TouchableOpacity
+                    style={styles.boutonSortir}
+                    onPress={() => demanderSuppression('sortie-prog-' + programme.id)}
+                  >
+                    <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+                  </TouchableOpacity>
+                  <ConfirmationSuppression
+                    actif={suppressionAConfirmer === 'sortie-prog-' + programme.id}
+                    question={`Sortir de « ${programme.nom} » ? Il libère ses jours et ses dates, mais reste ici : tu pourras le reposer quand tu veux.`}
+                    libelleConfirmer="Oui, sortir"
+                    couleur={colors.accent}
+                    onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme([programme]); }}
+                    onAnnuler={() => setSuppressionAConfirmer(null)}
+                  />
+                </>
+              )}
+            </View>
+          );
+        })}
+        {/* ---- Semaine type : écrire directement la séance de chaque jour.
+             N'apparaît que TANT QU'AUCUN PROGRAMME N'EST EN SERVICE — après,
+             c'est le programme qui pilote la semaine (voir programmeEnService). ---- */}
+        {!programmeEnService && (
+        <>
+        <Text style={styles.sectionTitre}>🗓 Semaine type</Text>
+        <Text style={styles.indice}>
+          Touche un jour pour écrire sa séance : un nom, puis tes exercices avec
+          leurs séries × reps. Elle se répète chaque semaine.
+        </Text>
+        {joursSemaine.map((jour) => {
+          // La séance de ce jour = le programme qui porte ce jour. S'il y en a
+          // plusieurs (ancien réglage), on édite le premier.
+          const seanceDuJour = programmes.find((p) => (p.jours || []).includes(jour)) || null;
+          const ouvert = jourSemaineOuvert === jour;
+          return (
+            <View key={jour}>
+              <TouchableOpacity
+                style={styles.ligneCalendrier}
+                onPress={() => setJourSemaineOuvert(ouvert ? null : jour)}
+              >
+                <Text style={styles.jourCalendrier}>
+                  {jour.charAt(0).toUpperCase() + jour.slice(1)}
+                </Text>
+                <Text style={styles.contenuCalendrier}>
+                  {seanceDuJour
+                    ? `${seanceDuJour.nom} · ${seanceDuJour.exercices.length} exo${seanceDuJour.exercices.length > 1 ? 's' : ''}`
+                    : 'Repos — touche pour ajouter'}
+                </Text>
+                <Text style={styles.flecheCalendrier}>{ouvert ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+              {ouvert && (
+                <EditeurSeance
+                  key={`jour-${jour}-${seanceDuJour ? seanceDuJour.id : 'vide'}`}
+                  programme={seanceDuJour}
+                  placeholderNom={`Ex. : Pecs / Biceps du ${jour}`}
+                  nomParDefaut={`Séance du ${jour}`}
+                  libelleBouton={`💾 Enregistrer la séance du ${jour}`}
+                  onSauvegarder={(nom, exercices) =>
+                    sauvegarderSeanceJour(jour, seanceDuJour, nom, exercices)}
+                  onVider={seanceDuJour ? () => viderJourSemaine(jour, seanceDuJour) : null}
+                  libelleVider="🗑 Vider ce jour (jour de repos)"
+                />
+              )}
+            </View>
+          );
+        })}
+
+        </>
+        )}
+        {/* ---- Modèles standards : Push Pull Legs, Full Body… ---- */}
+        <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setModelesOuverts(!modelesOuverts)}>
+          <Text style={styles.boutonSecondaireTexte}>
+            📦 Programmes standards {modelesOuverts ? '▲' : '▼'}
+          </Text>
+        </TouchableOpacity>
+        {modelesOuverts && programmesStandards.map((modele) => (
+          <View key={modele.id} style={styles.carteModele}>
+            <Text style={styles.nomProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
+            <Text style={[styles.indice, { marginTop: 4 }]}>{modele.description}</Text>
+            <Text style={[styles.indice, { marginTop: 4 }]}>
+              {modele.seances.map((s) =>
+                `${s.nom} : ${s.jours.map((j) => abreviationsJours[j]).join(', ')}`
+              ).join(' · ')}
+            </Text>
+            <TouchableOpacity
+              style={styles.boutonUtiliserModele}
+              onPress={() => appliquerModele(modele)}
+              disabled={modeleEnCours !== null}
+            >
+              {modeleEnCours === modele.id ? (
+                <ActivityIndicator color={colors.texte} size="small" />
+              ) : (
+                <Text style={styles.boutonDemarrerTexte}>Utiliser ce modèle</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ))}
+        {/* ---- Récupérer un programme AVEC UN CODE ----
+             Les programmes partagés ne sont PAS publics (02/09/2026, demande de
+             Hafiz) : sans le code, on ne peut même pas savoir qu'ils existent.
+             Même geste que rejoindre un duel ou valider la perf d'un partenaire. */}
+        <Text style={styles.sectionTitre}>🔑 Programme partagé</Text>
         <View style={styles.carteModele}>
           <Text style={styles.indice}>
-            Semaine du {debutSemaineISO} au {finSemaineISO} — les séries sont
-            comptées automatiquement depuis tes séances loggées.
+            Quelqu'un t'a donné un code ? Entre-le pour voir son programme et en
+            garder ta propre copie.
           </Text>
+          <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
+            <TextInput
+              style={[styles.champ, { flex: 1 }]}
+              value={codeSaisi}
+              onChangeText={(t) => setCodeSaisi(t.toUpperCase())}
+              placeholder="Ex. : K7XPQR"
+              placeholderTextColor={colors.texteGris}
+              autoCapitalize="characters"
+            />
+            <TouchableOpacity
+              style={styles.boutonAjouterSerie}
+              onPress={chercherParCode}
+              disabled={rechercheCode || !codeSaisi.trim()}
+            >
+              {rechercheCode ? <ActivityIndicator color={colors.texte} size="small" /> : (
+                <Text style={styles.boutonAjouterSerieTexte}>Voir</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          {erreurCode && <Text style={styles.messageErreur}>⚠️ {erreurCode}</Text>}
 
-          {!editionObjectifs && groupesSuivis.length === 0 && (
-            <Text style={[styles.indice, { marginTop: espacement.s }]}>
-              Fixe tes objectifs pour suivre ton volume d'entraînement.
-            </Text>
+          {/* On montre le contenu AVANT de copier : personne ne récupère un
+              programme sans savoir ce qu'il contient. */}
+          {programmeTrouve && (
+            <View style={[styles.detailJour, { borderColor: colors.or, borderWidth: 1 }]}>
+              <Text style={styles.nomProgrammeTexte}>⭐ {programmeTrouve.nom}</Text>
+              <Text style={[styles.indice, { marginTop: 4 }]}>{programmeTrouve.description}</Text>
+              {(programmeTrouve.seances || []).map((seance, i) => (
+                <Text key={i} style={styles.exerciceDetailJour}>
+                  • {seance.nom} — {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ') || 'sans jour fixe'}
+                  {' · '}{(seance.exercices || []).length} exo
+                  {(seance.exercices || []).length > 1 ? 's' : ''}
+                </Text>
+              ))}
+              <TouchableOpacity
+                style={styles.boutonUtiliserModele}
+                onPress={() => {
+                  appliquerModele(enModele(programmeTrouve));
+                  setProgrammeTrouve(null);
+                  setCodeSaisi('');
+                }}
+                disabled={modeleEnCours !== null}
+              >
+                <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
+              </TouchableOpacity>
+            </View>
           )}
+        </View>
+        {/* ---- ADMIN : les programmes que J'AI partagés, avec leurs codes ---- */}
+        {/* ⚠️ `? … : null` ET PAS `&& …` : `admin` arrive du serveur en ENTIER
+            (0 ou 1), pas en booléen. `{0 && …}` affiche le NOMBRE 0 — invisible
+            pour un compte admin, donc jamais vu en test. Voir CLAUDE.md,
+            section du 01/10/2026. */}
+        {moi.admin ? (
+          <>
+            <Text style={styles.sectionTitre}>🛠 Mes programmes partagés</Text>
+            {messageOfficiel && (
+              <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
+                {messageOfficiel.texte}
+              </Text>
+            )}
+            {programmesOfficiels.length === 0 ? (
+              <Text style={styles.indice}>
+                Aucun pour l'instant. Utilise « 🔑 Partager par code » sur un de tes
+                programmes ci-dessus.
+              </Text>
+            ) : programmesOfficiels.map((o) => (
+              <View key={o.id} style={[styles.carteModele, styles.carteOfficielle]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>⭐ {o.nom}</Text>
+                  <TouchableOpacity onPress={() => retirerOfficiel(o)} style={styles.boutonRetirer}>
+                    <Text style={styles.boutonRetirerTexte}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.codePartage}>{o.code}</Text>
+                <Text style={styles.indice}>
+                  Donne ce code aux personnes à qui tu veux offrir le programme.
+                  Il fonctionne autant de fois que tu veux, jusqu'à ce que tu le retires.
+                </Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+        {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+      </ScrollView>
+    );
+  }
 
-          {/* Suivi : objectif vs séries réellement faites */}
-          {!editionObjectifs && groupesSuivis.map((groupe) => {
-            const fait = seriesFaites[groupe] || 0;
-            const cible = objectifsSeries[groupe] || 0;
-            const pourcent = cible > 0 ? Math.min(100, Math.round((fait / cible) * 100)) : 0;
-            const atteint = cible > 0 && fait >= cible;
-            const deploye = groupeDeploye === groupe;
-            return (
-              <View key={groupe}>
-                {/* TOUCHER UN GROUPE MONTRE SES DERNIÈRES SÉRIES (09/09/2026).
-                    Le compteur disait combien, jamais lesquelles — donc rien
-                    ne permettait de vérifier ce qui avait été compté, ni de
-                    repérer un exercice rangé dans le mauvais groupe. */}
+  // ================= SOUS-ÉCRAN : SUIVI & OBJECTIFS =================
+  if (vue === 'suivi') {
+    return (
+      <ScrollView
+        key="suivi"
+        {...placeSuivi}
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m }}
+      >
+        <EnteteSousEcran
+          titre="Suivi & objectifs"
+          sousTitre="Ton volume de la semaine, et tes rappels."
+          onRetour={() => setVue('accueil')}
+        />
+        {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
+        <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>
+          <Text style={styles.sectionTitre}>
+            🎯 Séries par groupe musculaire {volumeOuvert ? '▲' : '▼'}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.totalSeries}>
+          {totalSeriesSemaine} série{totalSeriesSemaine > 1 ? 's' : ''} cette semaine
+          {seancesDeLaSemaine > 0
+            ? ` · ${seancesDeLaSemaine} séance${seancesDeLaSemaine > 1 ? 's' : ''}`
+            : ' · aucune séance encore'}
+        </Text>
+        {/* Résumé visible SANS déplier : on doit voir où on en est d'un coup d'œil. */}
+        {!volumeOuvert && nbNonClasses > 0 && (
+          <Text style={styles.alerteNonClasses}>
+            ❓ {nbNonClasses} exercice{nbNonClasses > 1 ? 's' : ''} n'{nbNonClasses > 1 ? 'ont' : 'a'} pas
+            de groupe — leurs séries ne sont comptées nulle part. Déplie pour les classer.
+          </Text>
+        )}
+        {!volumeOuvert && groupesSuivis.length > 0 && (
+          <View style={styles.resumeVolume}>
+            {groupesSuivis.map((groupe) => {
+              const fait = seriesFaites[groupe] || 0;
+              const cible = objectifsSeries[groupe] || 0;
+              const atteint = cible > 0 && fait >= cible;
+              return (
+                // Toucher une puce OUVRE la section sur ce groupe : c'est le
+                // chemin le plus court entre « Pectoraux 3/12 » et « lesquelles ? ».
                 <TouchableOpacity
-                  style={styles.ligneVolume}
-                  onPress={() => setGroupeDeploye(deploye ? null : groupe)}
+                  key={groupe}
+                  style={[styles.pucheVolume, atteint && { borderColor: colors.vert }]}
+                  onPress={() => { setVolumeOuvert(true); setGroupeDeploye(groupe); }}
                 >
-                  <Text style={styles.nomGroupe}>
-                    {deploye ? '▲' : '▼'} {groupe}
-                  </Text>
-                  <View style={styles.barreVolumeFond}>
-                    <View
-                      style={[
-                        styles.barreVolumeRemplie,
-                        { width: `${pourcent}%`, backgroundColor: atteint ? colors.vert : colors.accent },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.compteurVolume, atteint && { color: colors.vert }]}>
+                  <Text style={styles.pucheGroupe}>{groupe}</Text>
+                  <Text style={[styles.pucheCompte, atteint && { color: colors.vert }]}>
                     {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
                   </Text>
                 </TouchableOpacity>
-                {deploye && (() => {
-                  const lignes = dernieresSeriesDuGroupe(
-                    entrainements, correctionsGroupes, groupe
-                  );
-                  if (lignes.length === 0) {
-                    return (
-                      <Text style={styles.detailGroupeVide}>
-                        Aucune série sur ce groupe pour l'instant.
-                      </Text>
-                    );
-                  }
-                  return (
-                    <View style={styles.detailGroupe}>
-                      {lignes.map((l, i) => (
-                        <View key={`${l.date}-${l.exercice}-${i}`} style={styles.ligneDetailGroupe}>
-                          <Text style={styles.dateDetailGroupe}>
-                            {libelleDate(l.date)} · {l.exercice}
-                          </Text>
-                          <Text style={styles.seriesDetailGroupe}>
-                            {l.series
-                              .map((s) => (s.poids > 0 ? `${s.poids} kg × ${s.reps}` : `${s.reps} reps`))
-                              .join('  ·  ')}
-                          </Text>
-                        </View>
-                      ))}
-                      {/* La liste est volontairement bornée : on veut les
-                          DERNIÈRES séries, pas tout l'historique. */}
-                      <Text style={styles.indice}>
-                        {lignes.length > 1
-                          ? `Les ${lignes.length} dernières entrées de ce groupe`
-                          : 'La dernière entrée de ce groupe'}, toutes semaines confondues.
-                      </Text>
-                    </View>
-                  );
-                })()}
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
+        )}
+        {volumeOuvert && (
+          <View style={styles.carteModele}>
+            <Text style={styles.indice}>
+              Semaine du {debutSemaineISO} au {finSemaineISO} — les séries sont
+              comptées automatiquement depuis tes séances loggées.
+            </Text>
 
-          {/* Édition des objectifs : un champ par groupe (vide = pas suivi) */}
-          {editionObjectifs && (
-            <>
+            {!editionObjectifs && groupesSuivis.length === 0 && (
               <Text style={[styles.indice, { marginTop: espacement.s }]}>
-                Nombre de séries visées par semaine. Laisse vide un groupe que
-                tu ne veux pas suivre.
+                Fixe tes objectifs pour suivre ton volume d'entraînement.
               </Text>
-              {groupesMusculaires.map((groupe) => (
-                <View key={groupe} style={styles.ligneObjectif}>
-                  <Text style={styles.nomGroupe}>{groupe}</Text>
+            )}
+
+            {/* Suivi : objectif vs séries réellement faites */}
+            {!editionObjectifs && groupesSuivis.map((groupe) => {
+              const fait = seriesFaites[groupe] || 0;
+              const cible = objectifsSeries[groupe] || 0;
+              const pourcent = cible > 0 ? Math.min(100, Math.round((fait / cible) * 100)) : 0;
+              const atteint = cible > 0 && fait >= cible;
+              const deploye = groupeDeploye === groupe;
+              return (
+                <View key={groupe}>
+                  {/* TOUCHER UN GROUPE MONTRE SES DERNIÈRES SÉRIES (09/09/2026).
+                      Le compteur disait combien, jamais lesquelles — donc rien
+                      ne permettait de vérifier ce qui avait été compté, ni de
+                      repérer un exercice rangé dans le mauvais groupe. */}
+                  <TouchableOpacity
+                    style={styles.ligneVolume}
+                    onPress={() => setGroupeDeploye(deploye ? null : groupe)}
+                  >
+                    <Text style={styles.nomGroupe}>
+                      {deploye ? '▲' : '▼'} {groupe}
+                    </Text>
+                    <View style={styles.barreVolumeFond}>
+                      <View
+                        style={[
+                          styles.barreVolumeRemplie,
+                          { width: `${pourcent}%`, backgroundColor: atteint ? colors.vert : colors.accent },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.compteurVolume, atteint && { color: colors.vert }]}>
+                      {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                  {deploye && (() => {
+                    const lignes = dernieresSeriesDuGroupe(
+                      entrainements, correctionsGroupes, groupe
+                    );
+                    if (lignes.length === 0) {
+                      return (
+                        <Text style={styles.detailGroupeVide}>
+                          Aucune série sur ce groupe pour l'instant.
+                        </Text>
+                      );
+                    }
+                    return (
+                      <View style={styles.detailGroupe}>
+                        {lignes.map((l, i) => (
+                          <View key={`${l.date}-${l.exercice}-${i}`} style={styles.ligneDetailGroupe}>
+                            <Text style={styles.dateDetailGroupe}>
+                              {libelleDate(l.date)} · {l.exercice}
+                            </Text>
+                            <Text style={styles.seriesDetailGroupe}>
+                              {l.series
+                                .map((s) => (s.poids > 0 ? `${s.poids} kg × ${s.reps}` : `${s.reps} reps`))
+                                .join('  ·  ')}
+                            </Text>
+                          </View>
+                        ))}
+                        {/* La liste est volontairement bornée : on veut les
+                            DERNIÈRES séries, pas tout l'historique. */}
+                        <Text style={styles.indice}>
+                          {lignes.length > 1
+                            ? `Les ${lignes.length} dernières entrées de ce groupe`
+                            : 'La dernière entrée de ce groupe'}, toutes semaines confondues.
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+              );
+            })}
+
+            {/* Édition des objectifs : un champ par groupe (vide = pas suivi) */}
+            {editionObjectifs && (
+              <>
+                <Text style={[styles.indice, { marginTop: espacement.s }]}>
+                  Nombre de séries visées par semaine. Laisse vide un groupe que
+                  tu ne veux pas suivre.
+                </Text>
+                {groupesMusculaires.map((groupe) => (
+                  <View key={groupe} style={styles.ligneObjectif}>
+                    <Text style={styles.nomGroupe}>{groupe}</Text>
+                    <TextInput
+                      style={[styles.champ, { width: 64, textAlign: 'center' }]}
+                      value={brouillonObjectifs[groupe] || ''}
+                      onChangeText={(v) =>
+                        setBrouillonObjectifs((b) => ({ ...b, [groupe]: v }))}
+                      keyboardType="numeric"
+                      placeholder="—"
+                      placeholderTextColor={colors.texteGris}
+                    />
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.boutonUtiliserModele} onPress={enregistrerObjectifs}>
+                  <Text style={styles.boutonDemarrerTexte}>💾 Enregistrer mes objectifs</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setEditionObjectifs(false)}>
+                  <Text style={styles.lienAnnuler}>Annuler</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {!editionObjectifs && (
+              <TouchableOpacity style={styles.boutonSecondaire} onPress={ouvrirEditionObjectifs}>
+                <Text style={styles.boutonSecondaireTexte}>🎯 Fixer mes objectifs</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Rappel de SUIVI : le point hebdo sur le volume.
+                Différent du rappel d'entraînement (qui, lui, dit d'aller
+                s'entraîner). Caché sur web comme l'autre. */}
+            {!editionObjectifs && Platform.OS !== 'web' && (
+              <View style={styles.blocRappelSuivi}>
+                <Text style={styles.libelleRappelSuivi}>🔔 Point hebdo sur mes séries</Text>
+                <Text style={styles.indice}>
+                  Une notification chaque semaine avec ton avancement — pour ne pas
+                  découvrir le dimanche soir qu'il te manque 8 séries de dos.
+                </Text>
+                <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
+                  {joursSemaine.map((jour) => (
+                    <TouchableOpacity
+                      key={jour}
+                      style={[styles.puceJour, suiviJour === jour && styles.puceJourActive]}
+                      onPress={() => setSuiviJour(jour)}
+                    >
+                      <Text style={[styles.puceJourTexte, suiviJour === jour && styles.puceJourTexteActif]}>
+                        {abreviationsJours[jour]}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
                   <TextInput
-                    style={[styles.champ, { width: 64, textAlign: 'center' }]}
-                    value={brouillonObjectifs[groupe] || ''}
-                    onChangeText={(v) =>
-                      setBrouillonObjectifs((b) => ({ ...b, [groupe]: v }))}
-                    keyboardType="numeric"
-                    placeholder="—"
+                    style={[styles.champ, { width: 90 }]}
+                    value={suiviHeure}
+                    onChangeText={setSuiviHeure}
+                    placeholder="19:00"
                     placeholderTextColor={colors.texteGris}
                   />
+                  <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappelSuivi}>
+                    <Text style={styles.boutonAjouterSerieTexte}>
+                      {suiviActif ? 'Mettre à jour' : 'Activer'}
+                    </Text>
+                  </TouchableOpacity>
+                  {suiviActif && (
+                    <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappelSuivi}>
+                      <Text style={styles.boutonRetirerTexte}>✕</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ))}
-              <TouchableOpacity style={styles.boutonUtiliserModele} onPress={enregistrerObjectifs}>
-                <Text style={styles.boutonDemarrerTexte}>💾 Enregistrer mes objectifs</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setEditionObjectifs(false)}>
-                <Text style={styles.lienAnnuler}>Annuler</Text>
-              </TouchableOpacity>
-            </>
-          )}
+                {suiviMessage && (
+                  <Text style={[styles.messageRappel, suiviMessage.erreur && { color: colors.rouge }]}>
+                    {suiviMessage.texte}
+                  </Text>
+                )}
+              </View>
+            )}
 
-          {!editionObjectifs && (
-            <TouchableOpacity style={styles.boutonSecondaire} onPress={ouvrirEditionObjectifs}>
-              <Text style={styles.boutonSecondaireTexte}>🎯 Fixer mes objectifs</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Rappel de SUIVI : le point hebdo sur le volume.
-              Différent du rappel d'entraînement (qui, lui, dit d'aller
-              s'entraîner). Caché sur web comme l'autre. */}
-          {!editionObjectifs && Platform.OS !== 'web' && (
-            <View style={styles.blocRappelSuivi}>
-              <Text style={styles.libelleRappelSuivi}>🔔 Point hebdo sur mes séries</Text>
+            {/* TOUS les exercices de la semaine, avec le groupe où ils sont
+                comptés — et pas seulement ceux que l'app n'a pas reconnus.
+                CORRECTIF DU 03/09/2026 : « unilateral raises » était classé à
+                tort dans le Dos, donc absent de la liste des non classés, donc
+                IMPOSSIBLE à corriger. Un exercice mal rangé est même plus
+                gênant qu'un exercice non rangé : il fausse deux compteurs à la
+                fois, en silence. */}
+            {!editionObjectifs && exercicesSemaine.length > 0 && (
+              <>
+                <Text style={[styles.indice, { marginTop: espacement.s }]}>
+                  🏷 Où comptent mes exercices ? Touche-en un pour le changer de groupe.
+                </Text>
+                {exercicesSemaine.map(({ exercice, groupe, corrige }) => (
+                  <View key={exercice}>
+                    <TouchableOpacity
+                      style={styles.ligneChoixProgramme}
+                      onPress={() => setExerciceAClasser(exerciceAClasser === exercice ? null : exercice)}
+                    >
+                      <Text style={styles.choixProgrammeTexte}>
+                        {exerciceAClasser === exercice ? '▲' : '▼'} {exercice}
+                      </Text>
+                      <Text style={[styles.groupeExercice, !groupe && { color: colors.rouge }]}>
+                        {groupe ? `${groupe}${corrige ? ' ✏️' : ''}` : '❓ compté nulle part'}
+                      </Text>
+                    </TouchableOpacity>
+                    {exerciceAClasser === exercice && (
+                      <View style={styles.lignePuces}>
+                        {groupesMusculaires.map((g) => (
+                          <TouchableOpacity
+                            key={g}
+                            style={[styles.puceJour, g === groupe && styles.puceJourActive]}
+                            onPress={() => classerExercice(exercice, g)}
+                          >
+                            <Text style={[styles.puceJourTexte, g === groupe && styles.puceJourTexteActif]}>
+                              {g}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        )}
+        {/* ---- Rappel d'entraînement (pas de notifications programmées sur web) ---- */}
+        {Platform.OS !== 'web' && (
+          <>
+            <Text style={styles.sectionTitre}>🔔 Rappel d'entraînement</Text>
+            <View style={styles.carteModele}>
               <Text style={styles.indice}>
-                Une notification chaque semaine avec ton avancement — pour ne pas
-                découvrir le dimanche soir qu'il te manque 8 séries de dos.
+                Choisis tes jours et ton heure : ton téléphone te préviendra, même
+                app fermée (comme un réveil).
               </Text>
               <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
                 {joursSemaine.map((jour) => (
                   <TouchableOpacity
                     key={jour}
-                    style={[styles.puceJour, suiviJour === jour && styles.puceJourActive]}
-                    onPress={() => setSuiviJour(jour)}
+                    style={[styles.puceJour, rappelJours.includes(jour) && styles.puceJourActive]}
+                    onPress={() => basculerJourRappel(jour)}
                   >
-                    <Text style={[styles.puceJourTexte, suiviJour === jour && styles.puceJourTexteActif]}>
+                    <Text style={[styles.puceJourTexte, rappelJours.includes(jour) && styles.puceJourTexteActif]}>
                       {abreviationsJours[jour]}
                     </Text>
                   </TouchableOpacity>
@@ -3101,127 +3891,258 @@ export default function EntrainementScreen({
               <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
                 <TextInput
                   style={[styles.champ, { width: 90 }]}
-                  value={suiviHeure}
-                  onChangeText={setSuiviHeure}
-                  placeholder="19:00"
+                  value={rappelHeure}
+                  onChangeText={setRappelHeure}
+                  placeholder="18:00"
                   placeholderTextColor={colors.texteGris}
                 />
-                <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappelSuivi}>
+                <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappel}>
                   <Text style={styles.boutonAjouterSerieTexte}>
-                    {suiviActif ? 'Mettre à jour' : 'Activer'}
+                    {rappelActif ? 'Mettre à jour' : 'Activer'}
                   </Text>
                 </TouchableOpacity>
-                {suiviActif && (
-                  <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappelSuivi}>
+                {rappelActif && (
+                  <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappel}>
                     <Text style={styles.boutonRetirerTexte}>✕</Text>
                   </TouchableOpacity>
                 )}
               </View>
-              {suiviMessage && (
-                <Text style={[styles.messageRappel, suiviMessage.erreur && { color: colors.rouge }]}>
-                  {suiviMessage.texte}
+              {rappelMessage && (
+                <Text style={[styles.messageRappel, rappelMessage.erreur && { color: colors.rouge }]}>
+                  {rappelMessage.texte}
                 </Text>
               )}
             </View>
-          )}
+          </>
+        )}
+      </ScrollView>
+    );
+  }
 
-          {/* TOUS les exercices de la semaine, avec le groupe où ils sont
-              comptés — et pas seulement ceux que l'app n'a pas reconnus.
-              CORRECTIF DU 03/09/2026 : « unilateral raises » était classé à
-              tort dans le Dos, donc absent de la liste des non classés, donc
-              IMPOSSIBLE à corriger. Un exercice mal rangé est même plus
-              gênant qu'un exercice non rangé : il fausse deux compteurs à la
-              fois, en silence. */}
-          {!editionObjectifs && exercicesSemaine.length > 0 && (
-            <>
-              <Text style={[styles.indice, { marginTop: espacement.s }]}>
-                🏷 Où comptent mes exercices ? Touche-en un pour le changer de groupe.
+  // ================= SOUS-ÉCRAN : HISTORIQUE & RECORDS =================
+  if (vue === 'historique') {
+    return (
+      <ScrollView
+        key="historique"
+        {...placeHistorique}
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m }}
+      >
+        <EnteteSousEcran
+          titre="Historique & records"
+          sousTitre="Tout ce que tu as déjà soulevé."
+          onRetour={() => setVue('accueil')}
+        />
+        {bandeauEtat}
+        {/* ---- Records personnels (calculés depuis l'historique) ---- */}
+        {mesRecords.length > 0 && (
+          <>
+            <TouchableOpacity onPress={() => setRecordsOuverts(!recordsOuverts)}>
+              <Text style={styles.sectionTitre}>
+                🏆 Mes records {recordsOuverts ? '▲' : '▼'}
               </Text>
-              {exercicesSemaine.map(({ exercice, groupe, corrige }) => (
-                <View key={exercice}>
-                  <TouchableOpacity
-                    style={styles.ligneChoixProgramme}
-                    onPress={() => setExerciceAClasser(exerciceAClasser === exercice ? null : exercice)}
-                  >
-                    <Text style={styles.choixProgrammeTexte}>
-                      {exerciceAClasser === exercice ? '▲' : '▼'} {exercice}
+            </TouchableOpacity>
+            {recordsOuverts && (
+              <View style={styles.carteModele}>
+                <Text style={styles.indice}>
+                  Ta série la plus lourde sur chaque exercice, toutes séances confondues.
+                </Text>
+                {/* LECTURE SEULE (09/09/2026, demande de Hafiz : « au niveau des
+                    records on ne doit pas pouvoir renommer les exercices »).
+                    Toucher une ligne ouvrait un champ de renommage qui
+                    réécrivait l'historique PARTOUT — un geste lourd derrière une
+                    simple consultation de records, et déclenchable par erreur en
+                    faisant défiler la liste. Renommer se fait maintenant
+                    uniquement depuis l'éditeur d'un programme, où l'on est déjà
+                    en train de modifier quelque chose. */}
+                {mesRecords.map((r) => (
+                  <View key={r.exercice} style={styles.ligneRecord}>
+                    <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
+                    <Text style={styles.valeurRecord}>
+                      {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
                     </Text>
-                    <Text style={[styles.groupeExercice, !groupe && { color: colors.rouge }]}>
-                      {groupe ? `${groupe}${corrige ? ' ✏️' : ''}` : '❓ compté nulle part'}
-                    </Text>
-                  </TouchableOpacity>
-                  {exerciceAClasser === exercice && (
-                    <View style={styles.lignePuces}>
-                      {groupesMusculaires.map((g) => (
-                        <TouchableOpacity
-                          key={g}
-                          style={[styles.puceJour, g === groupe && styles.puceJourActive]}
-                          onPress={() => classerExercice(exercice, g)}
-                        >
-                          <Text style={[styles.puceJourTexte, g === groupe && styles.puceJourTexteActif]}>
-                            {g}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ))}
-            </>
-          )}
+                    <Text style={styles.dateRecord}>{r.date}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+        <Text style={styles.sectionTitre}>Historique</Text>
+        {!donneesIncertaines && entrainements.length === 0 && (
+          <Text style={styles.indice}>Aucune séance loggée pour l'instant.</Text>
+        )}
+        {/* L'historique a maintenant son propre écran : on n'a plus de raison
+            de s'arrêter aux 10 dernières séances comme quand il était coincé
+            en bas de l'accueil. */}
+        {entrainements.slice(0, 40).map((e) => {
+          const nbSeries = e.series.length;
+          const exercicesUniques = [...new Set(e.series.map((s) => s.exercice))];
+          return (
+            <TouchableOpacity
+              key={e.id}
+              style={styles.carteHistorique}
+              onPress={() => { setEntrainementSelectionne(e); setVue('historiqueDetail'); }}
+            >
+              {/* La date reste le repère principal — c'est par elle qu'on
+                  retrouve une séance. Le TYPE la complète sur la ligne
+                  d'en dessous : mis à côté de la date, un nom de programme long
+                  (48 caractères déjà vus en test) se serait battu pour la
+                  largeur, et c'est toujours le texte qui perd (bug du
+                  03/09/2026). Là, il passe simplement à la ligne. */}
+              <Text style={styles.dateHistorique}>{libelleDate(e.date)}</Text>
+              <Text style={styles.indice}>
+                <Text style={styles.typeHistorique}>{typeDeSeance(e, programmes)}</Text>
+                {' · '}{exercicesUniques.length} exercice{exercicesUniques.length > 1 ? 's' : ''} · {nbSeries} série{nbSeries > 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    );
+  }
+
+  // ================= SOUS-ÉCRAN : NUTRITION =================
+  if (vue === 'nutrition') {
+    return (
+      <ScrollView
+        key="nutrition"
+        {...placeNutrition}
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m }}
+      >
+        <EnteteSousEcran
+          titre="Nutrition"
+          sousTitre="Ton journal alimentaire du jour."
+          onRetour={() => setVue('accueil')}
+        />
+        {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
+            (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
+        <CarteNutrition moi={moi} actif={actif} />
+      </ScrollView>
+    );
+  }
+
+  // ================= ACCUEIL =================
+  return (
+    <ScrollView
+      // La `key` est indispensable pour garder sa place (voir usePlaceDefilement).
+      key="accueil"
+      {...placeAccueil}
+      style={styles.conteneur}
+      contentContainerStyle={{ padding: espacement.m }}
+    >
+      <Text style={styles.titre}>💪 Entraînement</Text>
+      {bandeauEtat}
+
+      {/* ---- LES DEUX ENTRÉES, TOUT EN HAUT (26/10/2026) ----
+          « Démarrer une séance libre » était enterré à la 10e section de la
+          page : l'action la plus immédiate de l'onglet demandait de faire
+          défiler trois écrans. Elle est désormais le premier bouton, à côté
+          de l'accès aux programmes. */}
+      <View style={stylesHub.ligneActionsPrincipales}>
+        <TouchableOpacity
+          style={[stylesHub.grandeAction, stylesHub.grandeActionOr]}
+          onPress={() => demarrerSeance(null)}
+        >
+          <View style={[stylesHub.pastilleAction, stylesHub.pastilleActionOr]}>
+            <Text style={stylesHub.symboleAction}>▶</Text>
+          </View>
+          <Text style={stylesHub.titreActionOr}>SÉANCE LIBRE</Text>
+          <Text style={stylesHub.sousTitreActionOr}>Démarre tout de suite, sans plan</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[stylesHub.grandeAction, stylesHub.grandeActionBordee]}
+          onPress={() => setVue('programmes')}
+        >
+          <View style={[stylesHub.pastilleAction, stylesHub.pastilleActionBordee]}>
+            <Text style={stylesHub.symboleAction}>📋</Text>
+          </View>
+          <Text style={stylesHub.titreAction}>PROGRAMMES</Text>
+          <Text style={stylesHub.sousTitreAction}>
+            {cycles.length + programmesSeuls.length === 0
+              ? 'Créer mon premier programme'
+              : `${cycles.length + programmesSeuls.length} enregistré${cycles.length + programmesSeuls.length > 1 ? 's' : ''} · créer, modifier`}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ---- CE QU'IL Y A À FAIRE AUJOURD'HUI ---- */}
+      <View style={stylesHub.bandeauSection}>
+        <Text style={stylesHub.libelleSection}>AUJOURD'HUI</Text>
+        <Text style={stylesHub.libelleSection}>{libelleDate(dateDuJour).toUpperCase()}</Text>
+      </View>
+
+      {seancesFaitesAujourdhui.length > 0 && (
+        <View style={[stylesHub.carteJour, stylesHub.carteJourFaite]}>
+          <Text style={stylesHub.nomSeanceJour}>
+            ✅ {seancesFaitesAujourdhui.map((e) => typeDeSeance(e, programmes)).join(' · ')}
+          </Text>
+          <Text style={stylesHub.metaSeanceJour}>
+            {seancesFaitesAujourdhui.length > 1
+              ? `${seancesFaitesAujourdhui.length} séances enregistrées aujourd'hui`
+              : 'Séance enregistrée aujourd\'hui'}
+            {' · '}
+            {(() => {
+              const n = seancesFaitesAujourdhui.reduce((t, e) => t + (e.series || []).length, 0);
+              return `${n} série${n > 1 ? 's' : ''}`;
+            })()}
+          </Text>
+          <View style={stylesHub.ligneLiensJour}>
+            <TouchableOpacity
+              style={stylesHub.lienJour}
+              onPress={() => {
+                setEntrainementSelectionne(seancesFaitesAujourdhui[0]);
+                setVue('historiqueDetail');
+              }}
+            >
+              <Text style={stylesHub.texteLienJour}>Voir le détail</Text>
+            </TouchableOpacity>
+            {/* Une 2e séance dans la journée reste possible : on ouvre le jour
+                dans le calendrier, qui porte déjà tout ce qu'il faut (le prévu,
+                « Démarrer », « Faire une autre séance ce jour »). */}
+            <TouchableOpacity
+              style={stylesHub.lienJour}
+              onPress={() => { setJourOuvert(dateDuJour); setPrevuAfficheLe(dateDuJour); }}
+            >
+              <Text style={stylesHub.texteLienJour}>Faire une autre séance</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
-      {/* ---- Semaine type : écrire directement la séance de chaque jour.
-           N'apparaît que TANT QU'AUCUN PROGRAMME N'EST EN SERVICE — après,
-           c'est le programme qui pilote la semaine (voir programmeEnService). ---- */}
-      {!programmeEnService && (
-      <>
-      <Text style={styles.sectionTitre}>🗓 Semaine type</Text>
-      <Text style={styles.indice}>
-        Touche un jour pour écrire sa séance : un nom, puis tes exercices avec
-        leurs séries × reps. Elle se répète chaque semaine.
-      </Text>
-      {joursSemaine.map((jour) => {
-        // La séance de ce jour = le programme qui porte ce jour. S'il y en a
-        // plusieurs (ancien réglage), on édite le premier.
-        const seanceDuJour = programmes.find((p) => (p.jours || []).includes(jour)) || null;
-        const ouvert = jourSemaineOuvert === jour;
-        return (
-          <View key={jour}>
-            <TouchableOpacity
-              style={styles.ligneCalendrier}
-              onPress={() => setJourSemaineOuvert(ouvert ? null : jour)}
-            >
-              <Text style={styles.jourCalendrier}>
-                {jour.charAt(0).toUpperCase() + jour.slice(1)}
-              </Text>
-              <Text style={styles.contenuCalendrier}>
-                {seanceDuJour
-                  ? `${seanceDuJour.nom} · ${seanceDuJour.exercices.length} exo${seanceDuJour.exercices.length > 1 ? 's' : ''}`
-                  : 'Repos — touche pour ajouter'}
-              </Text>
-              <Text style={styles.flecheCalendrier}>{ouvert ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-            {ouvert && (
-              <EditeurSeance
-                key={`jour-${jour}-${seanceDuJour ? seanceDuJour.id : 'vide'}`}
-                programme={seanceDuJour}
-                placeholderNom={`Ex. : Pecs / Biceps du ${jour}`}
-                nomParDefaut={`Séance du ${jour}`}
-                libelleBouton={`💾 Enregistrer la séance du ${jour}`}
-                onSauvegarder={(nom, exercices) =>
-                  sauvegarderSeanceJour(jour, seanceDuJour, nom, exercices)}
-                onVider={seanceDuJour ? () => viderJourSemaine(jour, seanceDuJour) : null}
-                libelleVider="🗑 Vider ce jour (jour de repos)"
-              />
-            )}
-          </View>
-        );
-      })}
-
-      </>
+      {seancesFaitesAujourdhui.length === 0 && seancesDuJour.length === 0 && (
+        <View style={stylesHub.carteJourVide}>
+          <Text style={stylesHub.texteJourVide}>
+            Rien de prévu aujourd'hui. Lance une séance libre ci-dessus, ou
+            touche un jour du calendrier pour y poser un programme.
+          </Text>
+        </View>
       )}
+
+      {/* Une carte par séance prévue : le nom, ses exercices en une phrase, et
+          un GROS bouton « Démarrer ». Elles disparaissent une fois la journée
+          bouclée (même règle que le ✅ du calendrier). */}
+      {seancesFaitesAujourdhui.length === 0 && seancesDuJour.map((p) => (
+        <View key={p.id} style={stylesHub.carteJour}>
+          <Text style={stylesHub.nomSeanceJour}>{p.nom}</Text>
+          <Text style={stylesHub.metaSeanceJour}>
+            {p.exercices.length} exercice{p.exercices.length > 1 ? 's' : ''} prévu
+            {p.exercices.length > 1 ? 's' : ''}
+          </Text>
+          {p.exercices.length > 0 && (
+            <Text style={stylesHub.exercicesSeanceJour} numberOfLines={3}>
+              {p.exercices.map((e) => e.exercice).join(', ')}
+            </Text>
+          )}
+          <TouchableOpacity
+            style={stylesHub.boutonDemarrerJour}
+            onPress={() => demarrerSeance(p)}
+          >
+            <Text style={stylesHub.texteDemarrerJour}>▶  DÉMARRER</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
 
       {/* ---- Les séances manquées de la semaine, et leur rattrapage ---- */}
       {manquees.length > 0 && (
@@ -3248,10 +4169,43 @@ export default function EntrainementScreen({
           ))}
         </View>
       )}
-
+      {/* Proposition de propager un renommage d'exercice (04/09/2026). */}
+      {renommages.length > 0 && (
+        <View style={styles.carteRenommage}>
+          <Text style={styles.titreRenommage}>✏️ Exercice renommé</Text>
+          {renommages.map((r) => (
+            <Text key={r.ancien} style={styles.ligneRenommage}>
+              « {r.ancien} » → « {r.nouveau} »
+            </Text>
+          ))}
+          <Text style={styles.indice}>
+            Le renommer partout met à jour tes autres programmes, ton historique
+            de séries, tes records et le comptage par groupe musculaire.
+            Si tu as en fait REMPLACÉ l'exercice par un autre mouvement, garde
+            le changement ici seulement — ton historique restera séparé.
+          </Text>
+          <View style={styles.ligneActionsProgramme}>
+            <TouchableOpacity
+              style={styles.boutonUtiliserModele}
+              onPress={appliquerRenommages}
+              disabled={renommageEnCours}
+            >
+              {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
+                <Text style={styles.boutonDemarrerTexte}>Renommer partout</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.boutonModifier} onPress={() => setRenommages([])}>
+              <Text style={styles.boutonModifierTexte}>Seulement ici</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {/* ---- Calendrier mensuel interactif : touche une DATE pour voir son
            programme, en ajouter un, ou démarrer la séance du jour. ---- */}
-      <Text style={styles.sectionTitre}>📆 Calendrier</Text>
+      <View style={stylesHub.bandeauSection}>
+        <Text style={stylesHub.libelleSection}>CALENDRIER</Text>
+        <Text style={stylesHub.libelleSection}>• PRÉVU   ✅ FAIT   ! MANQUÉ</Text>
+      </View>
       {/* Largeur limitée : sans ça, les cases (1/7 de l'écran chacune)
           deviennent énormes sur un grand écran (retour de Hafiz). */}
       <View style={styles.blocCalendrier}>
@@ -3382,7 +4336,7 @@ export default function EntrainementScreen({
                     {programmes.length === 0 ? (
                       <Text style={styles.indice}>
                         Tu n'as encore aucune séance enregistrée — crée un programme,
-                        ou lance une séance libre depuis le bas de cet écran.
+                        ou lance une séance libre depuis le haut de l'onglet.
                       </Text>
                     ) : (
                       <>
@@ -3527,575 +4481,40 @@ export default function EntrainementScreen({
         );
       })()}
 
-      {/* Proposition de propager un renommage d'exercice (04/09/2026). */}
-      {renommages.length > 0 && (
-        <View style={styles.carteRenommage}>
-          <Text style={styles.titreRenommage}>✏️ Exercice renommé</Text>
-          {renommages.map((r) => (
-            <Text key={r.ancien} style={styles.ligneRenommage}>
-              « {r.ancien} » → « {r.nouveau} »
-            </Text>
-          ))}
-          <Text style={styles.indice}>
-            Le renommer partout met à jour tes autres programmes, ton historique
-            de séries, tes records et le comptage par groupe musculaire.
-            Si tu as en fait REMPLACÉ l'exercice par un autre mouvement, garde
-            le changement ici seulement — ton historique restera séparé.
-          </Text>
-          <View style={styles.ligneActionsProgramme}>
-            <TouchableOpacity
-              style={styles.boutonUtiliserModele}
-              onPress={appliquerRenommages}
-              disabled={renommageEnCours}
-            >
-              {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
-                <Text style={styles.boutonDemarrerTexte}>Renommer partout</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.boutonModifier} onPress={() => setRenommages([])}>
-              <Text style={styles.boutonModifierTexte}>Seulement ici</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      <Text style={styles.sectionTitre}>Mes programmes</Text>
-      {!donneesIncertaines && cycles.length === 0 && programmesSeuls.length === 0 && (
-        <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
-      )}
-
-      {/* « Mes programmes » est l'endroit où l'on MODIFIE (27/08/2026, demande
-          de Hafiz) : le calendrier, lui, ne fait que montrer et démarrer.
-          D'où « ✏️ Modifier » ici à la place de « Démarrer ». */}
-      {(cycles.length > 0 || programmesSeuls.length > 0) && (
-        <Text style={styles.indice}>
-          C'est ici qu'on retouche une séance. Pour la démarrer, touche son jour
-          dans le calendrier.
-        </Text>
-      )}
-
-      {/* Les PROGRAMMES COMPLETS (cycles) : un nom + une séance par jour. */}
-      {cycles.map((cycle) => {
-        const detailOuvert = cyclesDeroules.includes(cycle.id);
-        return (
-        <View key={cycle.id} style={styles.carteModele}>
-          {/* Le nom sur SA PROPRE LIGNE : avec trois boutons à côté de lui sur
-              la même ligne, il était comprimé à une largeur nulle et se
-              repliait sur des dizaines de lignes invisibles (d'où les grands
-              vides de la capture), pendant que la croix débordait à droite. */}
-          <Text style={styles.nomProgrammeTexte}>📋 {cycle.nom}</Text>
-          <View style={styles.ligneActionsProgramme}>
-            <TouchableOpacity
-              style={styles.boutonModifier}
-              onPress={() => basculerDetailCycle(cycle.id)}
-            >
-              <Text style={styles.boutonModifierTexte}>
-                {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.boutonModifier}
-              onPress={() => ouvrirTableau(cycle.nom, cycle.seances,
-                { type: 'cycle', id: cycle.id, ...cycle })}
-            >
-              <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
-            </TouchableOpacity>
-            {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
-                C'est ainsi qu'on alimente le catalogue — pas de formulaire
-                séparé, l'admin construit un programme normalement puis le
-                publie. */}
-            {moi.admin ? (
-              <TouchableOpacity
-                style={styles.boutonPublier}
-                onPress={() => publierCycle(cycle)}
-                disabled={publicationEnCours !== null}
-              >
-                {publicationEnCours === cycle.id ? (
-                  <ActivityIndicator color={colors.rouge} size="small" />
-                ) : (
-                  <Text style={styles.boutonPublierTexte}>🔑 Partager par code</Text>
-                )}
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              onPress={() => demanderSuppression('cycle-' + cycle.id)}
-              style={styles.boutonRetirer}
-              hitSlop={ZONE_TACTILE}
-            >
-              <Text style={styles.boutonRetirerTexte}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <ConfirmationSuppression
-            actif={suppressionAConfirmer === 'cycle-' + cycle.id}
-            question={`Supprimer « ${cycle.nom} » et ses ${cycle.seances.length} séances ?`}
-            onConfirmer={() => { setSuppressionAConfirmer(null); supprimerCycle(cycle); }}
-            onAnnuler={() => setSuppressionAConfirmer(null)}
-          />
-          {/* DÉTAIL REPLIÉ = juste le nom du programme et un résumé.
-              La v4 ne repliait que les EXERCICES : les séances, elles,
-              restaient listées, donc « on voit toujours le détail »
-              (retour de Hafiz du 02/09/2026 sur l'APK). */}
-          {!detailOuvert && (
-            <Text style={styles.indice}>
-              {cycle.seances.length} séance{cycle.seances.length > 1 ? 's' : ''}
-              {joursDuCycle(cycle) ? ` · ${joursDuCycle(cycle)}` : ''}
-            </Text>
-          )}
-          {detailOuvert && cycle.seances.map((seance) => {
-            const enEdition = programmeEnEdition === seance.id;
-            const deroulee = seanceDeroulee === seance.id;
-            return (
-              <View key={seance.id}>
-                <View style={styles.ligneSeanceCycle}>
-                  {/* Toucher la ligne DÉROULE la séance : on voit ses exercices
-                      sans ouvrir l'éditeur (27/08/2026, demande de Hafiz). */}
-                  <TouchableOpacity
-                    style={styles.zoneDeroule}
-                    onPress={() => setSeanceDeroulee(deroulee ? null : seance.id)}
-                  >
-                    <Text style={styles.jourSeanceCycle}>
-                      {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
-                    </Text>
-                    <Text style={styles.contenuCalendrier}>
-                      {deroulee ? '▲' : '▼'} {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.boutonModifier}
-                    onPress={() => setProgrammeEnEdition(enEdition ? null : seance.id)}
-                  >
-                    <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
-                  </TouchableOpacity>
-                </View>
-                {deroulee && !enEdition && (
-                  <View style={styles.detailJour}>
-                    <Text style={styles.libelleJoursSeance}>
-                      Jours de la semaine (projetés sur tout le calendrier) :
-                    </Text>
-                    <ChoixJoursSeance programme={seance} onBasculer={basculerJourProgramme} />
-                    {seance.exercices.length === 0 ? (
-                      <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
-                    ) : seance.exercices.map((exo, i) => (
-                      <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
-                    progressions={progressions} />
-                    ))}
-                  </View>
-                )}
-                {enEdition && (
-                  <EditeurSeance
-                    key={`edition-${seance.id}`}
-                    programme={seance}
-                    placeholderNom="Nom de la séance"
-                    nomParDefaut={seance.nom}
-                    libelleBouton="💾 Enregistrer les modifications"
-                    note={noteReutilisation(seance)}
-                    onSauvegarder={(nom, exercices) => {
-                      sauvegarderProgramme(seance, nom, exercices);
-                      setProgrammeEnEdition(null);
-                    }}
-                  />
-                )}
-              </View>
-            );
-          })}
-          {/* AJOUTER UNE SÉANCE à ce programme (24/09/2026). */}
-          {cycleQuiRecoit === cycle.id ? (
-            <View style={styles.blocNouvelleSeance}>
-              <Text style={styles.titreNouvelleSeance}>➕ Nouvelle séance de « {cycle.nom} »</Text>
-              <Text style={styles.aideNouvelleSeance}>
-                Choisis son ou ses jours, puis écris ses exercices.
-              </Text>
-              {messageAjoutSeance && (
-                <Text style={styles.messageAjoutSeance}>{messageAjoutSeance}</Text>
-              )}
-              <ChoixJoursSeance
-                programme={{ jours: joursNouvelleSeance }}
-                onBasculer={(_, jour) => setJoursNouvelleSeance((actuels) => (
-                  actuels.includes(jour)
-                    ? actuels.filter((j) => j !== jour)
-                    : [...actuels, jour]
-                ))}
-              />
-              <EditeurSeance
-                programme={null}
-                placeholderNom="Nom de la séance (ex. Épaules)"
-                libelleBouton="Ajouter cette séance"
-                onSauvegarder={(nom, exercices) => ajouterSeanceAuCycle(cycle.id, nom, exercices)}
-              />
-              <TouchableOpacity onPress={() => { setCycleQuiRecoit(null); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}>
-                <Text style={styles.lienAnnuler}>Annuler</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.boutonAjouterSeance}
-              onPress={() => { setCycleQuiRecoit(cycle.id); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}
-            >
-              <Text style={styles.boutonAjouterSeanceTexte}>➕ Ajouter une séance</Text>
-            </TouchableOpacity>
-          )}
-          {cycleEnService(cycle) && (
-            <>
-              <TouchableOpacity
-                style={styles.boutonSortir}
-                onPress={() => demanderSuppression('sortie-cycle-' + cycle.id)}
-              >
-                <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
-              </TouchableOpacity>
-              <ConfirmationSuppression
-                actif={suppressionAConfirmer === 'sortie-cycle-' + cycle.id}
-                question={`Sortir de « ${cycle.nom} » ? Il libère la semaine et ses dates du calendrier, mais reste ici : tu pourras le reposer quand tu veux.`}
-                libelleConfirmer="Oui, sortir"
-                couleur={colors.accent}
-                onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme(cycle.seances); }}
-                onAnnuler={() => setSuppressionAConfirmer(null)}
-              />
-            </>
-          )}
-        </View>
-        );
-      })}
-
-      {/* Les séances isolées (créées depuis la semaine type, hors cycle). */}
-      {programmesSeuls.map((programme) => {
-        const enEdition = programmeEnEdition === programme.id;
-        const deroulee = seanceDeroulee === programme.id;
-        return (
-          <View key={programme.id} style={styles.carteModele}>
-            <TouchableOpacity onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}>
-              <Text style={styles.nomProgrammeTexte}>
-                {deroulee ? '▲' : '▼'} {programme.nom}
-              </Text>
-              <Text style={styles.indice}>
-                {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
-                {(programme.jours || []).length > 0 &&
-                  ' · ' + programme.jours.map((j) => abreviationsJours[j]).join(' ')}
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.ligneActionsProgramme}>
-              <TouchableOpacity
-                style={styles.boutonModifier}
-                onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
-              >
-                <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.boutonModifier}
-                onPress={() => ouvrirTableau(programme.nom, [programme],
-                  { type: 'programme', id: programme.id, ...programme })}
-              >
-                <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => demanderSuppression('prog-' + programme.id)}
-                style={styles.boutonRetirer}
-                hitSlop={ZONE_TACTILE}
-              >
-                <Text style={styles.boutonRetirerTexte}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ConfirmationSuppression
-              actif={suppressionAConfirmer === 'prog-' + programme.id}
-              question={`Supprimer « ${programme.nom} » ?`}
-              onConfirmer={() => { setSuppressionAConfirmer(null); supprimerProgramme(programme); }}
-              onAnnuler={() => setSuppressionAConfirmer(null)}
-            />
-            {deroulee && !enEdition && (
-              <View style={styles.detailJour}>
-                <Text style={styles.libelleJoursSeance}>
-                  Jours de la semaine (projetés sur tout le calendrier) :
-                </Text>
-                <ChoixJoursSeance programme={programme} onBasculer={basculerJourProgramme} />
-                {programme.exercices.length === 0 ? (
-                  <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
-                ) : programme.exercices.map((exo, i) => (
-                  <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
-                    progressions={progressions} />
-                ))}
-              </View>
-            )}
-            {enEdition && (
-              <EditeurSeance
-                key={`edition-${programme.id}`}
-                programme={programme}
-                placeholderNom="Nom de la séance"
-                nomParDefaut={programme.nom}
-                libelleBouton="💾 Enregistrer les modifications"
-                note={noteReutilisation(programme)}
-                onSauvegarder={(nom, exercices) => {
-                  sauvegarderProgramme(programme, nom, exercices);
-                  setProgrammeEnEdition(null);
-                }}
-              />
-            )}
-            {cycleEnService({ seances: [programme] }) && (
-              <>
-                <TouchableOpacity
-                  style={styles.boutonSortir}
-                  onPress={() => demanderSuppression('sortie-prog-' + programme.id)}
-                >
-                  <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
-                </TouchableOpacity>
-                <ConfirmationSuppression
-                  actif={suppressionAConfirmer === 'sortie-prog-' + programme.id}
-                  question={`Sortir de « ${programme.nom} » ? Il libère ses jours et ses dates, mais reste ici : tu pourras le reposer quand tu veux.`}
-                  libelleConfirmer="Oui, sortir"
-                  couleur={colors.accent}
-                  onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme([programme]); }}
-                  onAnnuler={() => setSuppressionAConfirmer(null)}
-                />
-              </>
-            )}
-          </View>
-        );
-      })}
-      <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setVue('nouveauProgramme')}>
-        <Text style={styles.boutonSecondaireTexte}>+ Nouveau programme</Text>
-      </TouchableOpacity>
-
-      {/* ---- Récupérer un programme AVEC UN CODE ----
-           Les programmes partagés ne sont PAS publics (02/09/2026, demande de
-           Hafiz) : sans le code, on ne peut même pas savoir qu'ils existent.
-           Même geste que rejoindre un duel ou valider la perf d'un partenaire. */}
-      <Text style={styles.sectionTitre}>🔑 Programme partagé</Text>
-      <View style={styles.carteModele}>
-        <Text style={styles.indice}>
-          Quelqu'un t'a donné un code ? Entre-le pour voir son programme et en
-          garder ta propre copie.
-        </Text>
-        <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
-          <TextInput
-            style={[styles.champ, { flex: 1 }]}
-            value={codeSaisi}
-            onChangeText={(t) => setCodeSaisi(t.toUpperCase())}
-            placeholder="Ex. : K7XPQR"
-            placeholderTextColor={colors.texteGris}
-            autoCapitalize="characters"
-          />
-          <TouchableOpacity
-            style={styles.boutonAjouterSerie}
-            onPress={chercherParCode}
-            disabled={rechercheCode || !codeSaisi.trim()}
-          >
-            {rechercheCode ? <ActivityIndicator color={colors.texte} size="small" /> : (
-              <Text style={styles.boutonAjouterSerieTexte}>Voir</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-        {erreurCode && <Text style={styles.messageErreur}>⚠️ {erreurCode}</Text>}
-
-        {/* On montre le contenu AVANT de copier : personne ne récupère un
-            programme sans savoir ce qu'il contient. */}
-        {programmeTrouve && (
-          <View style={[styles.detailJour, { borderColor: colors.or, borderWidth: 1 }]}>
-            <Text style={styles.nomProgrammeTexte}>⭐ {programmeTrouve.nom}</Text>
-            <Text style={[styles.indice, { marginTop: 4 }]}>{programmeTrouve.description}</Text>
-            {(programmeTrouve.seances || []).map((seance, i) => (
-              <Text key={i} style={styles.exerciceDetailJour}>
-                • {seance.nom} — {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ') || 'sans jour fixe'}
-                {' · '}{(seance.exercices || []).length} exo
-                {(seance.exercices || []).length > 1 ? 's' : ''}
-              </Text>
-            ))}
-            <TouchableOpacity
-              style={styles.boutonUtiliserModele}
-              onPress={() => {
-                appliquerModele(enModele(programmeTrouve));
-                setProgrammeTrouve(null);
-                setCodeSaisi('');
-              }}
-              disabled={modeleEnCours !== null}
-            >
-              <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+      {/* ---- LE RESTE, derrière une ligne chacun ----
+          Ces trois sections vivaient dans cette même page, dépliées ou non :
+          elles font maintenant chacune leur propre écran. Le résumé chiffré
+          reste visible ici, pour ne pas avoir à ouvrir pour savoir. */}
+      <View style={stylesHub.bandeauSection}>
+        <Text style={stylesHub.libelleSection}>LE RESTE</Text>
       </View>
-
-      {/* ---- ADMIN : les programmes que J'AI partagés, avec leurs codes ---- */}
-      {/* ⚠️ `? … : null` ET PAS `&& …` : `admin` arrive du serveur en ENTIER
-          (0 ou 1), pas en booléen. `{0 && …}` affiche le NOMBRE 0 — invisible
-          pour un compte admin, donc jamais vu en test. Voir CLAUDE.md,
-          section du 01/10/2026. */}
-      {moi.admin ? (
-        <>
-          <Text style={styles.sectionTitre}>🛠 Mes programmes partagés</Text>
-          {messageOfficiel && (
-            <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
-              {messageOfficiel.texte}
-            </Text>
-          )}
-          {programmesOfficiels.length === 0 ? (
-            <Text style={styles.indice}>
-              Aucun pour l'instant. Utilise « 🔑 Partager par code » sur un de tes
-              programmes ci-dessus.
-            </Text>
-          ) : programmesOfficiels.map((o) => (
-            <View key={o.id} style={[styles.carteModele, styles.carteOfficielle]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>⭐ {o.nom}</Text>
-                <TouchableOpacity onPress={() => retirerOfficiel(o)} style={styles.boutonRetirer}>
-                  <Text style={styles.boutonRetirerTexte}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.codePartage}>{o.code}</Text>
-              <Text style={styles.indice}>
-                Donne ce code aux personnes à qui tu veux offrir le programme.
-                Il fonctionne autant de fois que tu veux, jusqu'à ce que tu le retires.
-              </Text>
-            </View>
-          ))}
-        </>
-      ) : null}
-
-      {/* ---- Modèles standards : Push Pull Legs, Full Body… ---- */}
-      <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setModelesOuverts(!modelesOuverts)}>
-        <Text style={styles.boutonSecondaireTexte}>
-          📦 Programmes standards {modelesOuverts ? '▲' : '▼'}
-        </Text>
-      </TouchableOpacity>
-      {modelesOuverts && programmesStandards.map((modele) => (
-        <View key={modele.id} style={styles.carteModele}>
-          <Text style={styles.nomProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
-          <Text style={[styles.indice, { marginTop: 4 }]}>{modele.description}</Text>
-          <Text style={[styles.indice, { marginTop: 4 }]}>
-            {modele.seances.map((s) =>
-              `${s.nom} : ${s.jours.map((j) => abreviationsJours[j]).join(', ')}`
-            ).join(' · ')}
-          </Text>
-          <TouchableOpacity
-            style={styles.boutonUtiliserModele}
-            onPress={() => appliquerModele(modele)}
-            disabled={modeleEnCours !== null}
-          >
-            {modeleEnCours === modele.id ? (
-              <ActivityIndicator color={colors.texte} size="small" />
-            ) : (
-              <Text style={styles.boutonDemarrerTexte}>Utiliser ce modèle</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      ))}
-
-      <TouchableOpacity style={styles.boutonPrincipal} onPress={() => demarrerSeance(null)}>
-        <Text style={styles.boutonPrincipalTexte}>🏋️ Démarrer une séance libre</Text>
-      </TouchableOpacity>
-
-      {/* ---- Rappel d'entraînement (pas de notifications programmées sur web) ---- */}
-      {Platform.OS !== 'web' && (
-        <>
-          <Text style={styles.sectionTitre}>🔔 Rappel d'entraînement</Text>
-          <View style={styles.carteModele}>
-            <Text style={styles.indice}>
-              Choisis tes jours et ton heure : ton téléphone te préviendra, même
-              app fermée (comme un réveil).
-            </Text>
-            <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
-              {joursSemaine.map((jour) => (
-                <TouchableOpacity
-                  key={jour}
-                  style={[styles.puceJour, rappelJours.includes(jour) && styles.puceJourActive]}
-                  onPress={() => basculerJourRappel(jour)}
-                >
-                  <Text style={[styles.puceJourTexte, rappelJours.includes(jour) && styles.puceJourTexteActif]}>
-                    {abreviationsJours[jour]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
-              <TextInput
-                style={[styles.champ, { width: 90 }]}
-                value={rappelHeure}
-                onChangeText={setRappelHeure}
-                placeholder="18:00"
-                placeholderTextColor={colors.texteGris}
-              />
-              <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappel}>
-                <Text style={styles.boutonAjouterSerieTexte}>
-                  {rappelActif ? 'Mettre à jour' : 'Activer'}
-                </Text>
-              </TouchableOpacity>
-              {rappelActif && (
-                <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappel}>
-                  <Text style={styles.boutonRetirerTexte}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {rappelMessage && (
-              <Text style={[styles.messageRappel, rappelMessage.erreur && { color: colors.rouge }]}>
-                {rappelMessage.texte}
-              </Text>
-            )}
-          </View>
-        </>
-      )}
-
-      {/* ---- Records personnels (calculés depuis l'historique) ---- */}
-      {mesRecords.length > 0 && (
-        <>
-          <TouchableOpacity onPress={() => setRecordsOuverts(!recordsOuverts)}>
-            <Text style={styles.sectionTitre}>
-              🏆 Mes records {recordsOuverts ? '▲' : '▼'}
-            </Text>
-          </TouchableOpacity>
-          {recordsOuverts && (
-            <View style={styles.carteModele}>
-              <Text style={styles.indice}>
-                Ta série la plus lourde sur chaque exercice, toutes séances confondues.
-              </Text>
-              {/* LECTURE SEULE (09/09/2026, demande de Hafiz : « au niveau des
-                  records on ne doit pas pouvoir renommer les exercices »).
-                  Toucher une ligne ouvrait un champ de renommage qui
-                  réécrivait l'historique PARTOUT — un geste lourd derrière une
-                  simple consultation de records, et déclenchable par erreur en
-                  faisant défiler la liste. Renommer se fait maintenant
-                  uniquement depuis l'éditeur d'un programme, où l'on est déjà
-                  en train de modifier quelque chose. */}
-              {mesRecords.map((r) => (
-                <View key={r.exercice} style={styles.ligneRecord}>
-                  <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
-                  <Text style={styles.valeurRecord}>
-                    {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
-                  </Text>
-                  <Text style={styles.dateRecord}>{r.date}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </>
-      )}
-
-      <Text style={styles.sectionTitre}>Historique</Text>
-      {!donneesIncertaines && entrainements.length === 0 && (
-        <Text style={styles.indice}>Aucune séance loggée pour l'instant.</Text>
-      )}
-      {entrainements.slice(0, 10).map((e) => {
-        const nbSeries = e.series.length;
-        const exercicesUniques = [...new Set(e.series.map((s) => s.exercice))];
-        return (
-          <TouchableOpacity
-            key={e.id}
-            style={styles.carteHistorique}
-            onPress={() => { setEntrainementSelectionne(e); setVue('historiqueDetail'); }}
-          >
-            {/* La date reste le repère principal — c'est par elle qu'on
-                retrouve une séance. Le TYPE la complète sur la ligne
-                d'en dessous : mis à côté de la date, un nom de programme long
-                (48 caractères déjà vus en test) se serait battu pour la
-                largeur, et c'est toujours le texte qui perd (bug du
-                03/09/2026). Là, il passe simplement à la ligne. */}
-            <Text style={styles.dateHistorique}>{libelleDate(e.date)}</Text>
-            <Text style={styles.indice}>
-              <Text style={styles.typeHistorique}>{typeDeSeance(e, programmes)}</Text>
-              {' · '}{exercicesUniques.length} exercice{exercicesUniques.length > 1 ? 's' : ''} · {nbSeries} série{nbSeries > 1 ? 's' : ''}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+      <LigneRaccourci
+        icone="🎯"
+        titre="Suivi & objectifs"
+        alerte={nbNonClasses > 0}
+        resume={`${totalSeriesSemaine} série${totalSeriesSemaine > 1 ? 's' : ''} cette semaine · ${seancesDeLaSemaine} séance${seancesDeLaSemaine > 1 ? 's' : ''}${nbNonClasses > 0 ? ` · ${nbNonClasses} exo compté${nbNonClasses > 1 ? 's' : ''} nulle part` : ''}`}
+        // On ouvre la section en arrivant : sur un écran qui ne contient
+        // qu'elle, la trouver repliée n'aurait aucun sens.
+        onPress={() => { setVolumeOuvert(true); setVue('suivi'); }}
+      />
+      <LigneRaccourci
+        icone="🍽"
+        titre="Nutrition"
+        resume="Journal du jour · estimer un repas en photo"
+        onPress={() => setVue('nutrition')}
+      />
+      <LigneRaccourci
+        icone="🏆"
+        titre="Historique & records"
+        resume={entrainements.length > 0
+          ? `${entrainements.length} séance${entrainements.length > 1 ? 's' : ''} enregistrée${entrainements.length > 1 ? 's' : ''}${mesRecords.length > 0 ? ` · ${mesRecords.length} record${mesRecords.length > 1 ? 's' : ''}` : ''}`
+          : 'Aucune séance enregistrée pour l\'instant'}
+        onPress={() => { setRecordsOuverts(true); setVue('historique'); }}
+      />
 
       {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
     </ScrollView>
+
   );
 }
 
@@ -4323,12 +4742,18 @@ const styles = StyleSheet.create({
   flecheCalendrier: { color: colors.texteGris, fontSize: 10 },
   ligneChoixProgramme: { paddingVertical: 8 },
   choixProgrammeTexte: { color: colors.texte, fontSize: 14 },
-  blocCalendrier: { width: '100%', maxWidth: 380, alignSelf: 'flex-start' },
+  // Le calendrier reste borné à 380 px (sinon ses cases, à 1/7 de la largeur,
+  // deviennent énormes), mais il est CENTRÉ depuis le 26/10/2026 : dans la
+  // colonne de lecture de 560 px, collé à gauche, il paraissait de travers.
+  blocCalendrier: { width: '100%', maxWidth: 380, alignSelf: 'center' },
   enTeteMois: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: espacement.s,
   },
+  // 44 px pile : le minimum tactile iOS/Android. Mesuré à 42 px le
+  // 26/10/2026, c'étaient les deux seules cibles encore sous la barre.
   boutonMois: {
+    minHeight: 44, justifyContent: 'center',
     paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10,
     backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
   },

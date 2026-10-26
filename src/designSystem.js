@@ -41,9 +41,20 @@ export const da = {
 
   // Fonds d'accent
   orVoile: 'rgba(232,178,58,.08)',
+  orVoileFort: 'rgba(232,178,58,.14)',
   duelFond: '#2a1f10',
   duelFondBas: '#1c150c',
 };
+
+// LARGEUR MAXIMALE DE LECTURE (26/10/2026).
+// L'app est pensée pour un téléphone. Sur un ordinateur, les paragraphes
+// s'étiraient sur toute la fenêtre : 943 px mesurés en 1024, soit ~140
+// caractères par ligne, là où 60-80 est confortable. On borne donc la colonne
+// de contenu et on la centre.
+// ⚠️ ELLE S'APPLIQUE AUX SIX ONGLETS D'UN COUP (dans App.js, autour de la page
+// de chaque onglet) : n'en borner qu'un seul ferait sauter la largeur en
+// glissant d'un onglet à l'autre, ce qui serait pire que le défaut.
+export const largeurMaxContenu = 560;
 
 // Les chiffres en chasse fixe : sur téléphone comme sur web, on demande une
 // police monospace système (aucune police à installer).

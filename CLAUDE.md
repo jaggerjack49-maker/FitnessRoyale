@@ -4259,6 +4259,145 @@ est celle déjà écrite : `apiUrl` à `null`, **vider `node_modules/.cache` et
 `%TEMP%/metro-cache`**, redémarrer Metro, et seulement restaurer `app.json` une
 fois le test fini (`git diff app.json` vide avant tout commit).
 
+## Refonte de l'onglet Entraînement, passe 1 : un accueil qui tient — 26/10/2026
+
+Demande de Hafiz, images à l'appui (16 captures déposées dans `icones/`,
+IMG_1770→1777, 1781, 1782, 1823→1828) : « il restyle tout… on va intégrer un
+mode séance libre et un autre mode où on conçoit son programme ». Ce qui le
+gêne, en deux mots : **« trop chargé, trop long »** et **« ce n'est pas beau »**.
+
+C'est la PASSE 1 sur 3. Les icônes (passe 2) et la bibliothèque d'exercices
+(passe 3) ne sont PAS commencées.
+
+### Le constat, mesuré avant de toucher à quoi que ce soit
+
+L'onglet empilait HUIT sections dans une seule page qui défile : nutrition,
+volume par groupe musculaire, semaine type, à rattraper, calendrier, mes
+programmes, programme partagé, modèles standards, rappel, records, historique.
+Mesuré en format téléphone (375 px, compte `SondeTest`, toutes les sections
+REPLIÉES) : **2 450 px de haut, soit 3,3 écrans**. Le premier écran entier était
+occupé par la carte Nutrition ; « 🏋️ Démarrer une séance libre » — l'action la
+plus immédiate de l'onglet — arrivait en **10e position**, après les modèles
+standards.
+
+### Ce que l'accueil est devenu
+
+Il ne reste que ce à quoi on répond en ouvrant l'onglet :
+
+1. **DEUX GRANDES ENTRÉES, tout en haut** (modèle : la maquette IMG_1823) —
+   « ▶ SÉANCE LIBRE / Démarre tout de suite, sans plan » en or plein, et
+   « 📋 PROGRAMMES / N enregistrés · créer, modifier » bordée. Ce sont les deux
+   modes demandés par Hafiz, et ils ne demandent plus aucun défilement.
+2. **AUJOURD'HUI** — une carte par séance prévue ce jour : le nom, ses
+   exercices en une phrase, et un gros bouton « ▶ DÉMARRER ». Si la journée est
+   déjà bouclée, la carte passe au vert et dit ce qui a été fait ; si rien n'est
+   prévu, une seule ligne le dit.
+3. **CALENDRIER** — inchangé (grille, détail du jour, placer un programme).
+4. **LE RESTE** — trois lignes à chevron vers trois sous-écrans, chacune
+   portant son résumé chiffré pour ne pas avoir à ouvrir pour savoir.
+
+Mesuré après, même compte, même format : **1 262 px, soit 1,7 écran**.
+
+### Les quatre sous-écrans (`vue === …`)
+
+RIEN N'A ÉTÉ SUPPRIMÉ : les sections ont été DÉPLACÉES telles quelles, sans
+qu'une seule ligne de calcul soit touchée.
+- **`'programmes'`** : « + NOUVEAU PROGRAMME » en tête (c'est ce qu'on vient y
+  faire), puis mes cycles et séances isolées, la semaine type, les programmes
+  standards, le programme partagé par code, et les partages de l'admin.
+- **`'suivi'`** : séries par groupe musculaire + objectifs + exercices à
+  classer + les deux rappels (entraînement et point hebdo).
+- **`'historique'`** : mes records + l'historique. Il passe de **10 à 40
+  séances** affichées : la limite à 10 n'existait que parce que la liste était
+  coincée en bas de l'accueil.
+- **`'nutrition'`** : la carte Nutrition, inchangée.
+
+Chacun porte un en-tête « ‹ titre / sous-titre » (bouton rond de 44 px) et sa
+PROPRE place de défilement (`usePlaceDefilement`) : revenir sur « Mes
+programmes » après un tableau ne remonte pas tout en haut.
+
+### La navigation en profondeur a enfin un sens
+
+Avant, tous les écrans internes revenaient à l'accueil. Désormais le retour
+remonte d'un cran : le tableau de progression → « Mes programmes », le détail
+d'une séance passée → « Historique », « Nouveau programme » → « Mes
+programmes ». Le retour Android (`useRetour`) suit exactement la même règle, et
+l'accueil reste le seul endroit d'où le retour sort de l'onglet.
+BONNE SURPRISE : les deux liens « ← Revenir à mes programmes » et « ← Retour à
+l'historique » existaient DÉJÀ et promettaient ce comportement — ils disent
+enfin la vérité.
+
+### ⚠️ UN PIÈGE TRAITÉ : le prévu d'une journée bouclée
+
+Le lien « Faire une autre séance » de la carte du jour ouvre la date dans le
+calendrier ET demande d'y rouvrir le prévu. Or `useEffect(() =>
+setPrevuAfficheLe(null), [jourOuvert])` — la garde posée le 15/09/2026 — aurait
+effacé cette demande au rendu suivant, les deux états changeant ensemble.
+Corrigé en ne remettant à zéro que si la date rangée n'est PAS celle qu'on
+vient d'ouvrir. La règle du 15/09 est intacte, et **vérifiée à l'écran** :
+aller sur le 27 puis revenir sur le 26 remontre bien le réalisé, avec son lien
+« Voir ce qui était prévu ».
+
+### La largeur maximale de lecture, sur LES SIX ONGLETS
+
+C'était le chantier annoncé le 01/10/2026 et laissé ouvert (« 943 px de large,
+~140 caractères par ligne »), approuvé depuis par Hafiz.
+- `largeurMaxContenu = 560` dans `src/designSystem.js` — **une seule source**,
+  comme les couleurs.
+- Appliquée dans **App.js**, autour du contenu de CHAQUE page d'onglet. ⚠️ La
+  page elle-même GARDE la largeur de la fenêtre : c'est elle que le défilement
+  « page par page » cale, la borner aurait cassé le glissement entre onglets.
+  C'est une colonne INTÉRIEURE qui est bornée et centrée.
+- Mesuré en 1024 px : les six onglets donnent une colonne de **560 px centrée**
+  (gauche 232, droite 792), et le plus long paragraphe tombe de 943 à **528 px**
+  (~75 caractères). En 768 px : colonne de 560, marge de 104 de chaque côté.
+  En 375 px : rien ne change, 560 ne s'applique jamais.
+- Le calendrier, déjà borné à 380 px, est passé de `alignSelf: 'flex-start'` à
+  `'center'` : collé à gauche dans une colonne de 560, il paraissait de travers.
+
+### ⚠️ ON GARDE L'OR — les maquettes sont vertes
+
+Les captures viennent d'une AUTRE app (« Epilog »). On en reprend la MISE EN
+PAGE et la densité, jamais la palette : l'or de `designSystem.js` pilote aussi
+l'arène, l'avatar, les ligues et le classement des cinq autres onglets, et le
+vert y serait un corps étranger. Aucune couleur n'a été écrite en dur dans
+l'écran ; deux clés ont été ajoutées au design system (`texteDoux` réexporté
+par `theme.js`, `orVoileFort`).
+
+### Détails corrigés en chemin
+
+- Deux pluriels faux repérés à l'écran (« 1 séries », « 1 exo comptés nulle
+  part »).
+- Les flèches ◀ ▶ du calendrier mesuraient **42 px** — les deux dernières
+  cibles sous la barre des 44. Passées à 44.
+- Les phrases qui renvoyaient « au bas de cet écran » pour la séance libre
+  pointent maintenant vers le haut de l'onglet.
+
+### Vérifié
+
+Trois formats (375 / 768 / 1024), compte `SondeTest` (3 programmes, 7 séances,
+un bloc en cours) ET compte vide (`The Jaggerjack`), plus un **nom de programme
+de 50 caractères** posé exprès en base : il se replie sur deux lignes, aucun
+débordement horizontal mesuré (`getBoundingClientRect` sur tous les éléments,
+`document.body.scrollWidth` égal à la fenêtre). Parcours joués : démarrer
+depuis la carte du jour → séance → sortir → accueil ; accueil → programmes →
+tableau → retour programmes ; accueil → historique → détail d'une séance →
+retour historique ; journée bouclée → « Faire une autre séance » → le prévu
+s'ouvre dans le calendrier. Les 39 cibles tactiles de l'accueil sont toutes à
+44 px ou plus. **Zéro erreur console.** Suite backend : 343 tests, tous OK.
+
+### Ce qui N'EST PAS fait, et pourquoi
+
+- **Le résumé kcal du jour a quitté l'accueil.** Il vivait DANS
+  `CarteNutrition` ; le sortir sans démonter ce composant aurait demandé de
+  remonter son état. La ligne de l'accueil dit donc « Journal du jour · estimer
+  un repas en photo », sans chiffres. À reprendre si ça manque à Hafiz.
+- **Pas de durée estimée sur la carte du jour** (« ~67 min » dans la maquette) :
+  la règle d'estimation vit côté serveur depuis le 24/09/2026, et la recopier
+  dans l'écran créerait une SECONDE définition — le motif que ce projet paie en
+  boucle. Il faudrait la faire servir par l'API.
+- Les icônes (passe 2) et la bibliothèque d'exercices (passe 3).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
