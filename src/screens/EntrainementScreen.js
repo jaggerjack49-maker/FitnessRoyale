@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, espacement } from '../theme';
-import { da } from '../designSystem';
+import { da, monospace } from '../designSystem';
 import * as api from '../api';
 import {
   programmesStandards, joursSemaine, abreviationsJours, jourDeLaDate,
@@ -38,6 +38,11 @@ import useRetour from '../useRetour';
 import CarteNutrition from '../components/CarteNutrition';
 import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import TableauProgression from '../components/TableauProgression';
+import ChoixExercice from '../components/ChoixExercice';
+import { placerExerciceChoisi } from '../logic/choixExercice';
+import {
+  MATERIELS, bibliothequeExercices, exerciceDeLaBibliotheque, descriptionExercice,
+} from '../data/bibliothequeExercices';
 import {
   semaineDuBloc, ecartsDuBlocComplet, semainesARecalculer, ciblePrevueDansBloc,
 } from '../logic/bloc';
@@ -296,6 +301,7 @@ function EditeurSeance({
       : [{ exercice: '', series: '3', reps: '10', repsMax: '' }]
   );
   const [message, setMessage] = useState(null);
+  const [biblioOuverte, setBiblioOuverte] = useState(false);
 
   function modifier(index, champ, valeur) {
     setMessage(null);
@@ -387,12 +393,32 @@ function EditeurSeance({
         </View>
       ))}
 
-      <TouchableOpacity
-        style={stylesEditeur.boutonAjout}
-        onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10', repsMax: '' }])}
-      >
-        <LibelleIcone nom="plus" taille={13} ecart={5} style={stylesEditeur.boutonAjoutTexte}>Ajouter un exercice</LibelleIcone>
-      </TouchableOpacity>
+      <View style={stylesEditeur.deuxBoutons}>
+        <TouchableOpacity
+          style={[stylesEditeur.boutonAjout, stylesEditeur.boutonMoitie]}
+          onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10', repsMax: '' }])}
+        >
+          <LibelleIcone nom="plus" taille={13} ecart={5} style={stylesEditeur.boutonAjoutTexte}>Ligne vide</LibelleIcone>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[stylesEditeur.boutonAjout, stylesEditeur.boutonMoitie, stylesEditeur.boutonBiblio]}
+          onPress={() => { setBiblioOuverte((o) => !o); setMessage(null); }}
+        >
+          <LibelleIcone nom="bibliotheque" taille={13} ecart={5} style={stylesEditeur.boutonBiblioTexte}>
+            Bibliothèque
+          </LibelleIcone>
+        </TouchableOpacity>
+      </View>
+
+      {biblioOuverte && (
+        <ChoixExercice
+          dejaPris={lignes.map((l) => l.exercice)}
+          onFermer={() => setBiblioOuverte(false)}
+          onChoisir={(nomExo) => setLignes((l) => placerExerciceChoisi(
+            l, nomExo, { exercice: '', series: '3', reps: '10', repsMax: '' },
+          ))}
+        />
+      )}
 
       {message && <Text style={stylesEditeur.message}>{message}</Text>}
 
@@ -441,6 +467,13 @@ const stylesEditeur = StyleSheet.create({
     borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 2,
   },
   boutonAjoutTexte: { color: colors.accent, fontWeight: '700', fontSize: 12 },
+  // Les deux façons d'ajouter un exercice, côte à côte : une ligne vide (on
+  // tape son nom) ou la bibliothèque. La seconde est en OR — c'est le chemin
+  // qu'on veut voir en premier, puisqu'il évite les fautes de frappe.
+  deuxBoutons: { flexDirection: 'row', gap: espacement.s, marginTop: 2 },
+  boutonMoitie: { flex: 1, minHeight: 44, justifyContent: 'center' },
+  boutonBiblio: { borderColor: da.bordureOrDouce },
+  boutonBiblioTexte: { color: colors.or, fontWeight: '700', fontSize: 12 },
   bouton: {
     backgroundColor: colors.accent, borderRadius: 8, padding: 10,
     alignItems: 'center', marginTop: espacement.s,
@@ -563,6 +596,26 @@ const stylesHub = StyleSheet.create({
   titreSousEcran: { color: colors.texte, fontSize: 20, fontWeight: '800', letterSpacing: 0.3 },
   sousTitreSousEcran: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
 
+  // La fiche d'un exercice de la bibliothèque (sous-écran « Bibliothèque »).
+  ficheExo: {
+    backgroundColor: da.carte, borderRadius: 14, padding: espacement.m,
+    borderWidth: 1, borderColor: da.bordureOr, marginBottom: espacement.s,
+  },
+  ficheEntete: { flexDirection: 'row', alignItems: 'center', gap: espacement.s + 2 },
+  ficheIcone: {
+    width: 46, height: 46, borderRadius: 12, alignItems: 'center',
+    justifyContent: 'center', backgroundColor: da.orVoile,
+  },
+  ficheNom: { color: colors.texte, fontSize: 16, fontWeight: '800' },
+  ficheDetail: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
+  // ⚠️ La chasse fixe n'est PAS dans le style de base : « fontFamily:
+  // undefined » dans un style superposé ne l'annule pas (vu à l'écran, la
+  // phrase « jamais noté » restait en monospace). On l'AJOUTE quand il y a
+  // des chiffres à aligner, au lieu d'essayer de la retirer.
+  ficheRecord: { color: colors.texteGris, fontSize: 13, marginTop: espacement.m },
+  ficheChiffres: { color: colors.or, fontWeight: '700', fontFamily: monospace },
+  ficheAide: { color: colors.texteGris, fontSize: 11, lineHeight: 16, marginTop: espacement.s },
+
   // Les deux grandes entrées de l'accueil, côte à côte.
   ligneActionsPrincipales: { flexDirection: 'row', gap: espacement.s },
   grandeAction: {
@@ -677,6 +730,7 @@ export default function EntrainementScreen({
   const placeSuivi = usePlaceDefilement('suivi');
   const placeHistorique = usePlaceDefilement('historique');
   const placeNutrition = usePlaceDefilement('nutrition');
+  const placeBiblio = usePlaceDefilement('bibliotheque');
   const [programmes, setProgrammes] = useState([]);
   const [entrainements, setEntrainements] = useState([]);
   const [chargement, setChargement] = useState(false);
@@ -697,6 +751,8 @@ export default function EntrainementScreen({
   // { lundi: { nom: 'Push', lignes: [{exercice, seriesCibles, repsCibles}] }, ... }
   const [seancesParJour, setSeancesParJour] = useState({});
   const [jourEnEdition, setJourEnEdition] = useState(null); // jour déplié dans le formulaire
+  // Le jour dont la bibliothèque d'exercices est ouverte (un seul à la fois).
+  const [biblioJour, setBiblioJour] = useState(null);
   const [cycles, setCycles] = useState([]);
 
   // Quelle séance est DÉROULÉE dans « Mes programmes » (on voit ses exercices
@@ -825,6 +881,10 @@ export default function EntrainementScreen({
   const [programmeActif, setProgrammeActif] = useState(null); // null = séance libre
   const [exercicesSession, setExercicesSession] = useState([]); // [nomExercice, ...]
   const [nouvelExerciceLibre, setNouvelExerciceLibre] = useState('');
+  // La bibliothèque d'exercices ouverte PENDANT une séance (07/11/2026).
+  const [biblioSeance, setBiblioSeance] = useState(false);
+  // L'exercice dont on regarde la fiche dans le sous-écran « Bibliothèque ».
+  const [exoConsulte, setExoConsulte] = useState(null);
   const [seriesLoggees, setSeriesLoggees] = useState({}); // { exercice: [{numero_serie, reps, poids}] }
   const [champsSaisie, setChampsSaisie] = useState({}); // { exercice: { reps, poids } }
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
@@ -1118,7 +1178,14 @@ export default function EntrainementScreen({
   // passe alors à App.js, qui ramène au Profil.
   useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'
     || vue === 'tableau' || vue === 'programmes' || vue === 'suivi'
-    || vue === 'historique' || vue === 'nutrition'), () => {
+    || vue === 'historique' || vue === 'nutrition' || vue === 'bibliotheque'), () => {
+    if (vue === 'bibliotheque') {
+      // La fiche d'un exercice se ferme d'abord, la bibliothèque ensuite :
+      // un seul geste ne doit pas sauter deux niveaux.
+      if (exoConsulte) { setExoConsulte(null); return true; }
+      setVue('programmes');
+      return true;
+    }
     if (vue === 'historiqueDetail') {
       // Le détail d'une séance s'ouvre DEPUIS l'historique : on y revient,
       // pas à l'accueil.
@@ -2614,12 +2681,35 @@ export default function EntrainementScreen({
                           )}
                         </View>
                       ))}
-                      <TouchableOpacity
-                        style={styles.boutonSecondaire}
-                        onPress={() => ajouterLigneJour(jour)}
-                      >
-                        <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonSecondaireTexte}>Ajouter un exercice</LibelleIcone>
-                      </TouchableOpacity>
+                      <View style={styles.deuxBoutons}>
+                        <TouchableOpacity
+                          style={[styles.boutonSecondaire, styles.boutonMoitie]}
+                          onPress={() => ajouterLigneJour(jour)}
+                        >
+                          <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonSecondaireTexte}>Ligne vide</LibelleIcone>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.boutonSecondaire, styles.boutonMoitie, styles.boutonBiblio]}
+                          onPress={() => setBiblioJour((j) => (j === jour ? null : jour))}
+                        >
+                          <LibelleIcone nom="bibliotheque" taille={13} ecart={5} style={styles.boutonBiblioTexte}>
+                            Bibliothèque
+                          </LibelleIcone>
+                        </TouchableOpacity>
+                      </View>
+
+                      {biblioJour === jour && (
+                        <ChoixExercice
+                          dejaPris={brouillon.lignes.map((l) => l.exercice)}
+                          onFermer={() => setBiblioJour(null)}
+                          onChoisir={(nomExo) => majSeanceJour(jour, {
+                            lignes: placerExerciceChoisi(
+                              brouillon.lignes, nomExo,
+                              { exercice: '', seriesCibles: '3', repsCibles: '10' },
+                            ),
+                          })}
+                        />
+                      )}
                     </View>
                   )}
                 </View>
@@ -2937,6 +3027,25 @@ export default function EntrainementScreen({
             <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonAjouterSerieTexte}>Exo</LibelleIcone>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={styles.boutonBiblioSeance}
+          onPress={() => setBiblioSeance((o) => !o)}
+        >
+          <LibelleIcone nom="bibliotheque" taille={14} ecart={6} style={styles.boutonBiblioTexte}>
+            {biblioSeance ? 'Fermer la bibliothèque' : 'Choisir dans la bibliothèque'}
+          </LibelleIcone>
+        </TouchableOpacity>
+        {biblioSeance && (
+          <ChoixExercice
+            dejaPris={exercicesSession}
+            onFermer={() => setBiblioSeance(false)}
+            onChoisir={(nomExo) => {
+              // Pas de `ajouterExerciceLibre` ici : cette fonction lit le
+              // CHAMP de saisie, et l'exercice choisi n'y passe pas.
+              setExercicesSession((l) => (l.includes(nomExo) ? l : [...l, nomExo]));
+            }}
+          />
+        )}
 
         {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
 
@@ -3148,6 +3257,12 @@ export default function EntrainementScreen({
             NOUVEAU PROGRAMME
           </LibelleIcone>
         </TouchableOpacity>
+        <LigneRaccourci
+          icone="bibliotheque"
+          titre="Bibliothèque d'exercices"
+          resume={`${bibliothequeExercices.length} exercices · 12 groupes musculaires`}
+          onPress={() => { setExoConsulte(null); setVue('bibliotheque'); }}
+        />
         {!donneesIncertaines && cycles.length === 0 && programmesSeuls.length === 0 && (
           <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
         )}
@@ -3636,6 +3751,73 @@ export default function EntrainementScreen({
   }
 
   // ================= SOUS-ÉCRAN : SUIVI & OBJECTIFS =================
+  // ---------------------------------------------------------------------------
+  // SOUS-ÉCRAN « BIBLIOTHÈQUE » — parcourir les 96 exercices (07/11/2026)
+  // ---------------------------------------------------------------------------
+  // C'est le MÊME composant que le choisisseur branché aux éditeurs, en mode
+  // consultation : toucher un exercice ouvre sa fiche au lieu de remplir un
+  // champ. La fiche ne montre que ce qu'on sait déjà (groupe, matériel, mon
+  // record) — elle n'invente aucune consigne d'exécution, et surtout aucun
+  // chiffre : une charge conseillée se déduit de SON historique, pas d'un
+  // catalogue.
+  if (vue === 'bibliotheque') {
+    const fiche = exoConsulte ? exerciceDeLaBibliotheque(exoConsulte) : null;
+    const materielFiche = fiche ? MATERIELS[fiche.materiel] : null;
+    const recordFiche = fiche ? recordPersonnel(entrainements, fiche.nom) : null;
+    return (
+      <ScrollView
+        key="bibliotheque"
+        {...placeBiblio}
+        style={styles.conteneur}
+        contentContainerStyle={{ padding: espacement.m }}
+      >
+        <EnteteSousEcran
+          titre="Bibliothèque d'exercices"
+          sousTitre={`${bibliothequeExercices.length} exercices, rangés par groupe musculaire.`}
+          onRetour={() => { setExoConsulte(null); setVue('programmes'); }}
+        />
+
+        {fiche && (
+          <View style={stylesHub.ficheExo}>
+            <View style={stylesHub.ficheEntete}>
+              <View style={stylesHub.ficheIcone}>
+                <Icone
+                  nom={materielFiche ? materielFiche.icone : 'question'}
+                  taille={28}
+                  couleur={colors.or}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={stylesHub.ficheNom}>{fiche.nom}</Text>
+                <Text style={stylesHub.ficheDetail}>{descriptionExercice(fiche)}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setExoConsulte(null)} hitSlop={ZONE_TACTILE}>
+                <Icone nom="croix" taille={15} couleur={colors.texteGris} />
+              </TouchableOpacity>
+            </View>
+            {/* La chasse fixe est faite pour des CHIFFRES alignés, pas pour
+                une phrase : elle ne s'applique qu'au record. */}
+            <Text style={[stylesHub.ficheRecord, recordFiche && stylesHub.ficheChiffres]}>
+              {recordFiche
+                ? `Ton record : ${recordFiche.poids} kg × ${recordFiche.reps} reps (${libelleDate(recordFiche.date)})`
+                : 'Tu ne l’as jamais noté dans une séance.'}
+            </Text>
+            <Text style={stylesHub.ficheAide}>
+              Pour l’ajouter, ouvre un programme ou une séance : le bouton
+              « Bibliothèque » y propose cette même liste.
+            </Text>
+          </View>
+        )}
+
+        <ChoixExercice
+          consultation
+          onChoisir={(nomExo) => setExoConsulte(nomExo)}
+          onFermer={() => { setExoConsulte(null); setVue('programmes'); }}
+        />
+      </ScrollView>
+    );
+  }
+
   if (vue === 'suivi') {
     return (
       <ScrollView
@@ -4677,6 +4859,18 @@ const styles = StyleSheet.create({
     marginTop: espacement.s, marginBottom: espacement.m, borderWidth: 1, borderColor: colors.accent,
   },
   boutonSecondaireTexte: { color: colors.accent, fontWeight: '700' },
+  // « Ligne vide » et « Bibliothèque » côte à côte (passe 3). La bibliothèque
+  // est en OR : c'est le chemin à voir en premier, puisqu'il garantit un nom
+  // d'exercice exact — et le NOM est l'identifiant (voir CLAUDE.md 04/09/2026).
+  deuxBoutons: { flexDirection: 'row', gap: espacement.s },
+  boutonMoitie: { flex: 1, minHeight: 44, justifyContent: 'center', padding: 10 },
+  boutonBiblio: { borderColor: da.bordureOrDouce },
+  boutonBiblioTexte: { color: colors.or, fontWeight: '700' },
+  boutonBiblioSeance: {
+    backgroundColor: da.orVoile, borderRadius: 12, minHeight: 44,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: espacement.s, borderWidth: 1, borderColor: da.bordureOrDouce,
+  },
   boutonPrincipal: {
     backgroundColor: colors.accent, borderRadius: 12, padding: 14, alignItems: 'center',
     marginTop: espacement.m,

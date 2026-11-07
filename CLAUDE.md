@@ -4486,6 +4486,168 @@ l'identité or de l'app.
 `colors.accent` habille plusieurs boutons de l'onglet, donc le changer est une
 décision de DA à prendre avec Hafiz, pas un détail à trancher en passant.
 
+## Refonte de l'onglet Entraînement, passe 3 : la bibliothèque d'exercices — 07/11/2026
+
+Dernière des trois passes demandées par Hafiz : « il y aura donc une liste
+complète d'exercices avec des visuels ». (Passe 1 : l'accueil, validée le
+26/10. Passe 2 : les icônes, le 07/11.)
+
+### 96 exercices, et ce qu'ils règlent vraiment
+
+`src/data/bibliothequeExercices.js` : 96 exercices sur les 12 groupes
+musculaires (3 à 13 par groupe), chacun avec son groupe, son matériel et des
+alias de recherche en anglais (« bench press » trouve « Développé couché » —
+Hafiz nomme ses exercices en anglais, voir le correctif du 03/09/2026).
+
+⚠️ **ELLE NE REMPLACE PAS LE TEXTE LIBRE, ELLE S'AJOUTE À CÔTÉ.** On peut
+toujours taper le nom qu'on veut : c'est une règle de fond de l'app
+(« Entraînement : INDÉPENDANCE TOTALE du barème »), et personne ne doit être
+bloqué parce que sa machine n'est pas dans une liste. La phrase est écrite en
+pied du panneau, là où on la lit au moment où on ne trouve pas son exercice.
+
+CE QU'ELLE APPORTE VRAIMENT, et qui n'est pas du confort :
+1. **Plus de fautes de frappe.** Le NOM d'un exercice EST son identifiant dans
+   ce projet (04/09/2026) : « developé couché » et « développé couché » sont
+   deux exercices pour l'app — deux historiques, deux records, deux
+   suggestions de charge. Choisir dans une liste supprime le problème à la
+   source.
+2. **Le groupe musculaire est connu d'avance.** Il était jusqu'ici DEVINÉ par
+   mots-clés, ce qui a déjà produit des classements silencieusement faux
+   (« unilatéral raises » comptées dans le Dos, 03/09/2026). Une fiche le porte
+   noir sur blanc.
+
+L'ordre de décision devient : correction manuelle > fiche > mots-clés.
+⚠️ SOYONS HONNÊTES : cet ordre ne change RIEN aujourd'hui, et c'est voulu — un
+test exige que fiche et mots-clés soient d'accord partout où les mots-clés se
+prononcent, donc les deux ordres donneraient le même résultat. Il est là comme
+filet. Ce que la fiche apporte, c'est de répondre là où les mots-clés se
+TAISENT (« Développé haltères assis » ne contient aucun mot-clé d'épaules, et
+on ne peut pas ajouter « developpe » à la règle Épaules sans y envoyer aussi
+le développé couché).
+
+### ⚠️ LE TEST LE PLUS UTILE : fiche et mots-clés doivent être D'ACCORD
+
+Un désaccord ne casse rien tout de suite (la fiche gagne à l'exécution) — il
+pose une MINE. Le jour où le même exercice est tapé à la main au lieu d'être
+choisi dans la liste, ses séries partent dans un AUTRE groupe que celles
+d'avant : deux historiques pour un seul mouvement, sans un mot à l'écran.
+Écrire la bibliothèque a donc demandé six corrections de mots-clés dans
+`groupesMusculaires.js`, toutes trouvées par ce test :
+- la règle **Avant-bras est remontée en tête de liste** : « Curl poignets
+  barre » était attrapé par « curl » (biceps) ;
+- ajout de `nordic` (Nordic curl partait en biceps), `kickback fessier` (avant
+  la règle Triceps, qui possède « kickback »), `rowing menton` (avant la règle
+  Dos, qui possède « rowing »), `abduction`, `step up`, `roue abdominale`,
+  `burpee`, `marche du fermier`.
+
+### Les visuels : le MATÉRIEL, pas l'exercice
+
+8 pictogrammes dessinés dans le système de la passe 2 (`Icones.js`, section 5) :
+barre, haltères, poulie, machine, poids du corps, élastique, kettlebell, cardio.
+
+POURQUOI PAS UN DESSIN PAR EXERCICE : 96 pictogrammes à la main, c'est hors de
+portée, et de vraies illustrations demanderaient un graphiste (même décision
+que pour l'avatar évolutif ; les arènes n'ont de vraies images que parce que
+Hafiz les a fournies). Surtout, à 28 px, « développé couché » et « développé
+incliné » donneraient deux bonshommes identiques : un dessin par exercice
+n'apporterait AUCUNE information. Le matériel, lui, se reconnaît d'un coup
+d'œil, et c'est la question qu'on se pose en parcourant une liste.
+
+⚠️ **TROIS PICTOGRAMMES ONT DÛ ÊTRE REDESSINÉS, ET TOUJOURS POUR LA MÊME
+RAISON : ça ne se voyait qu'À L'ÉCRAN.** C'est la règle n°6 du système, payée
+une fois de plus :
+- **la barre et l'haltère étaient à l'envers.** La barre avait des disques en
+  blocs épais rapprochés (donc elle ressemblait à un haltère) et l'haltère
+  s'étalait sur toute la largeur en traits fins (donc à une barre). Les deux
+  dessins étaient justes, chacun nommait l'autre. Corrigé : la barre est LONGUE
+  ET FINE, l'haltère RAMASSÉ ET ÉPAIS ;
+- **la poulie se lisait comme un bonhomme** — donc comme « poids du corps », sa
+  voisine directe dans la liste (« Dips » et « Écarté à la poulie » se suivent
+  chez les pectoraux). Une POUTRE au-dessus l'accroche au plafond : plus de
+  doute ;
+- **le kettlebell se lisait comme une goutte d'eau**, l'anse se perdant dans le
+  corps évasé. Un cercle franc plus une anse détachée tiennent la lecture.
+
+### Où elle s'ouvre
+
+Un seul composant, `src/components/ChoixExercice.js`, branché aux TROIS
+endroits où l'on tape un nom d'exercice (l'éditeur d'une séance, le formulaire
+« Nouveau programme », l'ajout en pleine séance) et réutilisé en CONSULTATION
+pour le sous-écran « Bibliothèque d'exercices », accessible depuis « Mes
+programmes ». Trois formulaires de recherche auraient fini par divergir.
+
+⚠️ **DEUX TEMPS, PAS UNE LISTE DE 96 LIGNES** : on choisit d'abord un groupe
+(une grille qui tient sans défilement), puis on voit ses 3 à 13 exercices. Une
+recherche court-circuite les deux temps. POURQUOI PAS UNE LISTE UNIQUE AVEC SON
+PROPRE ASCENSEUR : le panneau vit DANS la page de l'onglet, qui défile déjà
+verticalement — imbriquer deux défilements verticaux marche « à peu près »
+selon la plateforme, et c'est invérifiable depuis le volet navigateur.
+
+### Deux règles sorties des composants pour être testables
+
+- `placerExerciceChoisi` (`src/logic/choixExercice.js`) : l'exercice va dans la
+  première ligne VIDE, sinon dans une ligne neuve. Les deux éditeurs n'ont même
+  pas la même forme de ligne, d'où le paramètre `ligneNeuve`.
+- `dejaChoisi` (dans la bibliothèque) : **la comparaison est normalisée**, et ce
+  cas a été trouvé À L'ÉCRAN. Le programme de test contenait « developpe
+  couche » (tapé à la main, sans accents) et la bibliothèque proposait
+  « Développé couché » SANS le griser : l'ajouter créait deux exercices pour un
+  seul mouvement.
+- `descriptionExercice` : « Pectoraux · Barre », mais « Cardio » tout court —
+  pour le cardio, le groupe et le matériel portent le même nom et la ligne
+  affichait « Cardio · Cardio ».
+Un composant qui importe `react-native` ne peut pas être exécuté par Node, donc
+pas être couvert par un harnais. Les règles de ce projet vivent là où on peut
+les mettre à l'épreuve.
+
+⚠️ `normaliserNomExercice` est RECOPIÉE dans la bibliothèque alors qu'elle
+existe déjà dans `groupesMusculaires.js` — seul endroit du projet où je
+m'autorise ça. L'importer créerait un CYCLE D'IMPORTS (groupesMusculaires a
+besoin de la bibliothèque pour connaître le groupe d'un exercice), et un cycle
+entre deux modules JS ne lève pas d'erreur : il laisse une des deux valeurs à
+`undefined` au chargement, donc un plantage bien plus tard, très difficile à
+relier à sa cause. Des cas de test comparent les deux sur les écarts d'écriture
+courants.
+
+### À SAVOIR POUR HAFIZ
+
+Si un exercice existe déjà dans l'historique sous un nom DIFFÉRENT (par exemple
+« developpe couche » sans accents), choisir la version de la bibliothèque
+démarre un historique neuf — l'app affiche « Première fois sur cet exercice ».
+C'est le comportement normal (le nom est l'identifiant) ; pour réunir les deux,
+il faut renommer depuis l'éditeur d'un programme, qui propose « Renommer
+partout » (04/09/2026).
+
+### Vérifié
+
+Tests : `backend/tests/test_bibliotheque.py` (4 cas) + `harnais_bibliotheque.mjs`
+(~190 vérifications : intégrité des 96 fiches, groupes et matériels connus, noms
+uniques, accord avec les mots-clés, ordre de décision du groupe, recherche par
+alias et mots en désordre, filtre par groupe, tri, placement de l'exercice
+choisi, « déjà dans la liste », description, et une trentaine d'entrées abîmées
+qui ne doivent jamais planter). Le test Python vérifie en plus, par lecture de
+fichier, que chaque matériel a son icône AU RÉPERTOIRE et une fonction qui la
+dessine — `Icones.js` importe React, Node ne peut pas le charger.
+**12 mutations vues échouer, chacune sur son cas** : fiche en désaccord, groupe
+inexistant, doublon de nom, chacun des deux mots-clés ajoutés, `dejaChoisi` sans
+accents, le doublon « Cardio · Cardio », la première ligne vide non servie, le
+filtre par groupe inopérant, l'icône retirée du répertoire, le composant
+d'icône renommé, et la bibliothèque qui importerait React.
+Suite complète : **347 tests, tous OK.**
+
+DANS L'APP (navigateur, backend LOCAL, compte `SondeTest`, 420 px puis 1024) :
+le sous-écran affiche les 12 groupes avec leurs effectifs ; « Pectoraux » liste
+ses 13 exercices avec leur pictogramme ; la fiche d'un exercice montre son
+record ou « jamais noté » ; dans l'éditeur de « Push », « Développé couché » est
+bien grisé « déjà dans la liste » face au « developpe couche » existant, et
+choisir « Dips » puis « Pec deck » les ajoute en 3 × 10 **sans toucher aux
+lignes déjà remplies** — vérifié CÔTÉ SERVEUR après enregistrement ; en séance
+libre, « bench press » trouve « Développé couché » et l'ajoute à la séance ;
+dans « Nouveau programme », le jour Mardi se remplit pareil. Aucun débordement
+horizontal en 420 ni en 1024, toutes les cibles tactiles du panneau à 44 px ou
+plus (le lien « ‹ tous les groupes », mesuré à 32, a été corrigé), et **zéro
+erreur console après rechargement propre**.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4498,7 +4660,7 @@ décision de DA à prendre avec Hafiz, pas un détail à trancher en passant.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (343 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (347 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

@@ -5,6 +5,13 @@
 // du nom écrit par l'utilisateur (liste de mots-clés ci-dessous). La détection
 // n'est jamais parfaite : l'utilisateur peut corriger le groupe d'un exercice,
 // et cette correction est enregistrée côté serveur (table groupes_exercices).
+//
+// DEPUIS LE 07/11/2026, LA DEVINETTE N'EST PLUS LE SEUL RECOURS : un exercice
+// choisi dans la bibliothèque (`src/data/bibliothequeExercices.js`) porte son
+// groupe noir sur blanc. L'ordre de décision est donc, du plus sûr au moins
+// sûr : correction de l'utilisateur > fiche de la bibliothèque > mots-clés.
+
+import { groupeDeLaBibliotheque } from './bibliothequeExercices';
 
 export const groupesMusculaires = [
   'Pectoraux', 'Dos', 'Épaules', 'Biceps', 'Triceps',
@@ -60,17 +67,26 @@ function contientExpression(texteNormalise, motCle) {
 // curl »), et une liste uniquement française les laissait non classés.
 const reglesDetection = [
   // --- Pièges connus, à trancher AVANT les règles générales ---
+  // L'AVANT-BRAS EST EN PREMIER (depuis le 07/11/2026) : ses mots-clés sont
+  // trop spécifiques pour voler quoi que ce soit, alors que « curl poignets »
+  // était attrapé par « curl » (biceps) quand cette règle vivait plus bas.
+  { groupe: 'Avant-bras', motsCles: [
+    'avant bras', 'poignet', 'forearm', 'wrist', 'grip',
+    'marche du fermier', 'farmer walk', 'farmers carry'] },
   { groupe: 'Ischio-jambiers', motsCles: [
     'leg curl', 'legcurl', 'hamstring', 'ischio', 'jambes tendues',
-    'roumain', 'romanian', 'rdl', 'good morning'] },
+    'roumain', 'romanian', 'rdl', 'good morning', 'nordic'] },
   { groupe: 'Mollets', motsCles: ['mollet', 'calf', 'calve', 'calf raise'] },
   { groupe: 'Abdos', motsCles: [
     'leg raise', 'knee raise', 'releve de jambes', 'hanging leg raise'] },
   { groupe: 'Quadriceps', motsCles: [
     'leg extension', 'extension jambes', 'leg press', 'hack squat', 'presse',
-    'fente', 'lunge', 'squat', 'pistol', 'quadriceps', 'quad'] },
+    'fente', 'lunge', 'squat', 'pistol', 'quadriceps', 'quad',
+    'step up', 'stepup'] },
   { groupe: 'Fessiers', motsCles: [
-    'hip thrust', 'fessier', 'glute', 'soulevé de terre sumo', 'sumo deadlift'] },
+    'hip thrust', 'fessier', 'glute', 'soulevé de terre sumo', 'sumo deadlift',
+    // « kickback fessier » AVANT la règle Triceps, qui possède « kickback ».
+    'kickback fessier', 'abduction'] },
 
   // --- Haut du corps ---
   { groupe: 'Triceps', motsCles: [
@@ -80,7 +96,9 @@ const reglesDetection = [
   { groupe: 'Épaules', motsCles: [
     'militaire', 'military press', 'elevation', 'raise', 'lateral raise',
     'front raise', 'side raise', 'face pull', 'oiseau', 'epaule', 'arnold',
-    'shoulder', 'overhead press', 'ohp', 'delt', 'upright row'] },
+    'shoulder', 'overhead press', 'ohp', 'delt', 'upright row',
+    // « rowing menton » AVANT la règle Dos, qui possède « rowing ».
+    'rowing menton'] },
   { groupe: 'Pectoraux', motsCles: [
     'developpe couche', 'developpe incline', 'decline', 'ecarte', 'pec deck',
     'pectoraux', 'pompe', 'push up', 'pushup', 'dips', 'dip', 'butterfly',
@@ -89,15 +107,16 @@ const reglesDetection = [
     'traction', 'rowing', 'row', 'tirage', 'pulldown', 'pull down', 'pull up',
     'pullup', 'chin up', 'chinup', 'pull over', 'pullover', 'soulevé de terre',
     'souleve de terre', 'deadlift', 'dos', 'lat', 'shrug', 'trapeze', 'trap'] },
-  { groupe: 'Avant-bras', motsCles: ['avant bras', 'poignet', 'forearm', 'wrist'] },
+  // (L'Avant-bras est remonté en tête de liste, voir le commentaire là-haut.)
 
   // --- Reste ---
   { groupe: 'Abdos', motsCles: [
     'abdo', 'abs', 'gainage', 'crunch', 'planche', 'plank', 'sit up', 'situp',
-    'russian twist'] },
+    'russian twist', 'roue abdominale', 'ab wheel', 'ab roller'] },
   { groupe: 'Cardio', motsCles: [
     'course', 'cardio', 'velo', 'bike', 'rameur', 'rower', 'corde a sauter',
-    'jump rope', 'tapis', 'treadmill', 'elliptique', 'elliptical', 'running'] },
+    'jump rope', 'tapis', 'treadmill', 'elliptique', 'elliptical', 'running',
+    'burpee'] },
 ];
 
 // Devine le groupe musculaire d'un exercice écrit en texte libre.
@@ -110,11 +129,28 @@ export function deviner_groupe(nomExercice) {
   return null;
 }
 
-// Le groupe RETENU pour un exercice : la correction manuelle de l'utilisateur
-// si elle existe, sinon la détection automatique.
+// Le groupe RETENU pour un exercice, du plus sûr au moins sûr :
+//   1. la correction manuelle de l'utilisateur (elle gagne toujours) ;
+//   2. la fiche de la bibliothèque, si cet exercice en vient (07/11/2026) ;
+//   3. la détection par mots-clés, pour tout ce qui est tapé à la main.
 // `corrections` = { "nom de l'exercice": "Groupe" }
+//
+// ⚠️ LA BIBLIOTHÈQUE PASSE AVANT LES MOTS-CLÉS, PAS APRÈS : les mots-clés sont
+// une devinette, une fiche est une certitude.
+// SOYONS HONNÊTES SUR CE QUE CET ORDRE CHANGE AUJOURD'HUI : rien, et c'est
+// voulu. Un test (`harnais_bibliotheque.mjs`) exige que la fiche et les
+// mots-clés soient D'ACCORD partout où les mots-clés se prononcent — donc les
+// deux ordres donneraient le même résultat. Il est là comme filet, pour le jour
+// où un mot-clé ajouté pour un autre exercice viendrait voler une fiche avant
+// que le test ne s'en aperçoive.
+// Ce que la bibliothèque apporte vraiment, c'est de répondre là où les mots-clés
+// se TAISENT : « Développé haltères assis » ne contient aucun mot-clé d'épaules,
+// et on ne peut pas ajouter « developpe » à la règle Épaules sans y envoyer
+// aussi le développé couché.
 export function groupeDeLExercice(nomExercice, corrections = {}) {
-  return corrections[nomExercice] || deviner_groupe(nomExercice);
+  return corrections[nomExercice]
+    || groupeDeLaBibliotheque(nomExercice)
+    || deviner_groupe(nomExercice);
 }
 
 // ----- Semaine en cours (lundi → dimanche), pour compter le volume -----

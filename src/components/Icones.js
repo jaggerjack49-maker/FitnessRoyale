@@ -557,10 +557,142 @@ export function IconeBouclier(props) {
 }
 
 // =============================================================================
-// 5. MATÉRIEL ET EXERCICES — à remplir par la PASSE 3
+// 5. MATÉRIEL (passe 3 — la bibliothèque d'exercices)
 // =============================================================================
-// (barre, haltère court, poulie, banc, élastique, poids du corps, machine…)
-// Mêmes six règles. Rien d'autre à inventer.
+// Une ligne de la bibliothèque porte le pictogramme de son MATÉRIEL, pas un
+// dessin de l'exercice : à 28 px, « développé couché » et « développé incliné »
+// donneraient deux bonshommes identiques, alors qu'une barre, un haltère et une
+// poulie se reconnaissent du premier coup (le raisonnement complet est en tête
+// de `src/data/bibliothequeExercices.js`).
+//
+// ⚠️ LE PIÈGE DE CETTE SÉRIE : la barre et l'haltère sont le MÊME objet en deux
+// tailles, donc deux icônes qui se ressemblent par construction. Ils sont
+// départagés par leur SILHOUETTE, pas par un détail :
+//   - la BARRE traverse toute la largeur, avec un gros disque de chaque côté ;
+//   - l'HALTÈRE est ramassé au centre, avec deux petits disques empilés par
+//     côté — la forme « poids court » classique.
+// On les juge côte à côte à 28 px, jamais séparément.
+
+// Barre — LONGUE ET FINE : la barre traverse tout le cadre et les disques
+// sont de simples traits verticaux, comme une barre olympique vue de côté.
+export function IconeMaterielBarre(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M2.5 12 H21.5" />
+      <Path d="M6.5 8 V16" />
+      <Path d="M4.5 9.5 V14.5" />
+      <Path d="M17.5 8 V16" />
+      <Path d="M19.5 9.5 V14.5" />
+    </Cadre>
+  );
+}
+
+// Haltère court — RAMASSÉ ET ÉPAIS : deux blocs pleins reliés par une poignée
+// courte. C'est la masse des blocs, pas la longueur, qui le distingue.
+//
+// ⚠️ LA PREMIÈRE VERSION AVAIT LES DEUX SILHOUETTES À L'ENVERS, et ça ne s'est
+// vu qu'À L'ÉCRAN : la barre avait des disques en blocs épais rapprochés (donc
+// elle ressemblait à un haltère) et l'haltère s'étalait sur toute la largeur
+// en traits fins (donc à une barre). Les deux dessins étaient justes, chacun
+// nommait l'autre. Rien dans le code ne pouvait le dire — c'est la règle n°6
+// du fichier, on juge à 20 px.
+export function IconeMaterielHalteres(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M9.5 12 H14.5" />
+      <Rect x="5" y="7" width="4.5" height="10" rx="1.5" />
+      <Rect x="14.5" y="7" width="4.5" height="10" rx="1.5" />
+    </Cadre>
+  );
+}
+
+// Poulie — la POUTRE en haut, la roue suspendue, le câble, la barre de tirage.
+//
+// ⚠️ LA POUTRE N'EST PAS DÉCORATIVE. Sans elle, la première version (roue +
+// câble en V + barre) se lisait comme un petit bonhomme — donc comme l'icône
+// « poids du corps », sa voisine directe dans la liste (« Dips » et « Écarté à
+// la poulie » se suivent chez les pectoraux). Vu à l'écran, pas dans le code.
+// La poutre accroche l'icône au plafond : plus aucun doute possible.
+export function IconeMaterielPoulie(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M3.5 4 H20.5" />
+      <Circle cx="12" cy="7.4" r="2.7" />
+      <Path d="M12 10.1 V14.5" />
+      <Path d="M7 17 H17" />
+    </Cadre>
+  );
+}
+
+// Machine — le montant et sa colonne de plaques.
+export function IconeMaterielMachine(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M4.5 20.5 V4 H19.5" />
+      <Rect x="9" y="9" width="8" height="3.5" rx="1" />
+      <Rect x="9" y="14.5" width="8" height="3.5" rx="1" />
+    </Cadre>
+  );
+}
+
+// Poids du corps — un personnage bras écartés.
+// ⚠️ À NE PAS CONFONDRE avec l'icône Profil (un buste aux épaules droites) ni
+// avec Clan (deux têtes) : celui-ci a des BRAS et des JAMBES, c'est un corps en
+// mouvement, pas un portrait.
+export function IconeMaterielCorps(props) {
+  return (
+    <Cadre {...props}>
+      <Circle cx="12" cy="5" r="2.6" />
+      <Path d="M12 7.8 V14" />
+      <Path d="M6 10.5 H18" />
+      <Path d="M12 14 L8.5 20.5" />
+      <Path d="M12 14 L15.5 20.5" />
+    </Cadre>
+  );
+}
+
+// Élastique — une onde tendue. Un seul tracé : une boucle fermée se lirait
+// « anneau », l'onde dit « ça s'étire ».
+export function IconeMaterielElastique(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M3 15.5 C 6 7.5, 10 7.5, 12 12 S 18 16.5, 21 8.5" />
+    </Cadre>
+  );
+}
+
+// Kettlebell — une cloche RONDE surmontée d'une anse nette.
+//
+// ⚠️ La première version dessinait la cloche en une seule courbe évasée : à
+// 20 px elle se lisait comme une GOUTTE D'EAU, l'anse se perdant dans le
+// corps. Un cercle franc plus une anse bien détachée tiennent la lecture.
+export function IconeMaterielKettlebell(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M8.5 10.5 A 3.6 3.6 0 1 1 15.5 10.5" />
+      <Circle cx="12" cy="15" r="5" />
+    </Cadre>
+  );
+}
+
+// Cardio — la ligne de pouls. Un seul tracé, lisible jusqu'à 14 px.
+export function IconeMaterielCardio(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M2.5 13 H7 L9.5 7 L13 18 L15.5 13 H21.5" />
+    </Cadre>
+  );
+}
+
+// Loupe — pour le champ de recherche de la bibliothèque.
+export function IconeRecherche(props) {
+  return (
+    <Cadre {...props}>
+      <Circle cx="10.5" cy="10.5" r="6" />
+      <Path d="M15 15 L20.5 20.5" />
+    </Cadre>
+  );
+}
 
 // =============================================================================
 // LE RÉPERTOIRE
@@ -586,6 +718,7 @@ export const NOMS_ICONES = {
   sortie: IconeSortie,
   telecharger: IconeTelecharger,
   recharger: IconeRecharger,
+  recherche: IconeRecherche,
   // navigation
   'chevron-gauche': IconeChevronGauche,
   'chevron-droit': IconeChevronDroit,
@@ -612,6 +745,17 @@ export const NOMS_ICONES = {
   alerte: IconeAlerte,
   question: IconeQuestion,
   bouclier: IconeBouclier,
+  // matériel (bibliothèque d'exercices) — les clés sont celles de `MATERIELS`
+  // dans `src/data/bibliothequeExercices.js` : les deux doivent rester
+  // d'accord, un test le vérifie.
+  'mat-barre': IconeMaterielBarre,
+  'mat-halteres': IconeMaterielHalteres,
+  'mat-poulie': IconeMaterielPoulie,
+  'mat-machine': IconeMaterielMachine,
+  'mat-corps': IconeMaterielCorps,
+  'mat-elastique': IconeMaterielElastique,
+  'mat-kettlebell': IconeMaterielKettlebell,
+  'mat-cardio': IconeMaterielCardio,
 };
 
 // Le point d'entrée unique. Un nom inconnu ne dessine RIEN : une icône qui
