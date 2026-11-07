@@ -13,29 +13,44 @@
 // PAS DE GENRE dans les libellés : « N°1 au développé couché » plutôt que
 // Roi/Reine — le titre décrit un rang, pas la personne qui le porte.
 import { classerParExercice, listeExercicesClassement } from './classement';
+import { couleursLigues } from '../data/clubSP';
 
 // Les trois marches qui donnent un titre sur un exercice.
 const MARCHES = [
-  { rang: 1, embleme: '🥇', prefixe: 'N°1' },
-  { rang: 2, embleme: '🥈', prefixe: 'N°2' },
-  { rang: 3, embleme: '🥉', prefixe: 'N°3' },
+  { rang: 1, prefixe: 'N°1' },
+  { rang: 2, prefixe: 'N°2' },
+  { rang: 3, prefixe: 'N°3' },
 ];
 
+// LA COULEUR D'UNE MÉDAILLE (08/11/2026) : or, argent, bronze — les couleurs
+// de ligue de l'app, pour que le podium parle la même langue que le reste.
+// Les emojis 🥇🥈🥉 ont été remplacés par UNE icône dessinée (« medaille »)
+// qu'on teinte : c'est cette fonction qui dit de quelle couleur.
+// UNE SEULE DÉFINITION, utilisée par le Profil (« Mes titres ») ET par les
+// lignes de classement de la Compétition — deux copies finiraient par donner
+// deux ors différents.
+// Renvoie null hors du podium : aucune médaille à dessiner.
+export function couleurMedaille(rang) {
+  if (rang === 1) return couleursLigues.Gold;
+  if (rang === 2) return couleursLigues.Silver;
+  if (rang === 3) return couleursLigues.Bronze;
+  return null;
+}
+
 // Tous les titres d'exercice existants, avec qui les détient aujourd'hui.
-// Renvoie [{ exercice, rang, embleme, libelle, detenteur, aMoi }].
+// Renvoie [{ exercice, rang, libelle, detenteur, aMoi }].
 // Un exercice sur lequel PERSONNE n'a de perf vérifiée ne donne aucun titre :
 // on ne décerne pas un « N°1 » à un classement vide.
 export function titresParExercice(joueurs) {
   const titres = [];
   listeExercicesClassement.forEach((exercice) => {
     const classement = classerParExercice(joueurs, exercice);
-    MARCHES.forEach(({ rang, embleme, prefixe }) => {
+    MARCHES.forEach(({ rang, prefixe }) => {
       const joueur = classement[rang - 1];
       if (!joueur) return;
       titres.push({
         exercice,
         rang,
-        embleme,
         libelle: `${prefixe} · ${exercice}`,
         detenteur: joueur.pseudo,
         aMoi: !!joueur.moi,

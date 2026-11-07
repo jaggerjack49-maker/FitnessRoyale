@@ -684,6 +684,202 @@ export function IconeMaterielCardio(props) {
   );
 }
 
+// =============================================================================
+// 6. LES AUTRES ONGLETS (Profil, Perfs, Paliers, Compétition, Clan) — 08/11/2026
+// =============================================================================
+// Demande de Hafiz : « change également la DA des autres onglets ainsi que les
+// emojis en t'inspirant de l'onglet Entraînement ». Ces douze icônes remplacent
+// les emojis d'INTERFACE de ces écrans. Mêmes six règles que tout le fichier.
+
+// Médaille — un disque pendu à deux rubans. ⚠️ ELLE PREND LA COULEUR DU RANG :
+// c'est tout l'intérêt de la dessiner plutôt que d'afficher 🥇🥈🥉, qui ne se
+// teintent pas. L'écran la passe en or, argent ou bronze (couleurs de ligue).
+export function IconeMedaille(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M8 2.5 L10.5 9.2" />
+      <Path d="M16 2.5 L13.5 9.2" />
+      <Circle cx="12" cy="15" r="5.8" />
+    </Cadre>
+  );
+}
+
+// Salle de sport — un bâtiment au toit pointu, porte au milieu. Distinct du
+// Profil (un buste) et du Clan (deux têtes) : ici c'est un LIEU, pas des gens.
+export function IconeSalle(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M3 10.5 L12 3.5 L21 10.5" />
+      <Path d="M5.5 8.6 V20.5 H18.5 V8.6" />
+      <Path d="M10 20.5 V15 H14 V20.5" />
+    </Cadre>
+  );
+}
+
+// Bulle de discussion — le chat du clan.
+export function IconeBulle(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M4.5 4.5 H19.5 A2 2 0 0 1 21.5 6.5 V14.5 A2 2 0 0 1 19.5 16.5 H10 L5.5 20.5 V16.5 H4.5 A2 2 0 0 1 2.5 14.5 V6.5 A2 2 0 0 1 4.5 4.5 Z" />
+    </Cadre>
+  );
+}
+
+// Globe — le classement « tout le monde », et le duel en ligne.
+export function IconeGlobe(props) {
+  return (
+    <Cadre {...props}>
+      <Circle cx="12" cy="12" r="9.5" />
+      <Path d="M12 2.5 C 7.8 6.5, 7.8 17.5, 12 21.5 C 16.2 17.5, 16.2 6.5, 12 2.5" />
+      <Path d="M2.5 12 H21.5" />
+    </Cadre>
+  );
+}
+
+// Balance — le classement par catégorie de poids.
+export function IconeBalance(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M12 4 V20.5" />
+      <Path d="M8 20.5 H16" />
+      <Path d="M4.5 6.5 H19.5" />
+      <Path d="M2.5 12.5 H6.5 L4.5 6.5 Z" />
+      <Path d="M17.5 12.5 H21.5 L19.5 6.5 Z" />
+    </Cadre>
+  );
+}
+
+// Éclair — l'XP d'activité et le duel. ⚠️ POURQUOI PAS DEUX ÉPÉES pour le
+// duel : c'est exactement le dessin qui est devenu un gribouillis à 20 px dans
+// la barre d'onglets le 08/09/2026. L'éclair dit « affrontement rapide » en un
+// seul tracé.
+export function IconeEclair(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M13.5 2.5 L4.5 13.5 H11.5 L10.5 21.5 L19.5 10.5 H12.5 Z" />
+    </Cadre>
+  );
+}
+
+// Caméra vidéo — preuve d'une perf en vidéo. Distincte de l'appareil photo
+// (repas de la Nutrition) par son objectif en trapèze sur le côté.
+export function IconeVideo(props) {
+  return (
+    <Cadre {...props}>
+      <Rect x="2.5" y="6.5" width="13" height="11" rx="2" />
+      <Path d="M15.5 10.5 L21.5 7 V17 L15.5 13.5" />
+    </Cadre>
+  );
+}
+
+// Cadenas — sécurité du compte, arène verrouillée.
+export function IconeCadenas(props) {
+  return (
+    <Cadre {...props}>
+      <Rect x="4.5" y="10.5" width="15" height="11" rx="2" />
+      <Path d="M8 10.5 V7.5 A4 4 0 0 1 16 7.5 V10.5" />
+      <Path d="M12 14.5 V17.5" />
+    </Cadre>
+  );
+}
+
+// Dé — ce qui est tiré au sort (le round de départage d'un duel).
+// Les points sont des cercles minuscules : avec le trait de 2, ils deviennent
+// des pastilles pleines sans enfreindre la règle « des contours ».
+export function IconeDe(props) {
+  return (
+    <Cadre {...props}>
+      <Rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+      <Circle cx="8.5" cy="8.5" r="0.4" />
+      <Circle cx="12" cy="12" r="0.4" />
+      <Circle cx="15.5" cy="15.5" r="0.4" />
+    </Cadre>
+  );
+}
+
+// Stop — « j'ai fini ma série ».
+export function IconeStop(props) {
+  return (
+    <Cadre {...props}>
+      <Rect x="6" y="6" width="12" height="12" rx="2.5" />
+    </Cadre>
+  );
+}
+
+// Drapeau — la fin (d'un test, d'un bloc).
+export function IconeDrapeau(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M5 21.5 V3.5" />
+      <Path d="M5 4 H18.5 L16 8.5 L18.5 13 H5" />
+    </Cadre>
+  );
+}
+
+// Envoyer — un avion en papier, pour le chat.
+export function IconeEnvoyer(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M21.5 2.5 L2.5 10 L10 13.5 L13.5 21.5 Z" />
+      <Path d="M21.5 2.5 L10 13.5" />
+    </Cadre>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// LES EMBLÈMES D'ARÈNE (08/11/2026) — ils remplacent 🚪 🌱 🔥 ⚔️ 🏆 💎 👑
+// -----------------------------------------------------------------------------
+// Sept arènes, sept emblèmes : quatre dessinés ici, trois déjà au répertoire
+// (bouclier pour COLOSSE, trophée pour TITAN, couronne pour ROYALE). Ils se
+// teintent à la COULEUR DE LA LIGUE — ce qu'un emoji ne savait pas faire : la
+// pastille de la route des arènes et le badge de l'avatar parlent enfin la
+// même couleur que l'anneau qui les entoure.
+// ⚠️ COLOSSE N'EST PAS DEUX ÉPÉES CROISÉES comme son emoji d'origine : c'est
+// le dessin qui est devenu un gribouillis à 20 px le 08/09/2026. Le bouclier
+// du gladiateur garde l'idée en un seul contour.
+
+// Porte — DÉBUT : on entre dans la salle.
+export function IconePorte(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M6 21.5 V4 A1.5 1.5 0 0 1 7.5 2.5 H16.5 A1.5 1.5 0 0 1 18 4 V21.5" />
+      <Path d="M3.5 21.5 H20.5" />
+      <Circle cx="14.6" cy="12.5" r="0.4" />
+    </Cadre>
+  );
+}
+
+// Pousse — INITIATION : ça commence à pousser.
+export function IconePousse(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M12 21.5 V11" />
+      <Path d="M12 14.5 C 7.2 14.5, 4.5 11.2, 4.5 7 C 9.2 7, 12 10.2, 12 14.5" />
+      <Path d="M12 11 C 12 6.8, 14.8 3.5, 19.5 3.5 C 19.5 7.9, 16.7 11, 12 11" />
+    </Cadre>
+  );
+}
+
+// Flamme — FORGE, et la série de jours d'entraînement du Profil.
+export function IconeFlamme(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M12 21.5 C 7.6 21.5, 5 18.6, 5 14.8 C 5 10.8, 8.4 8.6, 9 3.5 C 12 5.6, 13.2 8.2, 13.2 10.6 C 14.4 9.9, 15.1 8.7, 15.3 7.3 C 17.8 9.2, 19 11.8, 19 14.8 C 19 18.6, 16.4 21.5, 12 21.5 Z" />
+    </Cadre>
+  );
+}
+
+// Diamant — OLYMPE : très haut, très rare.
+export function IconeDiamant(props) {
+  return (
+    <Cadre {...props}>
+      <Path d="M7 3.5 H17 L21.5 9 L12 21 L2.5 9 Z" />
+      <Path d="M2.5 9 H21.5" />
+      <Path d="M9.5 3.5 L8 9 L12 21 L16 9 L14.5 3.5" />
+    </Cadre>
+  );
+}
+
 // Loupe — pour le champ de recherche de la bibliothèque.
 export function IconeRecherche(props) {
   return (
@@ -756,6 +952,24 @@ export const NOMS_ICONES = {
   'mat-elastique': IconeMaterielElastique,
   'mat-kettlebell': IconeMaterielKettlebell,
   'mat-cardio': IconeMaterielCardio,
+  // autres onglets (08/11/2026)
+  medaille: IconeMedaille,
+  salle: IconeSalle,
+  bulle: IconeBulle,
+  globe: IconeGlobe,
+  balance: IconeBalance,
+  eclair: IconeEclair,
+  video: IconeVideo,
+  cadenas: IconeCadenas,
+  de: IconeDe,
+  stop: IconeStop,
+  drapeau: IconeDrapeau,
+  envoyer: IconeEnvoyer,
+  // emblèmes d'arène
+  porte: IconePorte,
+  pousse: IconePousse,
+  flamme: IconeFlamme,
+  diamant: IconeDiamant,
 };
 
 // Le point d'entrée unique. Un nom inconnu ne dessine RIEN : une icône qui

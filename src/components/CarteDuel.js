@@ -3,6 +3,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import { comptageVictoires } from '../logic/duels';
+import { da } from '../designSystem';
+import { Icone, TexteIcone, LibelleIcone } from './Icones';
 
 const QUI_CHOISIT = { moi: 'choisi par toi', lui: 'choisi par lui', ia: "choisi par l'IA" };
 
@@ -18,7 +20,9 @@ export default function CarteDuel({ duel }) {
     <View style={styles.carte}>
       {/* En-tête : adversaire + score */}
       <View style={styles.ligneTitre}>
-        <Text style={styles.titre}>⚔️ vs {duel.adversaire}</Text>
+        <TexteIcone nom="eclair" taille={16} couleur={colors.or} style={styles.titre}>
+          {`vs ${duel.adversaire}`}
+        </TexteIcone>
         <View
           style={[
             styles.badge,
@@ -26,9 +30,14 @@ export default function CarteDuel({ duel }) {
             duel.statut === 'perdu' && styles.badgePerdu,
           ]}
         >
-          <Text style={styles.badgeTexte}>
-            {duel.statut === 'gagné' ? '🏆 Gagné' : duel.statut === 'perdu' ? '💀 Perdu' : '⏳ En cours'}
-          </Text>
+          <LibelleIcone
+            nom={duel.statut === 'gagné' ? 'competition' : duel.statut === 'perdu' ? 'croix' : 'horloge'}
+            taille={13}
+            ecart={4}
+            style={[styles.badgeTexte, duel.statut === 'gagné' && { color: da.orSombre }]}
+          >
+            {duel.statut === 'gagné' ? 'Gagné' : duel.statut === 'perdu' ? 'Perdu' : 'En cours'}
+          </LibelleIcone>
         </View>
       </View>
       <Text style={styles.score}>
@@ -41,7 +50,9 @@ export default function CarteDuel({ duel }) {
           return (
             <View key={i} style={styles.round}>
               <Text style={styles.roundNumero}>R{i + 1}</Text>
-              <Text style={styles.roundAttente}>🤖 L'IA choisira l'exercice du départage…</Text>
+              <TexteIcone nom="de" taille={14} style={styles.roundAttente}>
+                L'IA tirera l'exercice du départage au sort…
+              </TexteIcone>
             </View>
           );
         }
@@ -62,7 +73,13 @@ export default function CarteDuel({ duel }) {
                 </Text>
               )}
             </View>
-            <Text style={styles.roundIssue}>{!joue ? '⏳' : egalite ? '🔁' : gagne ? '✅' : '❌'}</Text>
+            <View style={styles.roundIssue}>
+              <Icone
+                nom={!joue ? 'horloge' : egalite ? 'recharger' : gagne ? 'valide' : 'croix'}
+                taille={17}
+                couleur={!joue || egalite ? colors.texteGris : gagne ? colors.vert : colors.rouge}
+              />
+            </View>
           </View>
         );
       })}
@@ -106,6 +123,6 @@ const styles = StyleSheet.create({
   roundChoisiPar: { color: colors.texteGris, fontWeight: '400', fontSize: 12 },
   roundReps: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   roundAttente: { color: colors.texteGris, fontSize: 13, flex: 1 },
-  roundIssue: { fontSize: 16, marginLeft: 6 },
+  roundIssue: { marginLeft: 6 },
   recompense: { color: colors.or, fontWeight: '700', fontSize: 13, marginTop: espacement.s },
 });

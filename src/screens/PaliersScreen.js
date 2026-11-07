@@ -15,6 +15,7 @@ import CarteArene, { areneDuJoueur } from '../components/CarteArene';
 import RouteArenes from '../components/RouteArenes';
 import Losange from '../components/Losange';
 import { da, monospace } from '../designSystem';
+import { Icone, TexteIcone } from '../components/Icones';
 
 export default function PaliersScreen({ moi }) {
   const [exerciceOuvert, setExerciceOuvert] = useState(null);
@@ -30,7 +31,9 @@ export default function PaliersScreen({ moi }) {
       <CarteArene joueur={moi} />
 
       {/* ---- La route des arènes (composant partagé) ---- */}
-      <Text style={styles.sectionTitre}>La route des arènes</Text>
+      <Text style={styles.sectionTitre}>
+        LA ROUTE DES <Text style={{ color: da.or }}>ARÈNES</Text>
+      </Text>
       <RouteArenes
         arenes={mesArenes}
         indexActuel={areneActuelle.index}
@@ -68,14 +71,19 @@ export default function PaliersScreen({ moi }) {
                 <Text style={styles.nomExo}>{exo}</Text>
                 <Text style={styles.perf}>
                   {perf
-                    ? `Meilleure perf : ${infos.unite === 'kg' ? `${infos.reps} × ${perf.valeur} kg` : `${perf.valeur} reps`} ${STATUTS[perf.statut].emoji}`
+                    ? `Meilleure perf : ${infos.unite === 'kg' ? `${infos.reps} × ${perf.valeur} kg` : `${perf.valeur} reps`}`
                     : 'Aucune perf enregistrée'}
+                  {perf ? (
+                    <Text style={{ color: STATUTS[perf.statut].couleur }}>
+                      {` · ${STATUTS[perf.statut].libelle}`}
+                    </Text>
+                  ) : null}
                 </Text>
               </View>
               <Text style={[styles.badgePalier, { color: couleur }]}>
                 {nomPalier.toUpperCase()}
               </Text>
-              <Text style={styles.fleche}>{ouvert ? '▴' : '›'}</Text>
+              <Icone nom={ouvert ? 'chevron-haut' : 'chevron-droit'} taille={16} couleur={da.texteMuet} />
             </TouchableOpacity>
 
             {/* Échelle complète du barème */}
@@ -107,24 +115,27 @@ export default function PaliersScreen({ moi }) {
                       <Text style={[styles.seuil, atteint && styles.seuilAtteint]}>
                         {formater(seuil)}
                       </Text>
-                      <Text style={styles.icone}>
-                        {atteint ? '✓' : prochain ? '◎' : ''}
-                      </Text>
+                      <View style={styles.icone}>
+                        {atteint ? <Icone nom="valide" taille={14} couleur={da.or} />
+                          : prochain ? <Icone nom="cible" taille={14} couleur={da.or} /> : null}
+                      </View>
                     </View>
                   );
                 })}
                 {prochainIndex !== null && perf && (
-                  <Text style={styles.objectif}>
-                    🎯 Prochain objectif : {nomsLigues[prochainIndex]} à {formater(infos.paliers[prochainIndex])}
-                  </Text>
+                  <TexteIcone nom="cible" taille={14} style={styles.objectif}>
+                    Prochain objectif : {nomsLigues[prochainIndex]} à {formater(infos.paliers[prochainIndex])}
+                  </TexteIcone>
                 )}
                 {prochainIndex === null && (
-                  <Text style={styles.objectif}>👑 Palier maximal atteint sur cet exercice !</Text>
+                  <TexteIcone nom="paliers" taille={14} style={styles.objectif}>
+                    Palier maximal atteint sur cet exercice !
+                  </TexteIcone>
                 )}
                 {perf && !estVerifiee(perf) && (
-                  <Text style={styles.avertissement}>
-                    ⚠️ Perf déclarée non vérifiée : elle ne compte pas au classement.
-                  </Text>
+                  <TexteIcone nom="alerte" taille={13} hautAligne style={styles.avertissement}>
+                    Perf déclarée non vérifiée : elle ne compte pas au classement.
+                  </TexteIcone>
                 )}
               </View>
             )}
@@ -160,7 +171,6 @@ const styles = StyleSheet.create({
   nomExo: { color: da.texte, fontWeight: '700', fontSize: 14 },
   perf: { color: da.texteGris, fontSize: 11, marginTop: 2 },
   badgePalier: { fontWeight: '900', fontSize: 12, letterSpacing: 1 },
-  fleche: { color: da.texteMuet, fontSize: 14, fontWeight: '900' },
   echelle: {
     borderTopWidth: 1,
     borderTopColor: da.bordureFine,
@@ -178,7 +188,7 @@ const styles = StyleSheet.create({
   nomPalier: { flex: 1, fontWeight: '800', fontSize: 13, letterSpacing: 1 },
   seuil: { color: da.texteDoux, fontSize: 12, fontFamily: monospace },
   seuilAtteint: { color: da.texte, fontWeight: '700' },
-  icone: { width: 18, textAlign: 'center', color: da.or, fontWeight: '900', fontSize: 13 },
+  icone: { width: 18, alignItems: 'center' },
   objectif: {
     color: da.or, fontWeight: '700', fontSize: 12,
     marginTop: espacement.s, paddingHorizontal: 16,

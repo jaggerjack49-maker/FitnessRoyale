@@ -16,6 +16,33 @@ import TestPompes from '../components/TestPompes';
 import useRetour from '../useRetour';
 import AvatarJoueur from '../components/AvatarJoueur';
 import usePlaceDefilement from '../usePlaceDefilement';
+import { da } from '../designSystem';
+import { couleurMedaille } from '../logic/titres';
+import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
+
+// UNE ENTRÉE DE L'ONGLET DÉFIS (08/11/2026) — même dessin que les lignes de
+// raccourci de l'onglet Entraînement : une pastille d'icône, un titre, une
+// phrase, un chevron. `principale` la passe en OR PLEIN, comme « SÉANCE
+// LIBRE » : c'est l'action qu'on vient faire ici.
+function EntreeDefi({ icone, titre, phrase, principale, onPress }) {
+  return (
+    <TouchableOpacity
+      style={[styles.entreeDefi, principale && styles.entreeDefiPrincipale]}
+      onPress={onPress}
+    >
+      <View style={[styles.pastilleDefi, principale && styles.pastilleDefiPrincipale]}>
+        <Icone nom={icone} taille={19} couleur={principale ? da.orSombre : colors.or} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.titreEntreeDefi, principale && { color: da.orSombre }]}>{titre}</Text>
+        <Text style={[styles.phraseEntreeDefi, principale && { color: 'rgba(20,19,25,0.72)' }]}>
+          {phrase}
+        </Text>
+      </View>
+      <Icone nom="chevron-droit" taille={18} couleur={principale ? da.orSombre : colors.texteGris} />
+    </TouchableOpacity>
+  );
+}
 
 // Une ligne de classement de joueurs.
 function LigneJoueur({ joueur, index }) {
@@ -23,7 +50,7 @@ function LigneJoueur({ joueur, index }) {
     <View style={[styles.ligneClassement, joueur.moi && styles.ligneMoi]}>
       <View style={styles.rangBloc}>
         <Text style={styles.rang}>{index === 0 ? '1er' : `${index + 1}e`}</Text>
-        {index < 3 && <Text style={styles.medaille}>{['🥇', '🥈', '🥉'][index]}</Text>}
+        {index < 3 && <Icone nom="medaille" taille={15} couleur={couleurMedaille(index + 1)} />}
       </View>
       <AvatarJoueur pseudo={joueur.pseudo} ligue={joueur.ligue} taille={36} />
       <View style={{ flex: 1, marginLeft: espacement.s }}>
@@ -31,7 +58,7 @@ function LigneJoueur({ joueur, index }) {
           {joueur.pseudo} {joueur.moi ? '(moi)' : ''}
         </Text>
         <Text style={[styles.ligueBadge, { color: couleursLigues[joueur.ligue] }]}>
-          {areneDeLaLigue(joueur.ligue).nom} • {joueur.poids} kg{joueur.salle ? ` • 🏠 ${joueur.salle}` : ''}
+          {areneDeLaLigue(joueur.ligue).nom} • {joueur.poids} kg{joueur.salle ? ` • ${joueur.salle}` : ''}
         </Text>
       </View>
     </View>
@@ -46,7 +73,7 @@ function LigneJoueurExercice({ joueur, index, unite }) {
     <View style={[styles.ligneClassement, joueur.moi && styles.ligneMoi]}>
       <View style={styles.rangBloc}>
         <Text style={styles.rang}>{index === 0 ? '1er' : `${index + 1}e`}</Text>
-        {index < 3 && <Text style={styles.medaille}>{['🥇', '🥈', '🥉'][index]}</Text>}
+        {index < 3 && <Icone nom="medaille" taille={15} couleur={couleurMedaille(index + 1)} />}
       </View>
       <AvatarJoueur pseudo={joueur.pseudo} ligue={joueur.ligue} taille={36} />
       <View style={{ flex: 1, marginLeft: espacement.s }}>
@@ -72,22 +99,30 @@ function CarteDefiRecurrent({ defi, fait, reussi }) {
   return (
     <View style={[styles.carteRecurrent, fait && styles.carteRecurrentFait]}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.recurrentTitre}>
-          {defi.id === 'jour' ? '📅' : '🗓️'} {defi.titre}
-        </Text>
+        <TexteIcone nom="calendrier" taille={15} couleur={colors.or} style={styles.recurrentTitre}>
+          {defi.titre}
+        </TexteIcone>
         <Text style={styles.recurrentDescription}>{defi.description}</Text>
         <Text style={styles.recurrentRecompense}>
           +{defi.points} pts{defi.titreRecompense ? ` • Titre : « ${defi.titreRecompense} »` : ''}
         </Text>
         {!fait && (
-          <Text style={styles.recurrentEtat}>
+          <TexteIcone
+            nom={reussi ? 'valide' : 'horloge'}
+            taille={13}
+            hautAligne
+            couleur={reussi ? colors.vert : colors.texteGris}
+            style={styles.recurrentEtat}
+          >
             {reussi
-              ? '✔️ Réussi — la récompense arrive…'
-              : '⏳ Pas encore : il se validera tout seul dès que ce sera fait.'}
-          </Text>
+              ? 'Réussi — la récompense arrive…'
+              : 'Pas encore : il se validera tout seul dès que ce sera fait.'}
+          </TexteIcone>
         )}
       </View>
-      {fait ? <Text style={styles.recurrentFaitTexte}>✅ Fait</Text> : null}
+      {fait ? (
+        <LibelleIcone nom="valide" taille={15} ecart={4} style={styles.recurrentFaitTexte}>Fait</LibelleIcone>
+      ) : null}
     </View>
   );
 }
@@ -155,10 +190,12 @@ export default function CompetitionScreen({
   const uniteExercice = (baremes.homme[exerciceChoisi] || baremes.femme[exerciceChoisi] || {}).unite;
 
   const MODES = [
-    { cle: 'global', libelle: '🌍 Global' },
-    { cle: 'relatif', libelle: '⚖️ Par poids' },
-    { cle: 'exercice', libelle: '🏋️ Par exercice' },
-    { cle: 'salles', libelle: '🏠 Salles' },
+    { cle: 'global', libelle: 'Global', icone: 'globe' },
+    { cle: 'relatif', libelle: 'Par poids', icone: 'balance' },
+    // L'haltère ramassé, pas la barre : à 18 px dans une puce, la barre longue
+    // et fine se lisait comme une flèche ↔ (vu à l'écran, 08/11/2026).
+    { cle: 'exercice', libelle: 'Exercice', icone: 'mat-halteres' },
+    { cle: 'salles', libelle: 'Salles', icone: 'salle' },
   ];
   const EXPLICATIONS = {
     global: 'Tout le monde, classé sur les performances vérifiées (barème Fitness Royale).',
@@ -169,7 +206,9 @@ export default function CompetitionScreen({
 
   return (
     <View style={styles.conteneur}>
-      <Text style={styles.titre}>⚔️ Compétition</Text>
+      <TexteIcone nom="competition" taille={20} couleur={colors.or} style={styles.titre}>
+        Compétition
+      </TexteIcone>
       <Text style={styles.sousTitre}>Classement Fitness Royale</Text>
 
       {/* Sélecteur Classement / Défis */}
@@ -201,7 +240,8 @@ export default function CompetitionScreen({
                 style={[styles.basculeBtn, mode === m.cle && styles.basculeActif]}
                 onPress={() => setMode(m.cle)}
               >
-                <Text style={[styles.basculeTexte, mode === m.cle && styles.basculeTexteActif]}>
+                <Icone nom={m.icone} taille={18} couleur={mode === m.cle ? colors.or : colors.texteGris} />
+                <Text style={[styles.basculeTexte, mode === m.cle && styles.basculeTexteActif]} numberOfLines={1}>
                   {m.libelle}
                 </Text>
               </TouchableOpacity>
@@ -219,7 +259,7 @@ export default function CompetitionScreen({
                 <Text style={{ color: selecteurExoOuvert ? colors.texteGris : colors.texte }}>
                   {selecteurExoOuvert ? 'Choisis un exercice…' : exerciceChoisi}
                 </Text>
-                <Text style={{ color: colors.texteGris }}>{selecteurExoOuvert ? '▲' : '▼'}</Text>
+                <Icone nom={selecteurExoOuvert ? 'chevron-haut' : 'chevron-bas'} taille={16} couleur={colors.texteGris} />
               </TouchableOpacity>
               {selecteurExoOuvert && (
                 <View style={styles.listeExoDeroulante}>
@@ -268,30 +308,32 @@ export default function CompetitionScreen({
           // allumée hors écran viderait la batterie pour rien.
           actif
             ? <TestPompes onFermer={() => setTestPompesActif(false)} />
-            : <Text style={styles.explication}>⏸ Caméra en pause — reviens sur cet onglet pour reprendre.</Text>
+            : <Text style={styles.explication}>Caméra en pause — reviens sur cet onglet pour reprendre.</Text>
         )}
         {onglet === 'defis' && !duelDirectActif && !duelEnLigneActif && !testPompesActif && (
           <>
-            <TouchableOpacity style={styles.boutonDuelDirect} onPress={() => setDuelDirectActif(true)}>
-              <Text style={styles.boutonDuelDirectTexte}>⚡ Lancer un duel en direct</Text>
-              <Text style={styles.boutonDuelDirectSousTexte}>
-                Vous êtes deux dans la salle ? Le téléphone arbitre.
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setDuelEnLigneActif(true)}>
-              <Text style={styles.boutonDuelDirectTexte}>🌐 Duel en ligne (à deux téléphones)</Text>
-              <Text style={styles.boutonDuelDirectSousTexte}>
-                Crée un duel et partage un code, ou rejoins-en un.
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.boutonDuelEnLigne} onPress={() => setTestPompesActif(true)}>
-              <Text style={styles.boutonDuelDirectTexte}>🧪 Tester le compteur de pompes</Text>
-              <Text style={styles.boutonDuelDirectSousTexte}>
-                Prototype du duel de pompes : la caméra compte tes pompes, face au téléphone.
-              </Text>
-            </TouchableOpacity>
+            <EntreeDefi
+              principale
+              icone="eclair"
+              titre="DUEL EN DIRECT"
+              phrase="Vous êtes deux dans la salle ? Le téléphone arbitre."
+              onPress={() => setDuelDirectActif(true)}
+            />
+            <EntreeDefi
+              icone="globe"
+              titre="Duel en ligne"
+              phrase="À deux téléphones : crée un duel et partage un code, ou rejoins-en un."
+              onPress={() => setDuelEnLigneActif(true)}
+            />
+            <EntreeDefi
+              icone="appareil-photo"
+              titre="Tester le compteur de pompes"
+              phrase="Prototype : la caméra compte tes pompes, face au téléphone."
+              onPress={() => setTestPompesActif(true)}
+            />
+            <Text style={styles.libelleSection}>DÉFIS RÉCURRENTS</Text>
             {etatDefis === null && (
-              <Text style={styles.explication}>⏳ Chargement des défis…</Text>
+              <Text style={styles.explication}>Chargement des défis…</Text>
             )}
             {defisAffiches.map((defi) => (
               <CarteDefiRecurrent
@@ -306,7 +348,7 @@ export default function CompetitionScreen({
                 le mode hors-ligne). Celui des duels EN LIGNE, que le serveur
                 garde pourtant, n'est pas encore affiché — voir « À faire ». */}
             {duels.length > 0 && (
-              <Text style={styles.sectionTitre}>Mes duels — premier à 2 victoires</Text>
+              <Text style={styles.libelleSection}>MES DUELS — PREMIER À 2 VICTOIRES</Text>
             )}
             {duels.map((duel) => (
               <CarteDuel key={duel.id} duel={duel} />
@@ -323,7 +365,7 @@ export default function CompetitionScreen({
         {onglet === 'classement' && mode === 'relatif' &&
           groupes.map((groupe) => (
             <View key={groupe.categorie}>
-              <Text style={styles.titreCategorie}>🏋️ Catégorie {groupe.categorie}</Text>
+              <Text style={styles.libelleSection}>CATÉGORIE {String(groupe.categorie).toUpperCase()}</Text>
               {groupe.joueurs.map((joueur, index) => (
                 <LigneJoueur key={joueur.id} joueur={joueur} index={index} />
               ))}
@@ -343,10 +385,10 @@ export default function CompetitionScreen({
             <View key={s.salle} style={styles.ligneClassement}>
               <View style={styles.rangBloc}>
                 <Text style={styles.rang}>{index === 0 ? '1er' : `${index + 1}e`}</Text>
-                {index < 3 && <Text style={styles.medaille}>{['🥇', '🥈', '🥉'][index]}</Text>}
+                {index < 3 && <Icone nom="medaille" taille={15} couleur={couleurMedaille(index + 1)} />}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.nom}>🏠 {s.salle}</Text>
+                <TexteIcone nom="salle" taille={15} couleur={colors.or} style={styles.nom}>{s.salle}</TexteIcone>
                 <Text style={styles.ligueBadge}>
                   {s.nbMembres} membre{s.nbMembres > 1 ? 's' : ''}
                 </Text>
@@ -369,22 +411,32 @@ const styles = StyleSheet.create({
     padding: 4,
     marginBottom: espacement.s,
   },
-  ongletBtn: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
-  ongletActif: { backgroundColor: colors.accent },
-  ongletTexte: { color: colors.texteGris, fontWeight: '600' },
-  ongletTexteActif: { color: colors.texte },
+  // Le sélecteur Classement / Défis reprend la PASTILLE de la barre d'onglets
+  // (voile d'or + liseré d'or) au lieu du cyan plein : un même geste — choisir
+  // une vue — se dessine pareil partout dans l'app (08/11/2026).
+  ongletBtn: {
+    flex: 1, minHeight: 42, justifyContent: 'center', borderRadius: 9, alignItems: 'center',
+    borderWidth: 1, borderColor: 'transparent',
+  },
+  ongletActif: { backgroundColor: da.orVoileFort, borderColor: 'rgba(232, 178, 58, 0.22)' },
+  ongletTexte: { color: colors.texteGris, fontWeight: '700' },
+  ongletTexteActif: { color: colors.or, fontWeight: '800' },
   bascule: { flexDirection: 'row', gap: 6, marginBottom: espacement.s },
+  // Icône AU-DESSUS du libellé, comme la barre d'onglets : quatre libellés
+  // côte à côte ne tiendraient pas sur une ligne avec leur icône devant.
   basculeBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
+    minHeight: 54,
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 12,
     alignItems: 'center',
     backgroundColor: colors.carte,
     borderWidth: 1,
     borderColor: colors.bordure,
   },
-  basculeActif: { borderColor: colors.or },
-  basculeTexte: { color: colors.texteGris, fontSize: 12, fontWeight: '600' },
+  basculeActif: { borderColor: da.bordureOr, backgroundColor: da.orVoile },
+  basculeTexte: { color: colors.texteGris, fontSize: 11, fontWeight: '700' },
   basculeTexteActif: { color: colors.or },
   explication: { color: colors.texteGris, fontSize: 12, marginBottom: espacement.m },
   selecteurExo: {
@@ -415,12 +467,10 @@ const styles = StyleSheet.create({
     marginTop: espacement.s,
     marginBottom: espacement.s,
   },
-  titreCategorie: {
-    color: colors.texte,
-    fontWeight: '800',
-    fontSize: 15,
-    marginTop: espacement.s,
-    marginBottom: espacement.s,
+  // Les petites capitales espacées des titres de section de l'Entraînement.
+  libelleSection: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
+    marginTop: espacement.m, marginBottom: espacement.s,
   },
   ligneClassement: {
     flexDirection: 'row',
@@ -435,27 +485,22 @@ const styles = StyleSheet.create({
   ligneMoi: { borderColor: colors.or },
   rangBloc: { width: 44, alignItems: 'center' },
   rang: { fontSize: 14, color: colors.texte, fontWeight: '800' },
-  medaille: { fontSize: 12, marginTop: 1 },
   nom: { color: colors.texte, fontWeight: '600' },
   ligueBadge: { fontSize: 12, fontWeight: '700', marginTop: 2, color: colors.texteGris },
-  boutonDuelDirect: {
-    backgroundColor: colors.accent,
-    borderRadius: 16,
-    padding: espacement.m,
-    alignItems: 'center',
-    marginBottom: espacement.s,
+  entreeDefi: {
+    flexDirection: 'row', alignItems: 'center', gap: espacement.s + 2,
+    backgroundColor: colors.carte, borderRadius: 16, padding: espacement.m,
+    borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.s,
+    minHeight: 68,
   },
-  boutonDuelDirectTexte: { color: colors.texte, fontWeight: '800', fontSize: 16 },
-  boutonDuelDirectSousTexte: { color: '#DCE6F5', fontSize: 12, marginTop: 2 },
-  boutonDuelEnLigne: {
-    backgroundColor: colors.carte,
-    borderRadius: 16,
-    padding: espacement.m,
-    alignItems: 'center',
-    marginBottom: espacement.s,
-    borderWidth: 1,
-    borderColor: colors.accent,
+  entreeDefiPrincipale: { backgroundColor: colors.or, borderColor: colors.or },
+  pastilleDefi: {
+    width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: da.orVoile,
   },
+  pastilleDefiPrincipale: { backgroundColor: 'rgba(0,0,0,0.18)' },
+  titreEntreeDefi: { color: colors.texte, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  phraseEntreeDefi: { color: colors.texteGris, fontSize: 12, marginTop: 2, lineHeight: 16 },
   carteRecurrent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -472,4 +517,5 @@ const styles = StyleSheet.create({
   recurrentRecompense: { color: colors.or, fontSize: 12, fontWeight: '700', marginTop: 4 },
   recurrentEtat: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
   recurrentFaitTexte: { color: colors.vert, fontWeight: '800', marginLeft: 8 },
+
 });

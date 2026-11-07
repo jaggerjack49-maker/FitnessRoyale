@@ -11,6 +11,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { colors, espacement } from '../theme';
 import { da, monospace } from '../designSystem';
 import { arenes } from '../data/arenes';
+import { couleursLigues } from '../data/clubSP';
+import { Icone, TexteIcone, LibelleIcone } from './Icones';
 import * as api from '../api';
 
 export default function PanneauModeTest({ onChangement }) {
@@ -43,8 +45,11 @@ export default function PanneauModeTest({ onChangement }) {
 
   return (
     <View style={styles.carte}>
-      <TouchableOpacity onPress={() => setOuvert(!ouvert)}>
-        <Text style={styles.titre}>🛠 MODE TEST {ouvert ? '▲' : '▼'}</Text>
+      <TouchableOpacity onPress={() => setOuvert(!ouvert)} style={styles.entete}>
+        <TexteIcone nom="bouclier" taille={16} couleur={colors.rouge} style={styles.titre}>
+          MODE TEST
+        </TexteIcone>
+        <Icone nom={ouvert ? 'chevron-haut' : 'chevron-bas'} taille={16} couleur={colors.rouge} />
       </TouchableOpacity>
 
       {ouvert && (
@@ -80,10 +85,18 @@ export default function PanneauModeTest({ onChangement }) {
                 disabled={enCours}
                 onPress={() => lancer(
                   () => api.adminRemplirMesPerfs(arene.index, nombreOuNull(nbExercices)),
-                  (r) => `${arene.embleme} ${arene.nom} → ${r.perfs_ecrites} perfs`
+                  (r) => `${arene.nom} → ${r.perfs_ecrites} perfs`
                 )}
               >
-                <Text style={styles.boutonPalierTexte}>{arene.embleme} {arene.nom}</Text>
+                <LibelleIcone
+                  nom={arene.icone}
+                  taille={14}
+                  ecart={5}
+                  couleur={couleursLigues[arene.ligue]}
+                  style={styles.boutonPalierTexte}
+                >
+                  {arene.nom}
+                </LibelleIcone>
               </TouchableOpacity>
             ))}
             <TouchableOpacity
@@ -183,7 +196,8 @@ const styles = StyleSheet.create({
     padding: espacement.m,
     marginTop: espacement.m,
   },
-  titre: { color: colors.rouge, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+  entete: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  titre: { flex: 1, color: colors.rouge, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
   avertissement: {
     color: da.texteMuet, fontSize: 11, lineHeight: 16, marginTop: espacement.s,
   },

@@ -26,7 +26,8 @@ import Losange from '../components/Losange';
 import CarteArenAccueil from '../components/CarteArenAccueil';
 import { areneDuJoueur } from '../components/CarteArene';
 import { areneDeLaLigue } from '../data/arenes';
-import { mesTitresDExercice, titresAPortee } from '../logic/titres';
+import { mesTitresDExercice, titresAPortee, couleurMedaille } from '../logic/titres';
+import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import PanneauModeTest from '../components/PanneauModeTest';
 import * as api from '../api';
 
@@ -60,7 +61,7 @@ export default function ProfilScreen({
       await api.changerMotDePasse(ancienMdp, nouveauMdp);
       setAncienMdp('');
       setNouveauMdp('');
-      setMessageSecurite({ texte: '✅ Mot de passe changé !', erreur: false });
+      setMessageSecurite({ texte: 'Mot de passe changé !', erreur: false });
     } catch (e) {
       setMessageSecurite({ texte: e.message || 'Changement impossible.', erreur: true });
     } finally {
@@ -146,7 +147,9 @@ export default function ProfilScreen({
         </View>
         <View style={styles.badgeSaison}>
           <Text style={styles.badgeSaisonTitre}>SÉRIE</Text>
-          <Text style={styles.badgeSaisonValeur}>🔥 {u.serieJours} j</Text>
+          <LibelleIcone nom="flamme" taille={11} ecart={3} couleur={da.or} style={styles.badgeSaisonValeur}>
+            {`${u.serieJours} j`}
+          </LibelleIcone>
         </View>
       </View>
 
@@ -190,7 +193,12 @@ export default function ProfilScreen({
         <View style={styles.ligneEnteteTop}>
           <Text style={styles.titreBloc}>CLASSEMENT — TOP 3</Text>
           {allerA && (
-            <TouchableOpacity onPress={() => allerA('competition')}>
+            <TouchableOpacity
+              onPress={() => allerA('competition')}
+              hitSlop={{ top: 15, bottom: 15, left: 12, right: 12 }}
+            >
+              {/* hitSlop : le lien ne mesurait que 14 px de haut — on touche
+                  plus large que le texte, sans grossir le dessin (08/11/2026). */}
               {/* « Voir tout » plutôt que « Classements » : le mot était répété
                   juste à côté du titre du bloc (demande de Hafiz du 25/08/2026). */}
               <Text style={styles.lienTop}>Voir tout ›</Text>
@@ -232,7 +240,9 @@ export default function ProfilScreen({
 
       {/* Points et titres de compétition */}
       <View style={styles.carteCompetition}>
-        <Text style={styles.carteTitre}>🏆 Compétition</Text>
+        <TexteIcone nom="competition" taille={16} couleur={colors.or} style={styles.carteTitre}>
+          Compétition
+        </TexteIcone>
         <Text style={styles.pointsCompetition}>{u.points} points (duels + défis)</Text>
         <Text style={styles.indice}>
           Les points départagent les égalités au classement — tes perfs restent reines.
@@ -241,7 +251,9 @@ export default function ProfilScreen({
           <View style={styles.listeTitres}>
             {u.titres.map((titre) => (
               <View key={titre} style={styles.chipTitre}>
-                <Text style={styles.chipTitreTexte}>🏅 {titre}</Text>
+                <LibelleIcone nom="medaille" taille={13} ecart={5} style={styles.chipTitreTexte}>
+                  {titre}
+                </LibelleIcone>
               </View>
             ))}
           </View>
@@ -262,13 +274,15 @@ export default function ProfilScreen({
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitreRepliable}>Mes performances (Fitness Royale)</Text>
+          <TexteIcone nom="perfs" taille={16} couleur={colors.or} style={styles.sectionTitreRepliable}>
+            Mes performances
+          </TexteIcone>
           <Text style={styles.resumeRepliable}>
             {nbVerifiees} vérifiée{nbVerifiees > 1 ? 's' : ''} sur {exercices.length} saisie
             {exercices.length > 1 ? 's' : ''}
           </Text>
         </View>
-        <Text style={styles.chevron}>{perfsOuvertes ? '▲' : '▼'}</Text>
+        <Icone nom={perfsOuvertes ? 'chevron-haut' : 'chevron-bas'} taille={18} couleur={colors.texteGris} />
       </TouchableOpacity>
       {perfsOuvertes && exercices.map(([exo, perf]) => {
         const palier = palierExercice(u.sexe, exo, perf.valeur);
@@ -282,7 +296,7 @@ export default function ProfilScreen({
               <Text style={styles.perfValeur}>
                 {bareme.unite === 'kg' ? `${bareme.reps} x ${perf.valeur} kg` : `${perf.valeur} reps`}
                 {'  '}
-                <Text style={{ color: st.couleur }}>{st.emoji}</Text>
+                <Text style={{ color: st.couleur }}>· {st.libelle}</Text>
               </Text>
             </View>
             <Text style={[styles.perfLigue, { color: couleursLigues[nomPalier] }]}>{nomPalier}</Text>
@@ -300,7 +314,9 @@ export default function ProfilScreen({
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitreRepliable}>🏅 Mes titres</Text>
+          <TexteIcone nom="medaille" taille={16} couleur={colors.or} style={styles.sectionTitreRepliable}>
+            Mes titres
+          </TexteIcone>
           <Text style={styles.resumeRepliable}>
             {titresGagnes.length === 0
               ? 'Aucun titre — monte sur un podium par exercice'
@@ -308,7 +324,7 @@ export default function ProfilScreen({
                   titresGagnes.filter((t) => t.rang === 1).length} en or`}
           </Text>
         </View>
-        <Text style={styles.chevron}>{titresOuverts ? '▲' : '▼'}</Text>
+        <Icone nom={titresOuverts ? 'chevron-haut' : 'chevron-bas'} taille={18} couleur={colors.texteGris} />
       </TouchableOpacity>
       {titresOuverts && (
         <View style={styles.carteTitres}>
@@ -326,7 +342,9 @@ export default function ProfilScreen({
           ) : (
             titresGagnes.map((t) => (
               <View key={`${t.exercice}-${t.rang}`} style={styles.ligneTitre}>
-                <Text style={styles.emblemeTitre}>{t.embleme}</Text>
+                <View style={styles.emblemeTitre}>
+                  <Icone nom="medaille" taille={18} couleur={couleurMedaille(t.rang)} />
+                </View>
                 <Text style={styles.libelleTitre}>{t.libelle}</Text>
               </View>
             ))
@@ -337,7 +355,9 @@ export default function ProfilScreen({
               <Text style={styles.sousTitreTitres}>À ta portée</Text>
               {titresProches.map((c) => (
                 <View key={c.exercice} style={styles.ligneTitre}>
-                  <Text style={styles.emblemeTitre}>🎯</Text>
+                  <View style={styles.emblemeTitre}>
+                    <Icone nom="cible" taille={18} couleur={colors.texteGris} />
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.libelleTitre}>{c.exercice}</Text>
                     <Text style={styles.indiceTitre}>
@@ -354,11 +374,11 @@ export default function ProfilScreen({
       )}
 
       {/* Stats de la semaine */}
-      <Text style={styles.sectionTitre}>Cette semaine</Text>
+      <Text style={styles.sectionTitre}>CETTE SEMAINE</Text>
       <View style={styles.ligneStats}>
-        <CarteStat emoji="💪" valeur={nbSeances} libelle="Séances" />
-        <CarteStat emoji="🔥" valeur={`≈${caloriesEstimees}`} libelle="Calories (est.)" />
-        <CarteStat emoji="⏱️" valeur={`${minutesSemaine} min`} libelle="Entraînement" />
+        <CarteStat icone="entrainement" valeur={nbSeances} libelle="Séances" />
+        <CarteStat icone="eclair" valeur={`≈${caloriesEstimees}`} libelle="Calories (est.)" />
+        <CarteStat icone="horloge" valeur={`${minutesSemaine} min`} libelle="Entraînement" />
       </View>
 
       {/* La saisie manuelle « ➕ Séance » a été retirée le 26/08/2026 (demande
@@ -367,12 +387,12 @@ export default function ProfilScreen({
           `ajouterSeanceLocale()` (App.js), qui alimente le même état. */}
 
       {/* Bilan compétition */}
-      <Text style={styles.sectionTitre}>Bilan compétition</Text>
+      <Text style={styles.sectionTitre}>BILAN COMPÉTITION</Text>
       <View style={styles.ligneStats}>
-        <CarteStat emoji="✅" valeur={u.stats.victoires} libelle="Victoires" />
-        <CarteStat emoji="❌" valeur={u.stats.defaites} libelle="Défaites" />
+        <CarteStat icone="valide" couleur={colors.vert} valeur={u.stats.victoires} libelle="Victoires" />
+        <CarteStat icone="croix" couleur={colors.rouge} valeur={u.stats.defaites} libelle="Défaites" />
         <CarteStat
-          emoji="📈"
+          icone="perfs"
           valeur={
             u.stats.victoires + u.stats.defaites > 0
               ? `${Math.round((u.stats.victoires / (u.stats.victoires + u.stats.defaites)) * 100)}%`
@@ -385,9 +405,12 @@ export default function ProfilScreen({
       {/* Sécurité du compte : repliée par défaut pour ne pas encombrer le profil. */}
       <View style={styles.carteSecurite}>
         <TouchableOpacity onPress={() => setSecuriteOuverte(!securiteOuverte)}>
-          <Text style={styles.titreSecurite}>
-            🔒 Sécurité du compte {securiteOuverte ? '▲' : '▼'}
-          </Text>
+          <View style={styles.enteteSecurite}>
+            <TexteIcone nom="cadenas" taille={16} couleur={colors.or} style={styles.titreSecurite}>
+              Sécurité du compte
+            </TexteIcone>
+            <Icone nom={securiteOuverte ? 'chevron-haut' : 'chevron-bas'} taille={16} couleur={colors.texteGris} />
+          </View>
         </TouchableOpacity>
 
         {securiteOuverte && (
@@ -432,7 +455,7 @@ export default function ProfilScreen({
               disabled={securiteEnCours}
             >
               <Text style={styles.boutonSecuriteTexte}>
-                {codeSecoursAffiche ? 'Regénérer encore' : '🔑 Regénérer mon code de secours'}
+                {codeSecoursAffiche ? 'Regénérer encore' : 'Regénérer mon code de secours'}
               </Text>
             </TouchableOpacity>
 
@@ -450,7 +473,7 @@ export default function ProfilScreen({
       {u.admin ? <PanneauModeTest onChangement={rafraichir} /> : null}
 
       <TouchableOpacity style={styles.boutonDeconnexion} onPress={seDeconnecter}>
-        <Text style={styles.boutonDeconnexionTexte}>🚪 Se déconnecter</Text>
+        <LibelleIcone nom="sortie" taille={15} style={styles.boutonDeconnexionTexte}>Se déconnecter</LibelleIcone>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -561,7 +584,12 @@ const styles = StyleSheet.create({
   ligneProgression: { flexDirection: 'row', alignItems: 'center' },
   pointsTexte: { color: colors.texteGris, fontSize: 12, marginLeft: espacement.s },
   indice: { color: colors.texteGris, fontSize: 12, marginTop: espacement.s },
-  sectionTitre: { color: colors.texte, fontSize: 18, fontWeight: '700', marginBottom: espacement.s },
+  // Petites capitales espacées, le titre de section de l'onglet Entraînement
+  // (« AUJOURD'HUI », « CALENDRIER ») — 08/11/2026.
+  sectionTitre: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
+    marginTop: espacement.l, marginBottom: espacement.s,
+  },
   enteteRepliable: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -575,7 +603,6 @@ const styles = StyleSheet.create({
   },
   sectionTitreRepliable: { color: colors.texte, fontSize: 16, fontWeight: '700' },
   resumeRepliable: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
-  chevron: { color: colors.texteGris, fontSize: 14, marginLeft: espacement.s },
   carteTitres: {
     backgroundColor: colors.carte, borderRadius: 14, padding: espacement.m,
     borderWidth: 1, borderColor: colors.bordure, marginBottom: espacement.m,
@@ -586,7 +613,7 @@ const styles = StyleSheet.create({
     marginTop: espacement.m, marginBottom: 4,
   },
   ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  emblemeTitre: { fontSize: 16, width: 22, textAlign: 'center' },
+  emblemeTitre: { width: 24, alignItems: 'center' },
   libelleTitre: { color: colors.texte, fontSize: 13, fontWeight: '600', flex: 1 },
   indiceTitre: { color: colors.texteGris, fontSize: 11, marginTop: 1 },
   lignePerf: {
@@ -620,7 +647,11 @@ const styles = StyleSheet.create({
     borderColor: colors.bordure,
     marginTop: espacement.m,
   },
-  titreSecurite: { color: colors.texte, fontWeight: '700', fontSize: 15 },
+  enteteSecurite: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  titreSecurite: { flex: 1, color: colors.texte, fontWeight: '700', fontSize: 15 },
   libelleSecurite: {
     color: colors.texte, fontWeight: '600', marginTop: espacement.m, marginBottom: 6,
   },

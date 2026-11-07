@@ -11,6 +11,7 @@ import { baremes, couleursLigues } from '../data/clubSP';
 import { moyennePaliers, scoreSP, ligueJoueur } from '../logic/classement';
 import { etatArene } from '../data/arenes';
 import AreneVisuel from './AreneVisuel';
+import { LibelleIcone } from './Icones';
 
 // Calcule l'état d'arène d'un joueur (exporté : les écrans en ont besoin pour
 // afficher le parcours sans refaire le calcul).
@@ -35,9 +36,9 @@ export default function CarteArene({ joueur, compacte = false }) {
 
       <View style={styles.contenu}>
         <Text style={styles.surtitre}>MON ARÈNE</Text>
-        <Text style={[styles.nom, { color: couleur }]}>
-          {actuelle.embleme} {actuelle.nom}
-        </Text>
+        <LibelleIcone nom={actuelle.icone} taille={19} ecart={8} style={[styles.nom, { color: couleur }]}>
+          {actuelle.nom}
+        </LibelleIcone>
         {/* On n'affiche PLUS le nom de ligue interne (Bronze, Silver…) à côté
             du nom d'arène : les deux échelles sont décalées d'un cran, donc
             « OLYMPE · Ligue Titan » laissait croire à une incohérence.
@@ -51,7 +52,9 @@ export default function CarteArene({ joueur, compacte = false }) {
         {/* L'XP est une jauge d'ACTIVITÉ, séparée de l'arène : on l'affiche
             discrètement pour que personne ne croie qu'elle fait monter. */}
         {typeof joueur.xp === 'number' && (
-          <Text style={styles.xp}>⚡ {joueur.xp.toLocaleString('fr-FR')} XP d'activité</Text>
+          <LibelleIcone nom="eclair" taille={13} ecart={4} style={styles.xp}>
+            {`${joueur.xp.toLocaleString('fr-FR')} XP d'activité`}
+          </LibelleIcone>
         )}
 
         {!compacte && <Text style={styles.devise}>{actuelle.devise}</Text>}
@@ -67,7 +70,7 @@ export default function CarteArene({ joueur, compacte = false }) {
               />
             </View>
             <Text style={styles.prochaine}>
-              Prochaine : {suivante.embleme} {suivante.nom}
+              Prochaine : <Text style={{ color: couleursLigues[suivante.ligue] }}>{suivante.nom}</Text>
             </Text>
             <Text style={styles.manquants}>
               Il te manque{' '}
@@ -78,7 +81,9 @@ export default function CarteArene({ joueur, compacte = false }) {
             </Text>
           </>
         ) : (
-          <Text style={styles.prochaine}>👑 Tu es au sommet de Fitness Royale !</Text>
+          <LibelleIcone nom="paliers" taille={15} style={styles.prochaine}>
+            Tu es au sommet de Fitness Royale !
+          </LibelleIcone>
         )}
       </View>
     </View>
@@ -97,9 +102,9 @@ const styles = StyleSheet.create({
   surtitre: {
     color: colors.texteGris, fontSize: 10, fontWeight: '800', letterSpacing: 2,
   },
-  nom: { fontSize: 19, fontWeight: '800', marginTop: 4, textAlign: 'center' },
+  nom: { fontSize: 19, fontWeight: '800', marginTop: 4, alignSelf: 'center' },
   ligue: { color: colors.texteGris, fontSize: 12, fontWeight: '600', marginTop: 2, textAlign: 'center' },
-  xp: { color: colors.accent, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  xp: { color: colors.texteDoux, fontSize: 12, fontWeight: '700', marginTop: 6 },
   devise: {
     color: colors.texteGris, fontSize: 12, fontStyle: 'italic',
     textAlign: 'center', marginTop: espacement.s, lineHeight: 17,

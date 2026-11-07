@@ -462,11 +462,14 @@ const stylesEditeur = StyleSheet.create({
     borderWidth: 1, borderColor: colors.rouge,
   },
   retirerTexte: { color: colors.rouge, fontWeight: '800', fontSize: 11 },
+  // « Ligne vide » reste NEUTRE (08/11/2026) : à côté de « Bibliothèque » en
+  // or, c'est le chemin de repli — deux boutons de même couleur n'auraient
+  // plus dit lequel préférer.
   boutonAjout: {
-    backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.accent,
+    backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
     borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 2,
   },
-  boutonAjoutTexte: { color: colors.accent, fontWeight: '700', fontSize: 12 },
+  boutonAjoutTexte: { color: colors.texteDoux, fontWeight: '700', fontSize: 12 },
   // Les deux façons d'ajouter un exercice, côte à côte : une ligne vide (on
   // tape son nom) ou la bibliothèque. La seconde est en OR — c'est le chemin
   // qu'on veut voir en premier, puisqu'il évite les fautes de frappe.
@@ -475,10 +478,10 @@ const stylesEditeur = StyleSheet.create({
   boutonBiblio: { borderColor: da.bordureOrDouce },
   boutonBiblioTexte: { color: colors.or, fontWeight: '700', fontSize: 12 },
   bouton: {
-    backgroundColor: colors.accent, borderRadius: 8, padding: 10,
+    backgroundColor: colors.or, borderRadius: 8, padding: 10, minHeight: 44, justifyContent: 'center',
     alignItems: 'center', marginTop: espacement.s,
   },
-  boutonTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
+  boutonTexte: { color: da.orSombre, fontWeight: '900', fontSize: 13 },
   message: { color: colors.vert, fontSize: 12, marginTop: 6 },
   lienVider: { color: colors.texteGris, fontSize: 11, textAlign: 'center', marginTop: 8 },
   note: { color: colors.or, fontSize: 11, marginBottom: 4, lineHeight: 15 },
@@ -2497,7 +2500,7 @@ export default function EntrainementScreen({
   if (chargement) {
     return (
       <View style={[styles.conteneur, styles.centre]}>
-        <ActivityIndicator color={colors.accent} />
+        <ActivityIndicator color={colors.or} />
       </View>
     );
   }
@@ -3050,7 +3053,7 @@ export default function EntrainementScreen({
         {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
 
         <TouchableOpacity style={styles.boutonPrincipal} onPress={terminerSeance} disabled={enregistrementEnCours}>
-          {enregistrementEnCours ? <ActivityIndicator color={colors.texte} /> : (
+          {enregistrementEnCours ? <ActivityIndicator color={da.orSombre} /> : (
             <LibelleIcone nom="valide" taille={15} style={styles.boutonPrincipalTexte}>Terminer la séance</LibelleIcone>
           )}
         </TouchableOpacity>
@@ -3457,7 +3460,7 @@ export default function EntrainementScreen({
                   actif={suppressionAConfirmer === 'sortie-cycle-' + cycle.id}
                   question={`Sortir de « ${cycle.nom} » ? Il libère la semaine et ses dates du calendrier, mais reste ici : tu pourras le reposer quand tu veux.`}
                   libelleConfirmer="Oui, sortir"
-                  couleur={colors.accent}
+                  couleur={colors.or}
                   onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme(cycle.seances); }}
                   onAnnuler={() => setSuppressionAConfirmer(null)}
                 />
@@ -3560,7 +3563,7 @@ export default function EntrainementScreen({
                     actif={suppressionAConfirmer === 'sortie-prog-' + programme.id}
                     question={`Sortir de « ${programme.nom} » ? Il libère ses jours et ses dates, mais reste ici : tu pourras le reposer quand tu veux.`}
                     libelleConfirmer="Oui, sortir"
-                    couleur={colors.accent}
+                    couleur={colors.or}
                     onConfirmer={() => { setSuppressionAConfirmer(null); sortirDuProgramme([programme]); }}
                     onAnnuler={() => setSuppressionAConfirmer(null)}
                   />
@@ -3627,7 +3630,7 @@ export default function EntrainementScreen({
               Programmes standards
             </LibelleIcone>
             <Icone nom={modelesOuverts ? 'chevron-haut' : 'chevron-bas'} taille={15}
-              couleur={colors.accent} />
+              couleur={colors.or} />
           </View>
         </TouchableOpacity>
         {modelesOuverts && programmesStandards.map((modele) => (
@@ -3645,7 +3648,7 @@ export default function EntrainementScreen({
               disabled={modeleEnCours !== null}
             >
               {modeleEnCours === modele.id ? (
-                <ActivityIndicator color={colors.texte} size="small" />
+                <ActivityIndicator color={da.orSombre} size="small" />
               ) : (
                 <Text style={styles.boutonDemarrerTexte}>Utiliser ce modèle</Text>
               )}
@@ -3676,7 +3679,7 @@ export default function EntrainementScreen({
               onPress={chercherParCode}
               disabled={rechercheCode || !codeSaisi.trim()}
             >
-              {rechercheCode ? <ActivityIndicator color={colors.texte} size="small" /> : (
+              {rechercheCode ? <ActivityIndicator color={da.orSombre} size="small" /> : (
                 <Text style={styles.boutonAjouterSerieTexte}>Voir</Text>
               )}
             </TouchableOpacity>
@@ -4432,7 +4435,7 @@ export default function EntrainementScreen({
               onPress={appliquerRenommages}
               disabled={renommageEnCours}
             >
-              {renommageEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
+              {renommageEnCours ? <ActivityIndicator color={da.orSombre} size="small" /> : (
                 <Text style={styles.boutonDemarrerTexte}>Renommer partout</Text>
               )}
             </TouchableOpacity>
@@ -4854,11 +4857,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.rouge,
   },
   boutonRetirerTexte: { color: colors.rouge, fontWeight: '800' },
+  // L'OR, PLUS LE CYAN, POUR TOUTES LES ACTIONS (08/11/2026). Quand les cinq
+  // autres onglets sont passés à l'or, l'Entraînement — leur modèle — était
+  // resté le seul à avoir des boutons cyan. Action principale = or plein,
+  // action secondaire = bordure or. Le cyan reste là où il est une DONNÉE
+  // (barres de volume, protéines) ou un REPÈRE (jour choisi au calendrier).
   boutonSecondaire: {
-    backgroundColor: colors.carteClaire, borderRadius: 12, padding: 12, alignItems: 'center',
-    marginTop: espacement.s, marginBottom: espacement.m, borderWidth: 1, borderColor: colors.accent,
+    backgroundColor: da.orVoile, borderRadius: 12, padding: 12, alignItems: 'center',
+    marginTop: espacement.s, marginBottom: espacement.m, borderWidth: 1, borderColor: da.bordureOrDouce,
   },
-  boutonSecondaireTexte: { color: colors.accent, fontWeight: '700' },
+  boutonSecondaireTexte: { color: colors.or, fontWeight: '800' },
   // « Ligne vide » et « Bibliothèque » côte à côte (passe 3). La bibliothèque
   // est en OR : c'est le chemin à voir en premier, puisqu'il garantit un nom
   // d'exercice exact — et le NOM est l'identifiant (voir CLAUDE.md 04/09/2026).
@@ -4872,10 +4880,10 @@ const styles = StyleSheet.create({
     marginTop: espacement.s, borderWidth: 1, borderColor: da.bordureOrDouce,
   },
   boutonPrincipal: {
-    backgroundColor: colors.accent, borderRadius: 12, padding: 14, alignItems: 'center',
-    marginTop: espacement.m,
+    backgroundColor: colors.or, borderRadius: 12, padding: 14, alignItems: 'center',
+    marginTop: espacement.m, minHeight: 50, justifyContent: 'center',
   },
-  boutonPrincipalTexte: { color: colors.texte, fontWeight: '700', fontSize: 16 },
+  boutonPrincipalTexte: { color: da.orSombre, fontWeight: '900', fontSize: 16, letterSpacing: 0.3 },
   lienAnnuler: { color: colors.texteGris, textAlign: 'center', marginTop: espacement.m, fontSize: 13 },
   messageErreur: { color: colors.rouge, fontSize: 13, marginTop: espacement.s },
   carteProgramme: {
@@ -4883,8 +4891,8 @@ const styles = StyleSheet.create({
     padding: espacement.m, marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure, gap: 8,
   },
   nomProgrammeTexte: { color: colors.texte, fontWeight: '700', fontSize: 15 },
-  boutonDemarrer: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
-  boutonDemarrerTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
+  boutonDemarrer: { backgroundColor: colors.or, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+  boutonDemarrerTexte: { color: da.orSombre, fontWeight: '900', fontSize: 12 },
   carteHistorique: {
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
     marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure,
@@ -4911,9 +4919,9 @@ const styles = StyleSheet.create({
   champSaisieSerie: { textAlign: 'center', fontSize: 16, fontWeight: '700' },
   boutonSerieAligne: { paddingVertical: 15 },
   boutonAjouterSerie: {
-    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 14,
+    backgroundColor: colors.or, borderRadius: 10, paddingVertical: 13, paddingHorizontal: 14,
   },
-  boutonAjouterSerieTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
+  boutonAjouterSerieTexte: { color: da.orSombre, fontWeight: '900', fontSize: 12 },
   lignePuces: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   lignePucesJoursSeance: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: espacement.s,
@@ -4947,10 +4955,10 @@ const styles = StyleSheet.create({
   },
   jourSeanceCycle: { color: colors.or, fontWeight: '700', fontSize: 11, width: 62 },
   boutonModifier: {
-    borderWidth: 1, borderColor: colors.accent, borderRadius: 8,
+    borderWidth: 1, borderColor: da.bordureOrDouce, borderRadius: 8, backgroundColor: da.orVoile,
     paddingVertical: 13, paddingHorizontal: 14,
   },
-  boutonModifierTexte: { color: colors.accent, fontWeight: '700', fontSize: 12 },
+  boutonModifierTexte: { color: colors.or, fontWeight: '800', fontSize: 12 },
   zoneDeroule: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   boutonSortir: {
     borderWidth: 1, borderColor: colors.texteGris, borderRadius: 8,
@@ -5125,7 +5133,7 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure,
   },
   boutonUtiliserModele: {
-    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 12,
+    backgroundColor: colors.or, borderRadius: 10, paddingVertical: 12,
     alignItems: 'center', marginTop: espacement.s,
   },
   messageRappel: { color: colors.vert, fontSize: 12, marginTop: espacement.s },

@@ -19,12 +19,15 @@ import { nomsLigues } from './clubSP';
 //
 // `titre` = ce que le joueur peut afficher sur son profil à cette arène.
 // index 0 = le départ, avant toute perf vérifiée.
+// `icone` = l'emblème de l'arène, un nom du répertoire de
+// src/components/Icones.js (08/11/2026 : les emojis 🚪🌱🔥⚔️🏆💎👑 ont laissé
+// place à des icônes dessinées, qui se teintent à la couleur de la ligue).
 export const arenes = [
   {
     index: 0,
     ligue: 'Aucune',
     nom: 'DÉBUT',
-    embleme: '🚪',
+    icone: 'porte',
     titre: null,
     devise: "Tu es dans la place. Fais vérifier ta première perf pour entrer dans l'arène.",
     decor: 'Vestiaire vide',
@@ -33,7 +36,7 @@ export const arenes = [
     index: 1,
     ligue: 'Bronze',
     nom: 'INITIATION',
-    embleme: '🌱',
+    icone: 'pousse',
     titre: 'Recrue',
     devise: 'Je commence mon aventure.',
     decor: "Salle d'entraînement basique, petit équipement",
@@ -42,7 +45,7 @@ export const arenes = [
     index: 2,
     ligue: 'Silver',
     nom: 'FORGE',
-    embleme: '🔥',
+    icone: 'flamme',
     titre: 'Fighter',
     devise: "Tu ne découvres plus : tu t'entraînes pour de vrai.",
     decor: 'Machines et haltères, environnement plus impressionnant',
@@ -51,7 +54,7 @@ export const arenes = [
     index: 3,
     ligue: 'Gold',
     nom: 'COLOSSE',
-    embleme: '⚔️',
+    icone: 'bouclier',
     titre: 'Gladiator',
     devise: 'On commence à te reconnaître comme un joueur sérieux.',
     decor: 'Grande salle, plateformes de force, équipements lourds',
@@ -60,7 +63,7 @@ export const arenes = [
     index: 4,
     ligue: 'Legend',
     nom: 'TITAN',
-    embleme: '🏆',
+    icone: 'competition',
     titre: 'Titan',
     devise: 'Le rang que tout le monde veut afficher sur son profil.',
     decor: 'Architecture monumentale, énorme rack, ambiance compétition',
@@ -69,7 +72,7 @@ export const arenes = [
     index: 5,
     ligue: 'Titan',
     nom: 'OLYMPE',
-    embleme: '💎',
+    icone: 'diamant',
     titre: 'Olympien',
     devise: 'Très haut niveau. Peu y arrivent.',
     decor: "Temple sur la montagne, statues d'athlètes",
@@ -80,7 +83,7 @@ export const arenes = [
     index: 6,
     ligue: 'Royal',
     nom: 'ROYALE',
-    embleme: '👑',
+    icone: 'paliers',
     titre: 'Royal',
     devise: "Il n'y a plus d'arène au-dessus. Il reste le classement mondial.",
     decor: 'Arène gigantesque, trophée central, effets légendaires',

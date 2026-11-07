@@ -3,10 +3,13 @@
 // - communaute : vidéo validée par la communauté → compte au classement
 // - salle      : validé par une salle partenaire → badge officiel, compte au classement
 // (Clé technique conservée : 'non_verifie' = statut "Déclaré".)
+// `icone` = un nom du répertoire de src/components/Icones.js (08/11/2026 :
+// les emojis 📝 👥 🏋️ ont laissé place aux icônes dessinées, qui prennent la
+// couleur du statut — un emoji, lui, garde toujours la sienne).
 export const STATUTS = {
-  non_verifie: { libelle: 'Déclaré', emoji: '📝', couleur: '#8A93A6' },
-  communaute: { libelle: 'Vérifié communauté', emoji: '👥', couleur: '#4F8DFD' },
-  salle: { libelle: 'Vérifié salle', emoji: '🏋️', couleur: '#3DDC84' },
+  non_verifie: { libelle: 'Déclaré', icone: 'crayon', couleur: '#8A93A6' },
+  communaute: { libelle: 'Vérifié communauté', icone: 'clan', couleur: '#4F8DFD' },
+  salle: { libelle: 'Vérifié salle', icone: 'salle', couleur: '#3DDC84' },
 };
 
 // Les seuls statuts qui COMPTENT au classement. Miroir exact de

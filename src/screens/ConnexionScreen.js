@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { colors, espacement } from '../theme';
 import * as api from '../api';
+import { LibelleIcone, TexteIcone } from '../components/Icones';
 
 export default function ConnexionScreen({ onConnecte }) {
   const [mode, setMode] = useState('connexion'); // 'connexion' | 'inscription' | 'oubli'
@@ -76,7 +77,9 @@ export default function ConnexionScreen({ onConnecte }) {
   if (inscriptionReussie) {
     return (
       <View style={[styles.conteneur, styles.scroll]}>
-        <Text style={styles.titre}>🎉 Compte créé !</Text>
+        <LibelleIcone nom="valide" taille={22} couleur={colors.vert} style={styles.titre}>
+          Compte créé !
+        </LibelleIcone>
         <View style={[styles.formulaire, { marginTop: espacement.l }]}>
           <Text style={styles.libelle}>Ton CODE DE SECOURS</Text>
           <Text style={styles.codeSecours}>{inscriptionReussie.code}</Text>
@@ -102,7 +105,9 @@ export default function ConnexionScreen({ onConnecte }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.titre}>🏆 Fitness Royale</Text>
+        <Text style={styles.titre}>
+          FITNESS <Text style={{ color: colors.or }}>ROYALE</Text>
+        </Text>
         {/* « Club SP — » retiré le 26/08/2026 (demande de Hafiz) : on ne garde
             que le slogan sous le nom de l'app. */}
         <Text style={styles.sousTitre}>FIGHT FOR IT</Text>
@@ -201,7 +206,9 @@ export default function ConnexionScreen({ onConnecte }) {
             </>
           )}
 
-          {erreur && <Text style={styles.erreur}>⚠️ {erreur}</Text>}
+          {erreur ? (
+            <TexteIcone nom="alerte" taille={14} hautAligne style={styles.erreur}>{erreur}</TexteIcone>
+          ) : null}
 
           <TouchableOpacity style={styles.bouton} onPress={valider} disabled={enCours}>
             {enCours ? (

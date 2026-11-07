@@ -11,6 +11,7 @@ import { da, monospace } from '../designSystem';
 import { couleursLigues } from '../data/clubSP';
 import Losange from './Losange';
 import AvatarJoueur from './AvatarJoueur';
+import { LibelleIcone } from './Icones';
 
 export default function CarteArenAccueil({ joueur, arene, salle }) {
   const { actuelle, suivante, manquants, progression } = arene;
@@ -85,7 +86,9 @@ export default function CarteArenAccueil({ joueur, arene, salle }) {
           </Text>
         </View>
       ) : (
-        <Text style={[styles.sommet, { color: couleur }]}>👑 Sommet de Fitness Royale atteint</Text>
+        <LibelleIcone nom="paliers" taille={15} couleur={couleur} style={[styles.sommet, { color: couleur }]}>
+          Sommet de Fitness Royale atteint
+        </LibelleIcone>
       )}
     </View>
   );

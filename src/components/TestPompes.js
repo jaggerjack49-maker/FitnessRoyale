@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import CameraPompes from './CameraPompes';
+import { TexteIcone, LibelleIcone } from './Icones';
 import {
   REGLAGES_POMPES, avancerCompteur, mesureDepuisPoints, nouvelEtatCompteur,
 } from '../logic/compteurPompes';
@@ -117,7 +118,9 @@ export default function TestPompes({ onFermer }) {
 
   return (
     <View style={styles.carte}>
-      <Text style={styles.titre}>🧪 Test du compteur de pompes</Text>
+      <TexteIcone nom="appareil-photo" taille={20} couleur={colors.or} style={styles.titre}>
+        Test du compteur de pompes
+      </TexteIcone>
       <Text style={styles.consigne}>
         Pose le téléphone au sol devant toi, caméra tournée vers toi, à 1 ou 2 mètres. On doit voir
         tes épaules, tes coudes et tes poignets : ils s'allument en or quand ils sont bien détectés.
@@ -133,13 +136,15 @@ export default function TestPompes({ onFermer }) {
         </View>
         {testEnCours && (
           <View style={styles.chronoSurImage} pointerEvents="none">
-            <Text style={styles.chronoTexte}>⏱ {secondesRestantes}s</Text>
+            <LibelleIcone nom="horloge" taille={18} ecart={5} style={styles.chronoTexte}>
+              {`${secondesRestantes}s`}
+            </LibelleIcone>
           </View>
         )}
       </View>
 
-      {erreur && <Text style={styles.erreur}>⚠️ {erreur}</Text>}
-      {!erreur && statut && <Text style={styles.statut}>⏳ {statut}</Text>}
+      {erreur ? <TexteIcone nom="alerte" taille={14} hautAligne style={styles.erreur}>{erreur}</TexteIcone> : null}
+      {!erreur && statut ? <TexteIcone nom="horloge" taille={14} hautAligne style={styles.statut}>{statut}</TexteIcone> : null}
 
       {/* Pour RÉGLER : ce que le compteur voit, en direct. */}
       <View style={styles.ligneReglage}>
@@ -181,17 +186,24 @@ export default function TestPompes({ onFermer }) {
       </View>
 
       {testFini && (
-        <Text style={styles.resultat}>🏁 Temps écoulé : {reps} {reps > 1 ? 'pompes' : 'pompe'} en 1 minute</Text>
+        <TexteIcone nom="drapeau" taille={16} hautAligne style={styles.resultat}>
+          Temps écoulé : {reps} {reps > 1 ? 'pompes' : 'pompe'} en 1 minute
+        </TexteIcone>
       )}
 
       <View style={styles.ligneBoutons}>
         <TouchableOpacity style={styles.bouton} onPress={remettreAZero}>
-          <Text style={styles.boutonTexte}>↺ Remettre à zéro</Text>
+          <LibelleIcone nom="recharger" taille={15} ecart={6} style={styles.boutonTexte}>Remettre à zéro</LibelleIcone>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.bouton, styles.boutonOr]} onPress={lancerTestMinute}>
-          <Text style={[styles.boutonTexte, { color: colors.fond }]}>
-            {testEnCours ? '↻ Relancer 1 minute' : '⏱ Test 1 minute'}
-          </Text>
+          <LibelleIcone
+            nom={testEnCours ? 'recharger' : 'horloge'}
+            taille={15}
+            ecart={6}
+            style={[styles.boutonTexte, { color: colors.fond }]}
+          >
+            {testEnCours ? 'Relancer 1 minute' : 'Test 1 minute'}
+          </LibelleIcone>
         </TouchableOpacity>
       </View>
 

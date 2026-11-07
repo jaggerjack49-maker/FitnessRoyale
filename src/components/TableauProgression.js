@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { colors, espacement } from '../theme';
 import { monospace } from '../designSystem';
+import { TexteIcone, LibelleIcone } from './Icones';
 import { projeterProgramme, SEMAINES_MAX } from '../logic/projectionProgramme';
 import { semaineDuBloc, finDuBloc, blocADerive } from '../logic/bloc';
 
@@ -101,7 +102,7 @@ function PanneauBloc({
          { date: lundi, libelle: 'Lundi prochain' }];
     return (
       <View style={styles.panneauBloc}>
-        <Text style={styles.panneauTitre}>▶️ DÉMARRER CE BLOC</Text>
+        <TexteIcone nom="lecture" taille={14} style={styles.panneauTitre}>DÉMARRER CE BLOC</TexteIcone>
         <Text style={styles.panneauTexte}>
           Tant que le bloc n'est pas démarré, ce tableau est une PROJECTION :
           il se recalcule à chaque fois que tu l'ouvres. Le démarrer FIGE ces
@@ -139,11 +140,15 @@ function PanneauBloc({
   const derive = blocADerive(ecarts);
   return (
     <View style={[styles.panneauBloc, derive && styles.panneauAlerte]}>
-      <Text style={styles.panneauTitre}>
-        {semaine === null ? '🏁 BLOC TERMINÉ'
-          : semaine === 'decharge' ? '🪶 SEMAINE DE DÉCHARGE'
-            : `📍 SEMAINE ${semaine} SUR ${nbSemaines}`}
-      </Text>
+      <TexteIcone
+        nom={semaine === null ? 'drapeau' : semaine === 'decharge' ? 'recharger' : 'repere'}
+        taille={16}
+        style={styles.panneauTitre}
+      >
+        {semaine === null ? 'BLOC TERMINÉ'
+          : semaine === 'decharge' ? 'SEMAINE DE DÉCHARGE'
+            : `SEMAINE ${semaine} SUR ${nbSemaines}`}
+      </TexteIcone>
       <Text style={styles.panneauTexte}>
         Démarré le {libelleJour(dateDebut)}, jusqu'au{' '}
         {libelleJour(finDuBloc(programme))}.
@@ -152,16 +157,22 @@ function PanneauBloc({
       {derive ? (
         <View>
           {ecarts.semainesSautees.length > 0 ? (
-            <Text style={styles.panneauEcart}>
-              ⚠️ Aucune séance de ce programme en semaine{' '}
+            <TexteIcone nom="alerte" taille={13} hautAligne style={styles.panneauEcart}>
+              Aucune séance de ce programme en semaine{' '}
               {ecarts.semainesSautees.join(', ')}.
-            </Text>
+            </TexteIcone>
           ) : null}
           {ecarts.chargesDifferentes.slice(0, 4).map((e) => (
-            <Text key={`${e.exercice}-${e.semaine}`} style={styles.panneauEcart}>
-              ⚠️ {e.exercice} : {e.fait} kg en semaine {e.semaine}, le plan
+            <TexteIcone
+              key={`${e.exercice}-${e.semaine}`}
+              nom="alerte"
+              taille={13}
+              hautAligne
+              style={styles.panneauEcart}
+            >
+              {e.exercice} : {e.fait} kg en semaine {e.semaine}, le plan
               disait {e.prevu} kg.
-            </Text>
+            </TexteIcone>
           ))}
           <Text style={styles.panneauTexte}>
             La suite du plan part donc d'une base fausse. La recalculer repart
@@ -295,7 +306,7 @@ export default function TableauProgression({
 
   return (
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-      <Text style={styles.titre}>📊 {nom}</Text>
+      <TexteIcone nom="tableau" taille={20} couleur={colors.or} style={styles.titre}>{nom}</TexteIcone>
       <Text style={styles.sousTitre}>
         Ce que l'app te propose semaine après semaine, à partir de tes dernières
         séances et de la façon dont chaque exercice progresse.
@@ -321,9 +332,14 @@ export default function TableauProgression({
         onPress={onBasculerDecharge}
         disabled={!!dateDebut}
       >
-        <Text style={[styles.puceTexte, avecDeload && styles.puceTexteActif]}>
-          {avecDeload ? '☑' : '☐'} Finir par une semaine de décharge
-        </Text>
+        <LibelleIcone
+          nom={avecDeload ? 'case-cochee' : 'case-vide'}
+          taille={15}
+          ecart={6}
+          style={[styles.puceTexte, avecDeload && styles.puceTexteActif]}
+        >
+          Finir par une semaine de décharge
+        </LibelleIcone>
       </TouchableOpacity>
       {dateDebut ? (
         <Text style={styles.aideReglages}>
@@ -402,7 +418,6 @@ export default function TableauProgression({
                     <Text style={[styles.texteEntete,
                       String(semaine) === String(semaineEnCours) && styles.texteEnteteCourante,
                     ]} numberOfLines={1}>
-                      {String(semaine) === String(semaineEnCours) ? '📍 ' : ''}
                       {enTeteSemaine(semaine)}
                     </Text>
                     <Text style={styles.texteSousEntete}>Séries · Reps · Kg</Text>
@@ -474,11 +489,11 @@ export default function TableauProgression({
         </Text>
       )}
 
-      <Text style={styles.note}>
+      <TexteIcone nom={dateDebut ? 'programme' : 'alerte'} taille={14} hautAligne style={styles.note}>
         {dateDebut
-          ? "📋 C'est ton PLAN : il est écrit, il ne se recalcule plus tout seul. Ta séance lit la case de la semaine où tu es."
-          : "⚠️ C'est une PROJECTION : elle suppose que chaque semaine est réussie exactement comme prévu. La semaine 1 dit la même chose que le « 🎯 Attendu » de ta séance — c'est le même calcul."}
-      </Text>
+          ? "C'est ton PLAN : il est écrit, il ne se recalcule plus tout seul. Ta séance lit la case de la semaine où tu es."
+          : "C'est une PROJECTION : elle suppose que chaque semaine est réussie exactement comme prévu. La semaine 1 dit la même chose que l'« Attendu » de ta séance — c'est le même calcul."}
+      </TexteIcone>
 
       <TouchableOpacity style={styles.boutonFermer} onPress={onFermer}>
         <Text style={styles.boutonFermerTexte}>← Revenir à mes programmes</Text>
@@ -562,7 +577,7 @@ const styles = StyleSheet.create({
   },
   // Un bloc dont on s'est écarté se signale, sans crier : c'est une
   // information, pas une faute.
-  panneauAlerte: { borderColor: colors.accent },
+  panneauAlerte: { borderColor: colors.or },
   panneauTitre: {
     color: colors.or, fontSize: 12, fontWeight: '800', letterSpacing: 1.5,
     marginBottom: espacement.s,
@@ -572,7 +587,7 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s,
   },
   panneauEcart: {
-    color: colors.accent, fontSize: 12, lineHeight: 18, marginBottom: espacement.xs,
+    color: colors.or, fontSize: 12, lineHeight: 18, marginBottom: espacement.xs,
   },
   panneauChoix: { flexDirection: 'row', flexWrap: 'wrap', gap: espacement.s,
     marginBottom: espacement.s },
@@ -587,10 +602,10 @@ const styles = StyleSheet.create({
   },
   boutonEteint: { opacity: 0.45 },
   boutonRecalculer: {
-    borderWidth: 1, borderColor: colors.accent, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.or, borderRadius: 12,
     paddingVertical: 13, alignItems: 'center', marginTop: espacement.xs,
   },
-  boutonRecalculerTexte: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+  boutonRecalculerTexte: { color: colors.or, fontSize: 13, fontWeight: '800' },
   lienArreter: {
     color: colors.texteGris, fontSize: 12, textAlign: 'center',
     paddingVertical: 12, marginTop: espacement.xs,

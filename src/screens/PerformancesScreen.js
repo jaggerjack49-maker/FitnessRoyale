@@ -24,6 +24,7 @@ import { da, monospace } from '../designSystem';
 import { baremes, nomsLigues, couleursLigues } from '../data/clubSP';
 import { STATUTS, estVerifiee } from '../data/statuts';
 import { palierExercice } from '../logic/classement';
+import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import * as api from '../api';
 
 const DELAI_RAFRAICHISSEMENT_MS = 10000;
@@ -226,7 +227,7 @@ export default function PerformancesScreen({
     // serveur ne connaît pas.
     const echec = await ajouterPerf(exo, nombre, statutALEnregistrement);
     if (echec) {
-      setMessageSaisie(`⚠️ Perf NON enregistrée (${resume}) : ${echec}`);
+      setMessageSaisie(`Perf NON enregistrée (${resume}) : ${echec}`);
       return;
     }
 
@@ -322,7 +323,7 @@ export default function PerformancesScreen({
     setErreurVideo(null);
     try {
       const resultat = await api.rejoindreValidation(codeSaisi.trim());
-      setMessageValidation(`✅ Perf de ${resultat.pseudo} (${resultat.exercice}) validée !`);
+      setMessageValidation(`Perf de ${resultat.pseudo} (${resultat.exercice}) validée !`);
       setCodeSaisi('');
     } catch (e) {
       setErreurVideo(e.message || 'Code invalide.');
@@ -465,7 +466,7 @@ export default function PerformancesScreen({
           </View>
         )}
         {!!derniereSaisie && !!erreurVideo && (
-          <Text style={styles.messageErreur}>⚠️ {erreurVideo}</Text>
+          <TexteIcone nom="alerte" taille={14} hautAligne style={styles.messageErreur}>{erreurVideo}</TexteIcone>
         )}
       </View>
 
@@ -481,13 +482,15 @@ export default function PerformancesScreen({
         activeOpacity={0.7}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitreRepliable}>Enregistrées</Text>
+          <TexteIcone nom="perfs" taille={16} couleur={colors.or} style={styles.sectionTitreRepliable}>
+            Enregistrées
+          </TexteIcone>
           <Text style={styles.resumeRepliable}>
             {nbVerifiees} vérifiée{nbVerifiees > 1 ? 's' : ''} sur {nbPerfs} saisie
             {nbPerfs > 1 ? 's' : ''}
           </Text>
         </View>
-        <Text style={styles.chevron}>{enregistreesOuvertes ? '▲' : '▼'}</Text>
+        <Icone nom={enregistreesOuvertes ? 'chevron-haut' : 'chevron-bas'} taille={18} couleur={colors.texteGris} />
       </TouchableOpacity>
       {enregistreesOuvertes && Object.entries(mesPerfs).map(([exo, perf]) => {
         const st = STATUTS[perf.statut];
@@ -503,9 +506,9 @@ export default function PerformancesScreen({
                 {'  •  '}
                 <Text style={{ color: couleursLigues[nomPalier] }}>{nomPalier}</Text>
               </Text>
-              <Text style={[styles.perfStatut, { color: st.couleur }]}>
-                {st.emoji} {st.libelle}
-              </Text>
+              <TexteIcone nom={st.icone} taille={13} ecart={5} style={[styles.perfStatut, { color: st.couleur }]}>
+                {st.libelle}
+              </TexteIcone>
             </View>
             {/* Le bouton « 📹 Envoyer une vidéo » qui validait la perf sur
                 place a disparu avec le mode hors-ligne (26/09/2026) : c'était
@@ -522,7 +525,10 @@ export default function PerformancesScreen({
             {perf.statut === 'non_verifie' && codeGenere?.exercice !== exo && (
               <View style={{ gap: 6 }}>
                 {videosEnvoyees[exo] ? (
-                  <Text style={styles.perfEnAttente}>🕒 Vidéo{'\n'}envoyée</Text>
+                  <View style={styles.blocEnAttente}>
+                    <Icone nom="horloge" taille={15} couleur={colors.texteGris} />
+                    <Text style={styles.perfEnAttente}>Vidéo{'\n'}envoyée</Text>
+                  </View>
                 ) : (
                   <TouchableOpacity
                     style={styles.boutonValider}
@@ -530,9 +536,9 @@ export default function PerformancesScreen({
                     disabled={envoiEnCours === exo}
                   >
                     {envoiEnCours === exo ? (
-                      <ActivityIndicator color={colors.accent} size="small" />
+                      <ActivityIndicator color={colors.or} size="small" />
                     ) : (
-                      <Text style={styles.boutonValiderTexte}>📹 Vidéo</Text>
+                      <LibelleIcone nom="video" taille={14} ecart={5} style={styles.boutonValiderTexte}>Vidéo</LibelleIcone>
                     )}
                   </TouchableOpacity>
                 )}
@@ -542,9 +548,9 @@ export default function PerformancesScreen({
                   disabled={genererCodeEnCours === exo}
                 >
                   {genererCodeEnCours === exo ? (
-                    <ActivityIndicator color={colors.accent} size="small" />
+                    <ActivityIndicator color={colors.or} size="small" />
                   ) : (
-                    <Text style={styles.boutonValiderTexte}>🔑 Code{'\n'}partenaire</Text>
+                    <LibelleIcone nom="cle" taille={14} ecart={5} style={styles.boutonValiderTexte}>Code</LibelleIcone>
                   )}
                 </TouchableOpacity>
 
@@ -561,7 +567,7 @@ export default function PerformancesScreen({
                     {validationAdminEnCours === exo ? (
                       <ActivityIndicator color={colors.rouge} size="small" />
                     ) : (
-                      <Text style={styles.boutonAdminTexte}>🛠 Valider{'\n'}(admin)</Text>
+                      <LibelleIcone nom="bouclier" taille={14} ecart={5} style={styles.boutonAdminTexte}>Admin</LibelleIcone>
                     )}
                   </TouchableOpacity>
                 ) : null}
@@ -570,11 +576,15 @@ export default function PerformancesScreen({
           </View>
         );
       })}
-      {erreurVideo && <Text style={styles.messageErreur}>⚠️ {erreurVideo}</Text>}
+      {erreurVideo ? (
+        <TexteIcone nom="alerte" taille={14} hautAligne style={styles.messageErreur}>{erreurVideo}</TexteIcone>
+      ) : null}
 
       {/* ---- Valider la perf d'un partenaire avec un code ---- */}
       <View style={styles.carteCode}>
-        <Text style={styles.sectionTitre}>🔑 Valider la perf d'un partenaire</Text>
+        <TexteIcone nom="cle" taille={16} couleur={colors.or} style={styles.sectionTitre}>
+          Valider la perf d'un partenaire
+        </TexteIcone>
         <Text style={styles.indice}>
           Ton partenaire de salle t'a donné un code juste après sa perf ? Entre-le ici pour la confirmer.
         </Text>
@@ -587,7 +597,7 @@ export default function PerformancesScreen({
           autoCapitalize="characters"
         />
         <TouchableOpacity style={styles.boutonAjouter} onPress={validerAvecCode} disabled={validationEnCours}>
-          {validationEnCours ? <ActivityIndicator color={colors.texte} /> : (
+          {validationEnCours ? <ActivityIndicator color={da.orSombre} /> : (
             <Text style={styles.boutonAjouterTexte}>Valider avec ce code</Text>
           )}
         </TouchableOpacity>
@@ -604,11 +614,13 @@ export default function PerformancesScreen({
           casserait `test_api_validation.py` sans rien gagner. */}
 
       {/* ---- Vidéos des autres joueurs à valider ---- */}
-      <Text style={styles.sectionTitre}>🎥 Vidéos à valider</Text>
+      <TexteIcone nom="video" taille={16} couleur={colors.or} style={styles.sectionTitre}>
+        Vidéos à valider
+      </TexteIcone>
       <Text style={styles.indice}>
         Le premier avis compte : valide si la perf te semble réelle, refuse sinon.
       </Text>
-      {chargementVideos && <ActivityIndicator color={colors.accent} style={{ marginTop: espacement.s }} />}
+      {chargementVideos && <ActivityIndicator color={colors.or} style={{ marginTop: espacement.s }} />}
       {!chargementVideos && videosAValider.length === 0 && (
         <Text style={styles.indice}>Aucune vidéo en attente pour l'instant.</Text>
       )}
@@ -623,10 +635,10 @@ export default function PerformancesScreen({
           />
           <View style={styles.ligneVoteBoutons}>
             <TouchableOpacity style={styles.boutonRefuser} onPress={() => voter(v.id, false)}>
-              <Text style={styles.boutonRefuserTexte}>❌ Refuser</Text>
+              <LibelleIcone nom="croix" taille={14} style={styles.boutonRefuserTexte}>Refuser</LibelleIcone>
             </TouchableOpacity>
             <TouchableOpacity style={styles.boutonValiderVideo} onPress={() => voter(v.id, true)}>
-              <Text style={styles.boutonValiderVideoTexte}>✅ Valider</Text>
+              <LibelleIcone nom="valide" taille={14} style={styles.boutonValiderVideoTexte}>Valider</LibelleIcone>
             </TouchableOpacity>
           </View>
         </View>
@@ -777,15 +789,24 @@ const styles = StyleSheet.create({
     padding: 12,
     color: colors.texte,
   },
+  // ⚠️ L'OR, PLUS LE CYAN (08/11/2026). Le cyan (`colors.accent`) est aussi
+  // la couleur du statut « vérifié communauté » : en faire la couleur d'un
+  // bouton brouillait les deux sens. Les ACTIONS sont en or, comme dans
+  // l'onglet Entraînement ; le cyan ne dit plus que « communauté ».
   boutonAjouter: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.or,
     borderRadius: 12,
     padding: 14,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: espacement.m,
   },
-  boutonAjouterTexte: { color: colors.texte, fontWeight: '700' },
-  sectionTitre: { color: colors.texte, fontSize: 18, fontWeight: '700', marginBottom: espacement.s },
+  boutonAjouterTexte: { color: da.orSombre, fontWeight: '900', letterSpacing: 0.3 },
+  sectionTitre: {
+    color: colors.texte, fontSize: 16, fontWeight: '800',
+    marginTop: espacement.m, marginBottom: espacement.s,
+  },
   enteteRepliable: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -799,7 +820,6 @@ const styles = StyleSheet.create({
   },
   sectionTitreRepliable: { color: colors.texte, fontSize: 16, fontWeight: '700' },
   resumeRepliable: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
-  chevron: { color: colors.texteGris, fontSize: 14, marginLeft: espacement.s },
   lignePerf: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -814,21 +834,23 @@ const styles = StyleSheet.create({
   perfValeur: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   perfStatut: { fontSize: 12, fontWeight: '700', marginTop: 4 },
   boutonValider: {
-    backgroundColor: colors.carteClaire,
+    backgroundColor: da.orVoile,
     borderRadius: 10,
-    paddingVertical: 8,
+    minHeight: 38,
+    justifyContent: 'center',
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: da.bordureOrDouce,
   },
-  boutonValiderTexte: { color: colors.accent, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  boutonValiderTexte: { color: colors.or, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   // Bouton du MODE TEST : bordure rouge pour qu'on ne le confonde jamais avec
   // les vrais chemins de validation (vidéo, code partenaire).
   boutonAdmin: {
-    borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10,
+    borderRadius: 10, minHeight: 38, justifyContent: 'center', paddingHorizontal: 10,
     borderWidth: 1, borderColor: colors.rouge,
   },
-  boutonAdminTexte: { color: colors.rouge, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  boutonAdminTexte: { color: colors.rouge, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  blocEnAttente: { alignItems: 'center', gap: 2 },
   perfEnAttente: { color: colors.texteGris, fontSize: 10, textAlign: 'center', maxWidth: 90 },
   messageErreur: { color: colors.rouge, fontSize: 13, marginTop: espacement.s, marginBottom: espacement.s },
   messageSucces: { color: colors.vert, fontSize: 13, fontWeight: '700', marginTop: espacement.s },
@@ -869,7 +891,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.carteClaire,
     borderRadius: 10,
-    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.rouge,
@@ -879,7 +902,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.vert,
     borderRadius: 10,
-    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   boutonValiderVideoTexte: { color: colors.fond, fontWeight: '800' },

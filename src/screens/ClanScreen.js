@@ -20,6 +20,8 @@ import AvatarJoueur from '../components/AvatarJoueur';
 import usePlaceDefilement from '../usePlaceDefilement';
 import useRetour from '../useRetour';
 import * as api from '../api';
+import { da } from '../designSystem';
+import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 
 const DELAI_POLLING_MS = 4000;
 
@@ -130,7 +132,9 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
   // La carte « ma salle » : toujours affichée, c'est la porte d'entrée du clan.
   const carteSalle = (
     <View style={styles.carteSalle}>
-      <Text style={styles.carteTitre}>🏠 Ma salle de gym</Text>
+      <TexteIcone nom="salle" taille={16} couleur={colors.or} style={styles.carteTitre}>
+        Ma salle de gym
+      </TexteIcone>
       <Text style={styles.explicationGauche}>
         Ta salle EST ton clan : elle ouvre le chat, le classement de ses membres
         et le classement des salles dans Compétition.
@@ -148,7 +152,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
           onPress={enregistrerSalle}
           disabled={enregistrementSalle || salleSaisie.trim() === (salle || '').trim()}
         >
-          {enregistrementSalle ? <ActivityIndicator color={colors.texte} size="small" /> : (
+          {enregistrementSalle ? <ActivityIndicator color={da.orSombre} size="small" /> : (
             <Text style={styles.boutonSalleTexte}>Enregistrer</Text>
           )}
         </TouchableOpacity>
@@ -187,7 +191,7 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
   if (!peutDiscuter) {
     return (
       <ScrollView style={styles.conteneur} contentContainerStyle={{ paddingBottom: espacement.l }}>
-        <Text style={styles.titre}>💬 Clan</Text>
+        <TexteIcone nom="clan" taille={20} couleur={colors.or} style={styles.titre}>Clan</TexteIcone>
         <Text style={styles.sousTitre}>Choisis ta salle pour rejoindre son clan.</Text>
         {carteSalle}
       </ScrollView>
@@ -205,22 +209,29 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
 
   return (
     <View style={styles.conteneur}>
-      <Text style={styles.titre}>💬 Clan {moi.salle}</Text>
+      <TexteIcone nom="clan" taille={20} couleur={colors.or} style={styles.titre} numberOfLines={1}>
+        {`Clan ${moi.salle}`}
+      </TexteIcone>
       <Text style={styles.sousTitre}>Réservé aux membres de ta salle.</Text>
 
       <View style={styles.bascule}>
         {[
-          { cle: 'membres', libelle: `🏆 Membres (${membres.length})` },
-          { cle: 'chat', libelle: '💬 Chat' },
+          { cle: 'membres', libelle: `Membres (${membres.length})`, icone: 'competition' },
+          { cle: 'chat', libelle: 'Chat', icone: 'bulle' },
         ].map((v) => (
           <TouchableOpacity
             key={v.cle}
             style={[styles.basculeBtn, vue === v.cle && styles.basculeActif]}
             onPress={() => setVue(v.cle)}
           >
-            <Text style={[styles.basculeTexte, vue === v.cle && styles.basculeTexteActif]}>
+            <LibelleIcone
+              nom={v.icone}
+              taille={15}
+              ecart={6}
+              style={[styles.basculeTexte, vue === v.cle && styles.basculeTexteActif]}
+            >
               {v.libelle}
-            </Text>
+            </LibelleIcone>
           </TouchableOpacity>
         ))}
       </View>
@@ -259,17 +270,22 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
               enlève la partie ma salle de gym »). La carte faisait doublon
               avec le titre de l'écran, mais elle reste le seul moyen de
               changer de clan — on la garde derrière un lien discret. */}
-          <TouchableOpacity onPress={() => setChangementSalle(!changementSalle)}>
-            <Text style={styles.lienChangerSalle}>
-              {changementSalle ? '▲ Fermer' : '⚙️ Changer de salle'}
-            </Text>
+          <TouchableOpacity onPress={() => setChangementSalle(!changementSalle)} style={styles.zoneLienSalle}>
+            <LibelleIcone
+              nom={changementSalle ? 'chevron-haut' : 'salle'}
+              taille={14}
+              ecart={6}
+              style={styles.lienChangerSalle}
+            >
+              {changementSalle ? 'Fermer' : 'Changer de salle'}
+            </LibelleIcone>
           </TouchableOpacity>
           {changementSalle && carteSalle}
         </ScrollView>
       )}
 
       {vue === 'chat' && (chargement ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: espacement.l }} />
+        <ActivityIndicator color={colors.or} style={{ marginTop: espacement.l }} />
       ) : (
         <ScrollView
           ref={scrollRef}
@@ -291,7 +307,9 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
         </ScrollView>
       ))}
 
-      {vue === 'chat' && erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+      {vue === 'chat' && erreur ? (
+        <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone>
+      ) : null}
 
       {vue === 'chat' && (
       <View style={styles.ligneSaisie}>
@@ -304,8 +322,8 @@ export default function ClanScreen({ moi, joueurs, salle, setSalle, actif = true
           multiline
         />
         <TouchableOpacity style={styles.boutonEnvoyer} onPress={envoyer} disabled={envoiEnCours}>
-          {envoiEnCours ? <ActivityIndicator color={colors.texte} size="small" /> : (
-            <Text style={styles.boutonEnvoyerTexte}>➤</Text>
+          {envoiEnCours ? <ActivityIndicator color={da.orSombre} size="small" /> : (
+            <Icone nom="envoyer" taille={20} couleur={da.orSombre} />
           )}
         </TouchableOpacity>
       </View>
@@ -331,10 +349,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.bordure,
   },
+  // Ma bulle : voile d'or + liseré d'or, le traitement de « ce qui est à moi »
+  // partout ailleurs dans l'app (ma ligne au classement, l'onglet actif). Le
+  // cyan plein d'avant était la couleur la plus forte de l'écran (08/11/2026).
   bulleMoi: {
     alignSelf: 'flex-end',
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: da.orVoileFort,
+    borderColor: da.bordureOrDouce,
   },
   bulleAuteur: { color: colors.or, fontWeight: '700', fontSize: 12, marginBottom: 2 },
   bulleTexte: { color: colors.texte, fontSize: 14 },
@@ -351,14 +372,13 @@ const styles = StyleSheet.create({
     borderColor: colors.bordure,
   },
   boutonEnvoyer: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.or,
     borderRadius: 14,
     width: 48,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  boutonEnvoyerTexte: { color: colors.texte, fontWeight: '800', fontSize: 18 },
   explicationGauche: { color: colors.texteGris, fontSize: 12, lineHeight: 17, marginBottom: espacement.s },
   carteSalle: {
     backgroundColor: colors.carte, borderRadius: 14, padding: espacement.m,
@@ -371,30 +391,31 @@ const styles = StyleSheet.create({
     color: colors.texte, borderWidth: 1, borderColor: colors.bordure,
   },
   boutonSalle: {
-    backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 11,
+    backgroundColor: colors.or, borderRadius: 10, minHeight: 44, justifyContent: 'center',
     paddingHorizontal: 14, alignItems: 'center',
   },
-  boutonSalleTexte: { color: colors.texte, fontWeight: '700', fontSize: 12 },
+  boutonSalleTexte: { color: da.orSombre, fontWeight: '900', fontSize: 12 },
   messageSalle: { color: colors.vert, fontSize: 12, marginTop: 6 },
   lignePucesSalles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   puceSalle: {
     borderWidth: 1, borderColor: colors.bordure, borderRadius: 999,
-    paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.carteClaire,
+    minHeight: 36, justifyContent: 'center', paddingHorizontal: 12,
+    backgroundColor: colors.carteClaire,
   },
-  puceSalleActive: { borderColor: colors.or },
+  puceSalleActive: { borderColor: colors.or, backgroundColor: da.orVoile },
   puceSalleTexte: { color: colors.texte, fontSize: 12 },
-  lienChangerSalle: {
-    color: colors.texteGris, fontSize: 12, textAlign: 'center',
-    marginTop: espacement.m, marginBottom: espacement.s,
-  },
+  zoneLienSalle: { minHeight: 44, justifyContent: 'center', marginTop: espacement.s },
+  lienChangerSalle: { color: colors.texteGris, fontSize: 12, fontWeight: '700' },
   bascule: { flexDirection: 'row', gap: 8, marginBottom: espacement.m },
+  // Même pastille que la barre d'onglets et que le sélecteur de la
+  // Compétition : voile d'or + liseré d'or, plus de cyan plein.
   basculeBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+    flex: 1, minHeight: 44, justifyContent: 'center', borderRadius: 12, alignItems: 'center',
     backgroundColor: colors.carte, borderWidth: 1, borderColor: colors.bordure,
   },
-  basculeActif: { backgroundColor: colors.accent, borderColor: colors.accent },
-  basculeTexte: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
-  basculeTexteActif: { color: colors.texte },
+  basculeActif: { backgroundColor: da.orVoileFort, borderColor: 'rgba(232, 178, 58, 0.22)' },
+  basculeTexte: { color: colors.texteGris, fontWeight: '700', fontSize: 13 },
+  basculeTexteActif: { color: colors.or, fontWeight: '800' },
   ligneMembre: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.s,

@@ -445,6 +445,9 @@ violette du Royal :
   la couleur ET l'épaisseur augmentent avec la ligue (`couleursLigues` de `clubSP.js`, déjà
   utilisées ailleurs dans l'app), une lueur (ombre colorée) à partir de Gold, et un petit emblème
   (🥉🥈🥇⭐⚡👑) qui apparaît en incrustation à partir de Bronze.
+  ⚠️ PÉRIMÉ DEPUIS LE 08/11/2026 : l'emblème est l'ICÔNE DE L'ARÈNE de la ligue (dessinée,
+  teintée à sa couleur) et le disque n'est plus cyan — voir « La DA de l'Entraînement sur les
+  cinq autres onglets ».
 - DÉCISION : pas de vraies illustrations (personnage, équipement) — ça demanderait de vrais
   visuels dessinés sur mesure, hors de portée de ce qui peut être généré ici. L'évolution se joue
   sur la couleur/l'anneau/l'emblème, qui est déjà un signal visuel clair et cohérent avec le reste
@@ -2275,7 +2278,9 @@ losange près, donc illisibles sans lire les libellés.
   Ce ne sont pas les métaphores les plus évidentes (on attendrait un podium et
   des épées), mais ce sont celles retenues dans la maquette — la variante
   `swords` et la variante `medal` y figurent explicitement comme écartées.
-- L'onglet actif porte TROIS signaux : l'or, un liseré au-dessus, et une
+- ⚠️ PÉRIMÉ DEPUIS LE 08/11/2026 (la barre est devenue une capsule flottante, le liseré a
+  disparu — voir « La DA de l'Entraînement sur les cinq autres onglets »).
+  L'onglet actif porte TROIS signaux : l'or, un liseré au-dessus, et une
   pastille voilée d'or à 8 %. Le liseré est en `position: 'absolute'` avec
   `top: -8` — il déborde volontairement sur le `paddingVertical` de la barre,
   pour ne pas décaler l'icône vers le bas quand il apparaît.
@@ -4648,6 +4653,133 @@ horizontal en 420 ni en 1024, toutes les cibles tactiles du panneau à 44 px ou
 plus (le lien « ‹ tous les groupes », mesuré à 32, a été corrigé), et **zéro
 erreur console après rechargement propre**.
 
+## La DA de l'Entraînement sur les cinq autres onglets + la capsule — 08/11/2026
+
+Demande de Hafiz : « change également la DA des autres onglets ainsi que les
+emojis en t'inspirant de l'onglet Entraînement, et change la DA de la barre des
+onglets en t'inspirant des images de l'appli que je t'ai envoyées ».
+
+### La barre d'onglets devient une CAPSULE FLOTTANTE
+
+Modèle : la barre de l'app de référence (`icones/IMG_1824` à `1828`) — une
+capsule détachée des bords, gris sombre à liseré fin, et l'onglet actif posé
+dans une PASTILLE arrondie teintée, icône ET libellé à la couleur d'accent.
+- ⚠️ EN OR, PAS EN VERT : on reprend la mise en page, jamais la palette (même
+  règle que la refonte de l'Entraînement — l'or pilote toute l'identité).
+- ⚠️ DANS LE FLUX, PAS PAR-DESSUS LE CONTENU : posée sur la page comme dans la
+  référence, elle cacherait le bas des six écrans, qu'il aurait fallu tous
+  rembourrer pour que leur dernier bouton reste touchable. Le rendu est le
+  même : une capsule sur le fond (le « socle » autour donne l'effet flottant).
+- Bornée à `largeurMaxContenu` comme le contenu : en 1024 px, capsule de
+  560 px centrée (mesuré : x = 232). Sinon, sur ordinateur, une barre de
+  1000 px n'aurait plus rien d'une capsule.
+- TOUS les onglets portent une bordure (transparente s'ils sont inactifs) :
+  sans ça, l'actif serait 2 px plus haut et la rangée sautillerait.
+- Le liseré or au-dessus de l'onglet actif (piste « Arène » du 08/09/2026)
+  disparaît : la pastille dit déjà « c'est ici ».
+
+### Ce qui a été repris de l'Entraînement, écran par écran
+
+Les mêmes trois gestes partout :
+1. **Plus un seul emoji d'interface** — tous remplacés par les icônes de
+   `Icones.js` (`<Icone>`, `<TexteIcone>`, `<LibelleIcone>`).
+2. **Les actions en OR, plus en CYAN.** Action principale = or plein (texte
+   `da.orSombre`), action secondaire = voile d'or + liseré d'or. Le cyan
+   (`colors.accent`) était aussi la couleur du statut « vérifié communauté » :
+   en faire celle des boutons brouillait les deux sens.
+3. **Les titres de section en petites capitales espacées** (« CETTE SEMAINE »,
+   « DÉFIS RÉCURRENTS ») — le libellé de section de l'accueil de l'Entraînement.
+
+Points marquants :
+- **Compétition → Défis** : les trois entrées (duel en direct, duel en ligne,
+  test de pompes) reprennent EXACTEMENT les lignes de raccourci de
+  l'Entraînement (composant `EntreeDefi`) ; le duel en direct en OR PLEIN,
+  comme « SÉANCE LIBRE ». Le sélecteur Classement / Défis et les quatre modes
+  de classement prennent la pastille de la barre d'onglets.
+- **Les médailles 🥇🥈🥉 deviennent UNE icône teintée** : `couleurMedaille(rang)`
+  (`src/logic/titres.js`) — UNE SEULE DÉFINITION, utilisée par le Profil (Mes
+  titres) ET les classements de la Compétition.
+- **Les statuts de perf** (`src/data/statuts.js`) portent `icone` au lieu
+  d'`emoji` : crayon (déclaré), clan (communauté), salle (salle).
+- **Le chat du Clan** : ma bulle en voile d'or (le traitement de « ce qui est à
+  moi » partout : ma ligne au classement, l'onglet actif), bouton d'envoi or
+  avec un avion en papier.
+- **L'écran d'erreur (`LimiteErreur`) reste en TEXTE PUR**, volontairement :
+  c'est le filet qui s'affiche quand un écran plante — le faire dépendre du
+  moteur SVG, c'est risquer qu'il plante à son tour si c'est lui qui a cassé.
+
+### Les emblèmes d'ARÈNE et l'avatar
+
+Décision revue en cours de route : je comptais garder les emblèmes d'arène
+(🚪🌱🔥⚔️🏆💎👑) comme du « contenu ». Mais ce sont eux qui remplissaient tout
+l'onglet Paliers (sept pastilles) et chaque ligne de classement (sur l'avatar).
+Ils sont donc DESSINÉS (`arenes.js` porte `icone` au lieu d'`embleme`) :
+porte, pousse, flamme, bouclier, trophée, diamant, couronne. Avantage décisif :
+ils prennent la COULEUR DE LA LIGUE, ce qu'un emoji ne savait pas faire.
+- ⚠️ COLOSSE est un BOUCLIER, pas deux épées croisées comme son emoji : c'est
+  le dessin devenu gribouillis à 20 px le 08/09/2026.
+- **L'avatar** (`AvatarJoueur`) : son badge d'emblème est désormais l'icône de
+  L'ARÈNE de sa ligue (un emblème = une arène, partout) ; son disque n'est plus
+  CYAN — la couleur la plus criarde de l'accueil, qui ne disait rien — mais une
+  surface sombre, l'initiale portant la couleur de la ligue.
+- La flamme de la SÉRIE (Profil) est dessinée elle aussi : l'icône existait
+  désormais, garder l'emoji juste à côté n'avait plus de sens.
+
+### L'Entraînement aussi, du coup
+
+Une fois les cinq autres onglets passés à l'or, l'Entraînement — leur modèle —
+était le SEUL à garder des boutons cyan (« Terminer la séance », « + Série »,
+« Démarrer », « Rattraper maintenant », « Modifier »…). C'était le point signalé
+à la passe 2 en le laissant à Hafiz ; sa demande de cohérence le tranche.
+Le cyan RESTE là où il est une DONNÉE ou un REPÈRE, pas une action : barres de
+volume, protéines de la Nutrition, jour choisi au calendrier, suggestion de
+charge. « Sortir de ce programme » passe aussi en or — la doc du 27/08/2026 le
+voulait déjà (« ça ne détruit rien »), le code l'avait mis en cyan.
+Dans l'éditeur, « Ligne vide » devient NEUTRE : à côté de « Bibliothèque » en
+or, deux boutons de même couleur n'auraient plus dit lequel préférer.
+Le tableau de progression, oublié par la passe 2, a aussi perdu ses emojis.
+
+### Seize icônes de plus dans `Icones.js`
+
+Section 6 : médaille, salle, bulle, globe, balance, éclair, vidéo, cadenas, dé,
+stop, drapeau, envoyer — et les quatre emblèmes d'arène manquants (porte,
+pousse, flamme, diamant). Mêmes six règles que tout le fichier.
+⚠️ UNE ICÔNE REJETÉE À L'ÉCRAN, encore : la barre (`mat-barre`) choisie pour
+la puce « Exercice » de la Compétition se lisait comme une FLÈCHE ↔ à 18 px.
+Remplacée par l'haltère ramassé. Règle n°6, payée une fois de plus.
+
+### Le verrou : `backend/tests/test_pas_d_emoji_interface.py`
+
+Un test qui échoue dès qu'un emoji réapparaît dans le code affiché (App.js +
+src/), commentaires exclus. Seule exception : `src/notifications.js` — le texte
+d'une notification du téléphone est du texte brut, il ne peut pas contenir de
+dessin. Il cherche aussi le SÉLECTEUR DE VARIANTE EMOJI (U+FE0F), qui transforme
+un symbole ordinaire en emoji : un premier inventaire fait sans lui avait laissé
+passer « ▶️ DÉMARRER CE BLOC » — trouvé À L'ÉCRAN, pas par le script.
+Vu échouer sur un emoji recollé dans un écran et sur le ▶️, et rester vert sur
+un emoji simplement cité en commentaire (ligne ou bloc).
+Les quatre champs `emoji` MORTS des programmes standards (aucun code ne les
+lisait, vérifié) ont été supprimés plutôt qu'ajoutés aux exceptions.
+
+### Vérifié
+
+- `cd backend && python -m unittest discover tests` → **349 tests, tous OK** ;
+- les 24 fichiers modifiés passés au parseur Babel du projet (un parseur ne
+  voit pas une variable non importée : c'est la visite des écrans qui l'a vu) ;
+- navigateur, backend LOCAL, compte `SondeTest`, 400 px puis 1024 px : les six
+  onglets montés, **zéro emoji à l'écran, 98 icônes dessinées, aucun
+  débordement**, aucune cible sous 38 px (le lien « Voir tout › » du Profil,
+  mesuré à 14 px, a reçu un `hitSlop`) ; duel en direct, duel en ligne, test de
+  pompes et tableau de progression ouverts sans écran d'erreur ; un message
+  envoyé dans le chat du Clan accepté par le serveur ;
+- **zéro erreur console** entre un rechargement propre et la fin de la visite.
+
+⚠️ INCIDENT DE MÉTHODE : un commentaire JSX posé DEVANT un bouton, à
+l'intérieur de `{allerA && ( … )}`, a cassé la compilation (deux expressions
+dans une parenthèse qui n'en attend qu'une) — page blanche. Vu au rechargement,
+corrigé en rentrant le commentaire dans le bouton. D'où le passage de TOUS les
+fichiers au parseur avant la vérification finale.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4660,7 +4792,7 @@ erreur console après rechargement propre**.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (347 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (349 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

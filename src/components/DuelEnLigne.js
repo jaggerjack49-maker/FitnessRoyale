@@ -17,6 +17,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { colors, espacement } from '../theme';
 import { baremes } from '../data/clubSP';
 import * as api from '../api';
+import { da } from '../designSystem';
+import { TexteIcone, LibelleIcone } from './Icones';
 
 const DELAI_POLLING_MS = 3000;
 
@@ -182,7 +184,7 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
   if (etape === 'menu') {
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>🌐 Duel en ligne</Text>
+        <TexteIcone nom="globe" taille={20} couleur={colors.or} style={styles.titre}>Duel en ligne</TexteIcone>
         <Text style={styles.explication}>
           Toi et ton adversaire jouez chacun depuis votre téléphone. Crée un
           duel et partage le code, ou rejoins un duel avec un code reçu.
@@ -204,14 +206,14 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
           }}
           disabled={chargement}
         >
-          {chargement ? <ActivityIndicator color={colors.texte} /> : (
-            <Text style={styles.boutonPrincipalTexte}>➕ Créer un duel</Text>
+          {chargement ? <ActivityIndicator color={da.orSombre} /> : (
+            <LibelleIcone nom="plus" taille={15} style={styles.boutonPrincipalTexte}>Créer un duel</LibelleIcone>
           )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setEtape('rejoindre')}>
-          <Text style={styles.boutonSecondaireTexte}>🔑 Rejoindre avec un code</Text>
+          <LibelleIcone nom="cle" taille={15} style={styles.boutonSecondaireTexte}>Rejoindre avec un code</LibelleIcone>
         </TouchableOpacity>
-        {erreur && <Text style={styles.message}>⚠️ {erreur}</Text>}
+        {erreur ? <TexteIcone nom="alerte" taille={14} hautAligne style={styles.message}>{erreur}</TexteIcone> : null}
         <TouchableOpacity onPress={onFermer}>
           <Text style={styles.lienAnnuler}>Fermer</Text>
         </TouchableOpacity>
@@ -223,7 +225,7 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
   if (etape === 'rejoindre') {
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>🔑 Rejoindre un duel</Text>
+        <TexteIcone nom="cle" taille={20} couleur={colors.or} style={styles.titre}>Rejoindre un duel</TexteIcone>
         <Text style={styles.libelle}>Code reçu de ton adversaire</Text>
         <TextInput
           style={styles.champ}
@@ -234,11 +236,11 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
           autoCapitalize="characters"
         />
         <TouchableOpacity style={styles.boutonPrincipal} onPress={rejoindre} disabled={chargement}>
-          {chargement ? <ActivityIndicator color={colors.texte} /> : (
+          {chargement ? <ActivityIndicator color={da.orSombre} /> : (
             <Text style={styles.boutonPrincipalTexte}>Rejoindre</Text>
           )}
         </TouchableOpacity>
-        {erreur && <Text style={styles.message}>⚠️ {erreur}</Text>}
+        {erreur ? <TexteIcone nom="alerte" taille={14} hautAligne style={styles.message}>{erreur}</TexteIcone> : null}
         <TouchableOpacity onPress={() => setEtape('menu')}>
           <Text style={styles.lienAnnuler}>Retour</Text>
         </TouchableOpacity>
@@ -250,7 +252,9 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
   if (etape === 'attente') {
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>⏳ En attente d'un adversaire…</Text>
+        <TexteIcone nom="horloge" taille={20} couleur={colors.or} style={styles.titre}>
+          En attente d'un adversaire…
+        </TexteIcone>
         <Text style={styles.explication}>Partage ce code avec ton adversaire :</Text>
         <Text style={styles.codeAffiche}>{duel.code}</Text>
         <ActivityIndicator color={colors.or} style={{ marginTop: espacement.m }} />
@@ -271,7 +275,14 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
     const gagne = duel.gagnant_id === moi.id;
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>{gagne ? '🏆 Victoire !' : '💀 Défaite…'}</Text>
+        <TexteIcone
+          nom={gagne ? 'competition' : 'croix'}
+          taille={20}
+          couleur={gagne ? colors.or : colors.rouge}
+          style={styles.titre}
+        >
+          {gagne ? 'Victoire !' : 'Défaite…'}
+        </TexteIcone>
         <Text style={styles.scoreFinal}>{mesVictoires} — {sesVictoires}</Text>
         <Text style={styles.explication}>
           {gagne ? `+${duel.recompense} points pour toi !` : 'Pas de points cette fois — prends ta revanche !'}
@@ -309,8 +320,8 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
           <>
             <Text style={styles.libelle}>Départage : l'IA choisit l'exercice</Text>
             <TouchableOpacity style={styles.boutonSecondaire} onPress={tirerIA} disabled={chargement}>
-              {chargement ? <ActivityIndicator color={colors.accent} /> : (
-                <Text style={styles.boutonSecondaireTexte}>🎲 Tirer l'exercice au sort</Text>
+              {chargement ? <ActivityIndicator color={colors.or} /> : (
+                <LibelleIcone nom="de" taille={15} style={styles.boutonSecondaireTexte}>Tirer l'exercice au sort</LibelleIcone>
               )}
             </TouchableOpacity>
           </>
@@ -346,32 +357,34 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
               onPress={() => validerExercice(numero)}
               disabled={chargement}
             >
-              {chargement ? <ActivityIndicator color={colors.texte} /> : (
+              {chargement ? <ActivityIndicator color={da.orSombre} /> : (
                 <Text style={styles.boutonPrincipalTexte}>Valider l'exercice</Text>
               )}
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <Text style={styles.explication}>
-              ⏳ En attente que ton adversaire choisisse l'exercice de ce round…
-            </Text>
+            <TexteIcone nom="horloge" taille={14} hautAligne style={styles.explication}>
+              En attente que ton adversaire choisisse l'exercice de ce round…
+            </TexteIcone>
             <ActivityIndicator color={colors.or} />
           </>
         )
       ) : jaiDejaJoue ? (
         <>
           <Text style={styles.choixIA}>{roundActif.exercice} @ {roundActif.charge} kg</Text>
-          <Text style={styles.explication}>
-            ✅ Tes reps sont enregistrées ({mesReps}). En attente de l'adversaire…
-          </Text>
+          <TexteIcone nom="valide" taille={14} couleur={colors.vert} hautAligne style={styles.explication}>
+            Tes reps sont enregistrées ({mesReps}). En attente de l'adversaire…
+          </TexteIcone>
           <View style={styles.blocAdversaire}>
             {sonDebut ? (
-              <Text style={styles.indiceAdversaire}>
-                🏋️ Il/elle est en train de faire sa série… {secondesDepuis(sonDebut)}s
-              </Text>
+              <TexteIcone nom="entrainement" taille={14} couleur={colors.or} hautAligne style={styles.indiceAdversaire}>
+                Il/elle est en train de faire sa série… {secondesDepuis(sonDebut)}s
+              </TexteIcone>
             ) : (
-              <Text style={styles.indiceAdversaire}>⏳ N'a pas encore commencé sa série.</Text>
+              <TexteIcone nom="horloge" taille={14} hautAligne style={styles.indiceAdversaire}>
+                N'a pas encore commencé sa série.
+              </TexteIcone>
             )}
           </View>
           <ActivityIndicator color={colors.or} />
@@ -386,18 +399,20 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
               onPress={() => demarrerMaSerie(numero)}
               disabled={chargement}
             >
-              {chargement ? <ActivityIndicator color={colors.texte} /> : (
-                <Text style={styles.boutonPrincipalTexte}>🔴 Je commence ma série</Text>
+              {chargement ? <ActivityIndicator color={da.orSombre} /> : (
+                <LibelleIcone nom="lecture" taille={15} style={styles.boutonPrincipalTexte}>Je commence ma série</LibelleIcone>
               )}
             </TouchableOpacity>
           ) : !montrerSaisieReps ? (
             <>
               <View style={styles.blocChrono}>
-                <Text style={styles.chronoTexte}>⏱ {secondesDepuis(monDebut)}s</Text>
+                <LibelleIcone nom="horloge" taille={24} ecart={8} style={styles.chronoTexte}>
+                  {`${secondesDepuis(monDebut)}s`}
+                </LibelleIcone>
                 <Text style={styles.indiceChrono}>Ta série est en cours… pose le téléphone !</Text>
               </View>
               <TouchableOpacity style={styles.boutonPrincipal} onPress={() => setMontrerSaisieReps(true)}>
-                <Text style={styles.boutonPrincipalTexte}>⏹ Terminé</Text>
+                <LibelleIcone nom="stop" taille={15} style={styles.boutonPrincipalTexte}>Terminé</LibelleIcone>
               </TouchableOpacity>
             </>
           ) : (
@@ -417,7 +432,7 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
                 onPress={() => soumettreReps(numero)}
                 disabled={chargement}
               >
-                {chargement ? <ActivityIndicator color={colors.texte} /> : (
+                {chargement ? <ActivityIndicator color={da.orSombre} /> : (
                   <Text style={styles.boutonPrincipalTexte}>Valider mes reps</Text>
                 )}
               </TouchableOpacity>
@@ -426,19 +441,23 @@ export default function DuelEnLigne({ moi, onFermer, onDuelTermine }) {
 
           <View style={styles.blocAdversaire}>
             {sesReps != null ? (
-              <Text style={styles.indiceAdversaire}>✅ Ton adversaire a déjà fini ce round.</Text>
+              <TexteIcone nom="valide" taille={14} couleur={colors.vert} hautAligne style={styles.indiceAdversaire}>
+                Ton adversaire a déjà fini ce round.
+              </TexteIcone>
             ) : sonDebut ? (
-              <Text style={styles.indiceAdversaire}>
-                🏋️ Ton adversaire est en train de faire sa série… {secondesDepuis(sonDebut)}s
-              </Text>
+              <TexteIcone nom="entrainement" taille={14} couleur={colors.or} hautAligne style={styles.indiceAdversaire}>
+                Ton adversaire est en train de faire sa série… {secondesDepuis(sonDebut)}s
+              </TexteIcone>
             ) : (
-              <Text style={styles.indiceAdversaire}>⏳ Ton adversaire n'a pas encore commencé.</Text>
+              <TexteIcone nom="horloge" taille={14} hautAligne style={styles.indiceAdversaire}>
+                Ton adversaire n'a pas encore commencé.
+              </TexteIcone>
             )}
           </View>
         </>
       )}
 
-      {erreur && <Text style={styles.message}>⚠️ {erreur}</Text>}
+      {erreur ? <TexteIcone nom="alerte" taille={14} hautAligne style={styles.message}>{erreur}</TexteIcone> : null}
       <TouchableOpacity onPress={onFermer}>
         <Text style={styles.lienAnnuler}>Fermer (le duel reste ouvert)</Text>
       </TouchableOpacity>
@@ -453,7 +472,7 @@ const styles = StyleSheet.create({
     padding: espacement.m,
     marginBottom: espacement.m,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: da.bordureOrDouce,
   },
   titre: { color: colors.texte, fontSize: 20, fontWeight: '800' },
   score: { color: colors.or, fontWeight: '800', fontSize: 18, marginVertical: espacement.s },
@@ -487,7 +506,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.bordure,
     backgroundColor: colors.carteClaire,
   },
-  choixIA: { color: colors.accent, fontWeight: '800', fontSize: 16, marginVertical: espacement.s },
+  choixIA: { color: colors.or, fontWeight: '800', fontSize: 16, marginVertical: espacement.s },
   blocChrono: {
     backgroundColor: colors.carteClaire,
     borderRadius: 12,
@@ -497,26 +516,30 @@ const styles = StyleSheet.create({
   },
   chronoTexte: { color: colors.or, fontWeight: '800', fontSize: 28 },
   indiceChrono: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
-  blocAdversaire: { marginTop: espacement.s, alignItems: 'center' },
-  indiceAdversaire: { color: colors.texteGris, fontSize: 13, textAlign: 'center' },
+  blocAdversaire: { marginTop: espacement.s },
+  indiceAdversaire: { color: colors.texteGris, fontSize: 13 },
+  // L'OR, PLUS LE CYAN (08/11/2026) — même règle que tout le reste de l'app :
+  // une action principale est en or plein, une action secondaire bordée d'or.
   boutonPrincipal: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.or,
     borderRadius: 12,
-    padding: 14,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: espacement.m,
   },
-  boutonPrincipalTexte: { color: colors.texte, fontWeight: '700' },
+  boutonPrincipalTexte: { color: da.orSombre, fontWeight: '900', letterSpacing: 0.3 },
   boutonSecondaire: {
-    backgroundColor: colors.carteClaire,
+    backgroundColor: da.orVoile,
     borderRadius: 12,
-    padding: 14,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: espacement.s,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: da.bordureOrDouce,
   },
-  boutonSecondaireTexte: { color: colors.accent, fontWeight: '700' },
-  message: { color: colors.or, fontWeight: '700', marginTop: espacement.s, textAlign: 'center' },
+  boutonSecondaireTexte: { color: colors.or, fontWeight: '800' },
+  message: { color: colors.or, fontWeight: '700', marginTop: espacement.s },
   lienAnnuler: { color: colors.texteGris, textAlign: 'center', marginTop: espacement.m, fontSize: 13 },
 });

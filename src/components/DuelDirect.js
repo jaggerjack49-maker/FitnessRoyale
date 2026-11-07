@@ -7,6 +7,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { colors, espacement } from '../theme';
 import { baremes } from '../data/clubSP';
 import { comptageVictoires, exerciceAleatoireIA } from '../logic/duels';
+import { da } from '../designSystem';
+import { TexteIcone, LibelleIcone } from './Icones';
 
 const RECOMPENSE = 150;
 
@@ -58,7 +60,7 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
       return;
     }
     if (m === l) {
-      setMessage('Égalité ! Personne ne marque : rejouez ce round. 💪');
+      setMessage('Égalité ! Personne ne marque : rejouez ce round.');
       setMesReps('');
       setSesReps('');
       return;
@@ -99,7 +101,7 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
   if (etape === 'config') {
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>⚡ Duel en direct</Text>
+        <TexteIcone nom="eclair" taille={20} couleur={colors.or} style={styles.titre}>Duel en direct</TexteIcone>
         <Text style={styles.explication}>
           Vous êtes deux dans la salle, un seul téléphone : il sert d'arbitre.
           Charge fixe, le plus de répétitions gagne, premier à 2 victoires.
@@ -127,15 +129,27 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
     const gagne = victoires.moi >= 2;
     return (
       <View style={styles.carte}>
-        <Text style={styles.titre}>{gagne ? '🏆 Victoire !' : '💀 Défaite…'}</Text>
+        <TexteIcone
+          nom={gagne ? 'competition' : 'croix'}
+          taille={20}
+          couleur={gagne ? colors.or : colors.rouge}
+          style={styles.titre}
+        >
+          {gagne ? 'Victoire !' : 'Défaite…'}
+        </TexteIcone>
         <Text style={styles.scoreFinal}>
           {moi.pseudo} {victoires.moi} — {victoires.lui} {adversaire}
         </Text>
         {rounds.map((r, i) => (
-          <Text key={i} style={styles.resumeRound}>
-            R{i + 1} · {r.exercice} @ {r.charge} kg : {r.mesReps} vs {r.sesReps}{' '}
-            {r.mesReps > r.sesReps ? '✅' : '❌'}
-          </Text>
+          <TexteIcone
+            key={i}
+            nom={r.mesReps > r.sesReps ? 'valide' : 'croix'}
+            taille={14}
+            couleur={r.mesReps > r.sesReps ? colors.vert : colors.rouge}
+            style={styles.resumeRound}
+          >
+            R{i + 1} · {r.exercice} @ {r.charge} kg : {r.mesReps} vs {r.sesReps}
+          </TexteIcone>
         ))}
         <Text style={styles.explication}>
           {gagne ? `+${RECOMPENSE} points pour toi !` : 'Pas de points cette fois — entraîne-toi et prends ta revanche !'}
@@ -163,10 +177,12 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
 
       {roundIA ? (
         exercice ? (
-          <Text style={styles.choixIA}>🤖 {exercice} @ {charge} kg</Text>
+          <TexteIcone nom="de" taille={16} couleur={colors.or} style={styles.choixIA}>
+            {exercice} @ {charge} kg
+          </TexteIcone>
         ) : (
           <TouchableOpacity style={styles.boutonSecondaire} onPress={lancerRoundIA}>
-            <Text style={styles.boutonSecondaireTexte}>🎲 Tirer l'exercice au sort</Text>
+            <LibelleIcone nom="de" taille={15} style={styles.boutonSecondaireTexte}>Tirer l'exercice au sort</LibelleIcone>
           </TouchableOpacity>
         )
       ) : (
@@ -201,9 +217,9 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
 
       {exercice !== null && (
         <>
-          <Text style={styles.explication}>
-            💪 À vous de jouer ! Faites votre série chacun votre tour, puis entrez les reps.
-          </Text>
+          <TexteIcone nom="entrainement" taille={14} couleur={colors.or} hautAligne style={styles.explication}>
+            À vous de jouer ! Faites votre série chacun votre tour, puis entrez les reps.
+          </TexteIcone>
           <View style={styles.ligneReps}>
             <View style={{ flex: 1 }}>
               <Text style={styles.libelle}>{moi.pseudo}</Text>
@@ -275,26 +291,30 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.bordure,
     backgroundColor: colors.carteClaire,
   },
-  choixIA: { color: colors.accent, fontWeight: '800', fontSize: 16, marginVertical: espacement.s },
+  choixIA: { color: colors.or, fontWeight: '800', fontSize: 16, marginVertical: espacement.s },
   ligneReps: { flexDirection: 'row', gap: 10 },
   resumeRound: { color: colors.texteGris, fontSize: 13, marginTop: 4 },
+  // L'OR, PLUS LE CYAN (08/11/2026) : action principale en or plein, action
+  // secondaire bordée d'or — la règle de l'onglet Entraînement.
   boutonPrincipal: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.or,
     borderRadius: 12,
-    padding: 14,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: espacement.m,
   },
-  boutonPrincipalTexte: { color: colors.texte, fontWeight: '700' },
+  boutonPrincipalTexte: { color: da.orSombre, fontWeight: '900', letterSpacing: 0.3 },
   boutonSecondaire: {
-    backgroundColor: colors.carteClaire,
+    backgroundColor: da.orVoile,
     borderRadius: 12,
-    padding: 14,
+    minHeight: 48,
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: da.bordureOrDouce,
   },
-  boutonSecondaireTexte: { color: colors.accent, fontWeight: '700' },
+  boutonSecondaireTexte: { color: colors.or, fontWeight: '800' },
   message: { color: colors.or, fontWeight: '700', marginTop: espacement.s, textAlign: 'center' },
   lienAnnuler: { color: colors.texteGris, textAlign: 'center', marginTop: espacement.m, fontSize: 13 },
 });

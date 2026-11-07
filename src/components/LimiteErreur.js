@@ -24,7 +24,11 @@ export default class LimiteErreur extends React.Component {
     if (this.state.erreur) {
       return (
         <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-          <Text style={styles.titre}>💥 Erreur d'affichage</Text>
+          {/* Texte pur, SANS icône dessinée (08/11/2026) : cet écran est le
+              filet qui s'affiche quand un autre plante. Le faire dépendre du
+              moteur SVG, c'est risquer qu'il plante à son tour si c'est
+              justement ce moteur qui a cassé. */}
+          <Text style={styles.titre}>Erreur d'affichage</Text>
           <Text style={styles.message}>{String(this.state.erreur?.message || this.state.erreur)}</Text>
           <Text style={styles.sousTitre}>Composants concernés :</Text>
           <Text style={styles.pile}>{this.state.infos?.componentStack || 'inconnue'}</Text>

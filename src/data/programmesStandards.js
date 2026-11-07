@@ -13,7 +13,6 @@ export const programmesStandards = [
   {
     id: 'ppl6',
     nom: 'Push Pull Legs — 6 jours',
-    emoji: '🔥',
     description:
       "Le classique : pousser (pectoraux/épaules/triceps), tirer (dos/biceps), jambes — chaque famille travaillée 2 fois par semaine.",
     seances: [
@@ -58,7 +57,6 @@ export const programmesStandards = [
   {
     id: 'ppl3',
     nom: 'Push Pull Legs — 3 jours',
-    emoji: '💼',
     description:
       'La même logique Push/Pull/Legs, mais une seule fois par semaine — idéal si tu as peu de temps.',
     seances: [
@@ -97,7 +95,6 @@ export const programmesStandards = [
   {
     id: 'fullbody3',
     nom: 'Full Body — 3 jours',
-    emoji: '🧱',
     description:
       'Tout le corps à chaque séance, 3 fois par semaine — parfait pour débuter et progresser vite.',
     seances: [
@@ -118,7 +115,6 @@ export const programmesStandards = [
   {
     id: 'upperlower4',
     nom: 'Upper / Lower — 4 jours',
-    emoji: '⚖️',
     description:
       'Haut du corps / bas du corps en alternance, 2 fois chacun par semaine — bon équilibre volume/récupération.',
     seances: [

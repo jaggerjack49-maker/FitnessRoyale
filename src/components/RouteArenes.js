@@ -12,6 +12,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { colors, espacement } from '../theme';
 import { couleursLigues } from '../data/clubSP';
 import { seuilMoyenne } from '../data/arenes';
+import { Icone } from './Icones';
 
 export default function RouteArenes({ arenes, indexActuel, nbExercices }) {
   // Du sommet vers la base.
@@ -44,9 +45,16 @@ export default function RouteArenes({ arenes, indexActuel, nbExercices }) {
                   actuelle && { backgroundColor: couleur },
                 ]}
               >
-                <Text style={[styles.embleme, !atteinte && styles.emblemeVerrouille]}>
-                  {arene.embleme}
-                </Text>
+                {/* Sur la pastille PLEINE de l'arène actuelle, l'emblème passe
+                    en sombre pour rester lisible ; ailleurs il prend la couleur
+                    de la ligue (estompée si l'arène est verrouillée). */}
+                <View style={!atteinte && styles.emblemeVerrouille}>
+                  <Icone
+                    nom={arene.icone}
+                    taille={22}
+                    couleur={actuelle ? colors.fond : atteinte ? couleur : colors.texteGris}
+                  />
+                </View>
               </View>
 
               <View style={{ flex: 1 }}>
@@ -63,22 +71,25 @@ export default function RouteArenes({ arenes, indexActuel, nbExercices }) {
                 </Text>
               </View>
 
-              <Text style={styles.etat}>{franchie ? '✅' : actuelle ? '📍' : '🔒'}</Text>
+              <View style={styles.etat}>
+                <Icone
+                  nom={franchie ? 'valide' : actuelle ? 'repere' : 'cadenas'}
+                  taille={18}
+                  couleur={franchie ? colors.vert : actuelle ? couleur : colors.texteGris}
+                />
+              </View>
             </View>
 
             {/* La flèche qui relie deux étapes de la route */}
             {!derniere && (
               <View style={styles.liaison}>
-                <Text
-                  style={[
-                    styles.fleche,
-                    // La flèche s'allume si l'étape du DESSOUS est déjà atteinte
-                    // (c'est le chemin que le joueur a parcouru ou va parcourir).
-                    { color: duHautVersLeBas[position + 1].index <= indexActuel ? couleur : colors.bordure },
-                  ]}
-                >
-                  ⬆️
-                </Text>
+                {/* La flèche s'allume si l'étape du DESSOUS est déjà atteinte
+                    (c'est le chemin que le joueur a parcouru ou va parcourir). */}
+                <Icone
+                  nom="chevron-haut"
+                  taille={16}
+                  couleur={duHautVersLeBas[position + 1].index <= indexActuel ? couleur : colors.bordure}
+                />
               </View>
             )}
           </View>
@@ -105,11 +116,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, backgroundColor: colors.fond,
   },
-  embleme: { fontSize: 22 },
   emblemeVerrouille: { opacity: 0.3 },
   nom: { fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
   detail: { color: colors.texteGris, fontSize: 11, marginTop: 2 },
-  etat: { fontSize: 16 },
+  etat: { width: 26, alignItems: 'center' },
   liaison: { alignItems: 'center', paddingVertical: 2 },
-  fleche: { fontSize: 13 },
 });

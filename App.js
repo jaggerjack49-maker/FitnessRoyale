@@ -23,8 +23,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from './src/theme';
-import { largeurMaxContenu } from './src/designSystem';
+import { colors, espacement } from './src/theme';
+import { da, largeurMaxContenu } from './src/designSystem';
 import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
 import useRetour from './src/useRetour';
@@ -609,37 +609,48 @@ function AppInterne() {
       </ScrollView>
       </View>
 
-      {/* Barre d'onglets en bas — piste « Arène » : icône pleine ligne, et sur
-          l'onglet actif un liseré or au-dessus + une pastille voilée d'or. */}
+      {/* BARRE D'ONGLETS — LA CAPSULE FLOTTANTE (08/11/2026).
+          Demande de Hafiz : « change la DA de la barre des onglets en
+          t'inspirant des images de l'appli que je t'ai envoyées »
+          (icones/IMG_1824 à 1828). Ce qu'on en reprend : une CAPSULE détachée
+          des bords, gris sombre à liseré fin, et l'onglet actif posé dans une
+          PASTILLE arrondie teintée, icône ET libellé à la couleur d'accent.
+          ⚠️ DEUX ÉCARTS ASSUMÉS :
+          - la couleur reste l'OR, pas le vert de la maquette (même règle que
+            la refonte de l'Entraînement : on reprend la mise en page, jamais
+            la palette — l'or pilote toute l'identité de l'app) ;
+          - la capsule reste DANS LE FLUX au lieu de flotter PAR-DESSUS le
+            contenu. Posée dessus, elle cacherait le bas des six écrans, qu'il
+            faudrait tous rembourrer pour qu'on puisse encore toucher leur
+            dernier bouton. Le rendu est le même : une capsule sur le fond. */}
       {avertissementQuitter && (
         <View style={styles.avertissementQuitter} pointerEvents="none">
           <Text style={styles.avertissementQuitterTexte}>Appuie encore une fois pour quitter</Text>
         </View>
       )}
-      <View style={styles.barreOnglets}>
-        {ONGLETS.map((o) => {
-          const actif = o.cle === ongletActif;
-          const couleur = actif ? colors.or : colors.texteGris;
-          const Icone = ICONES_ONGLETS[o.cle];
-          return (
-            <TouchableOpacity
-              key={o.cle}
-              style={styles.onglet}
-              onPress={() => setOngletActif(o.cle)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: actif }}
-              accessibilityLabel={o.libelle}
-            >
-              {actif && <View style={styles.ongletLisere} />}
-              <View style={[styles.ongletPastille, actif && styles.ongletPastilleActive]}>
+      <View style={styles.socleOnglets}>
+        <View style={styles.barreOnglets}>
+          {ONGLETS.map((o) => {
+            const actif = o.cle === ongletActif;
+            const couleur = actif ? colors.or : colors.texteGris;
+            const Icone = ICONES_ONGLETS[o.cle];
+            return (
+              <TouchableOpacity
+                key={o.cle}
+                style={[styles.onglet, actif && styles.ongletActif]}
+                onPress={() => setOngletActif(o.cle)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: actif }}
+                accessibilityLabel={o.libelle}
+              >
                 <Icone taille={20} couleur={couleur} />
-              </View>
-              <Text style={[styles.ongletLibelle, { color: couleur }]} numberOfLines={1}>
-                {o.libelle}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text style={[styles.ongletLibelle, { color: couleur }]} numberOfLines={1}>
+                  {o.libelle}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -660,38 +671,52 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   avertissementQuitter: {
-    position: 'absolute', left: 0, right: 0, bottom: 90, alignItems: 'center',
+    position: 'absolute', left: 0, right: 0, bottom: 96, alignItems: 'center',
   },
   avertissementQuitterTexte: {
     color: colors.texte, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 18,
     paddingHorizontal: 16, paddingVertical: 8, fontWeight: '700', overflow: 'hidden',
   },
+  // Le socle : le fond de l'app autour de la capsule, c'est lui qui donne
+  // l'impression qu'elle flotte.
+  socleOnglets: {
+    backgroundColor: colors.fond,
+    paddingHorizontal: espacement.s + 2,
+    paddingTop: 6,
+    paddingBottom: 10,
+  },
+  // La capsule elle-même. Bornée comme le contenu (même largeur maximale) :
+  // sur un ordinateur, une barre de 1000 px de long n'aurait plus rien d'une
+  // capsule.
   barreOnglets: {
     flexDirection: 'row',
-    backgroundColor: colors.carte,
-    borderTopWidth: 1,
-    borderTopColor: colors.bordure,
-    paddingVertical: 8,
+    width: '100%',
+    maxWidth: largeurMaxContenu,
+    alignSelf: 'center',
+    backgroundColor: da.carteHaute,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: colors.bordure,
+    padding: 5,
   },
-  onglet: { flex: 1, alignItems: 'center', gap: 5 },
-  // Liseré or au-dessus de l'onglet actif. Positioné en absolu pour ne pas
-  // décaler l'icône : il déborde sur le padding de la barre.
-  ongletLisere: {
-    position: 'absolute',
-    top: -8,
-    width: 26,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: colors.or,
-  },
-  ongletPastille: {
-    width: 34,
-    height: 26,
-    borderRadius: 8,
+  // ⚠️ TOUS les onglets portent une bordure — transparente quand ils sont
+  // inactifs. Sans ça, l'onglet actif (bordé) serait 2 px plus haut que ses
+  // voisins et toute la rangée sautillerait à chaque changement.
+  onglet: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
+    minHeight: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  // Même teinte que colors.or (#e8b23a), à 8 % : un voile, pas un bouton.
-  ongletPastilleActive: { backgroundColor: 'rgba(232, 178, 58, 0.08)' },
-  ongletLibelle: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.5 },
+  // La pastille de l'onglet actif : un voile d'or et un liseré d'or à peine
+  // plus marqué — exactement le traitement de la maquette, en or.
+  ongletActif: {
+    backgroundColor: da.orVoileFort,
+    borderColor: 'rgba(232, 178, 58, 0.22)',
+  },
+  ongletLibelle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
 });
