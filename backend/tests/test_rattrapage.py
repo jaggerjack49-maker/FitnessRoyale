@@ -61,5 +61,43 @@ class TestRattrapage(unittest.TestCase):
                 )
 
 
+class TestMasquageRattrapage(unittest.TestCase):
+    """Le bouton « Masquer » de la section « À rattraper » (08/11/2026).
+
+    Règle verrouillée : masquer cache les séances AFFICHÉES ; une séance
+    manquée ensuite fait revenir la section, avec elle seule. Et une mémoire
+    locale abîmée ne fait jamais planter l'accueil de l'onglet.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if shutil.which("node") is None:
+            raise unittest.SkipTest(
+                "Node n'est pas installé : impossible d'exécuter le code de l'app."
+            )
+        sortie = subprocess.run(
+            ["node", "--import", "./resolveur.mjs", "harnais_masquage_rattrapage.mjs"],
+            cwd=HARNAIS, capture_output=True, text=True, encoding="utf-8", timeout=120,
+        )
+        if sortie.returncode != 0:
+            raise AssertionError(
+                "Le harnais de masquage n'a pas pu tourner :\n" + (sortie.stderr or "")
+            )
+        cls.resultats = json.loads(sortie.stdout)
+
+    def test_tous_les_cas_de_masquage(self):
+        self.assertGreater(len(self.resultats), 0, "aucun cas n'a été exécuté")
+        for resultat in self.resultats:
+            with self.subTest(cas=resultat["nom"]):
+                self.assertNotIn(
+                    "erreur", resultat,
+                    f"le calcul a planté : {resultat.get('erreur')}"
+                )
+                self.assertEqual(
+                    resultat["obtenu"], resultat["attendu"],
+                    f"cas « {resultat['nom']} »"
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

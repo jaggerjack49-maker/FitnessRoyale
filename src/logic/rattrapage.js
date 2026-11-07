@@ -105,4 +105,38 @@ export function seancesARattraper({ programmes, planning, entrainements, lundiIS
   return manquees;
 }
 
+// ---------------------------------------------------------------------------
+// MASQUER LES SÉANCES À RATTRAPER (demande de Hafiz du 08/11/2026 : « ajoute
+// un moyen de supprimer l'affichage des séances à rattraper, c'est encombrant »)
+// ---------------------------------------------------------------------------
+// « Masquer » cache les séances AFFICHÉES À CET INSTANT, par leur clé (date +
+// programme). Conséquence voulue : si une NOUVELLE séance est manquée plus
+// tard, la section revient — avec elle seule.
+// POURQUOI CE SENS-LÀ plutôt que « masquer la section pour toujours » : un
+// geste distrait ferait perdre l'info pour de bon, et on ne saurait plus
+// jamais qu'on a raté une séance. Ici on ignore ce qu'on a VU, on reste
+// prévenu de ce qu'on n'a PAS vu.
+// Rien n'est perdu : le calendrier garde son « ! » rouge sur les jours manqués.
+
+// La clé d'une séance manquée : sa date prévue et son programme.
+export function cleRattrapage(manquee) {
+  if (!manquee || !manquee.programme) return '';
+  return `${manquee.date}|${manquee.programme.id}`;
+}
+
+// Les séances manquées encore à MONTRER, une fois retirées celles masquées.
+export function rattrapagesVisibles(manquees, masquees) {
+  const masque = new Set(Array.isArray(masquees) ? masquees : []);
+  return (Array.isArray(manquees) ? manquees : [])
+    .filter((m) => m && m.programme && !masque.has(cleRattrapage(m)));
+}
+
+// Le ménage de la mémoire : une clé d'une semaine PASSÉE ne peut plus jamais
+// correspondre à rien (le calcul ne regarde que la semaine en cours), on la
+// jette. Sans ça la liste grossirait d'une semaine sur l'autre, sans fin.
+export function masquesAGarder(masquees, lundiISO) {
+  return (Array.isArray(masquees) ? masquees : [])
+    .filter((cle) => typeof cle === 'string' && cle.slice(0, 10) >= String(lundiISO || ''));
+}
+
 export { joursSemaine };

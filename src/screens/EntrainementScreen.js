@@ -48,6 +48,7 @@ import {
 } from '../logic/bloc';
 import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
+  cleRattrapage, rattrapagesVisibles, masquesAGarder,
 } from '../logic/rattrapage';
 
 // BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
@@ -796,6 +797,29 @@ export default function EntrainementScreen({
   const [brouillonObjectifs, setBrouillonObjectifs] = useState({}); // saisie en cours (texte)
   const [exerciceAClasser, setExerciceAClasser] = useState(null);
   const [recordsOuverts, setRecordsOuverts] = useState(false);
+
+  // ---- Les séances à rattraper que l'utilisateur a MASQUÉES (08/11/2026) ----
+  // Une préférence d'AFFICHAGE, propre à ce téléphone : elle vit dans
+  // AsyncStorage, rangée par joueur, et jamais sur le serveur (rien à
+  // partager, rien à garantir — au pire, la section réapparaît). Les règles
+  // (quoi montrer, quoi garder en mémoire) vivent dans src/logic/rattrapage.js.
+  const cleMasques = `fitnessRoyale.rattrapagesMasques.${moi.id}`;
+  const [rattrapagesMasques, setRattrapagesMasques] = useState([]);
+  useEffect(() => {
+    let annule = false;
+    AsyncStorage.getItem(cleMasques)
+      .then((brut) => {
+        if (annule || !brut) return;
+        try {
+          const liste = JSON.parse(brut);
+          setRattrapagesMasques(Array.isArray(liste) ? liste : []);
+        } catch {
+          // Mémoire illisible : on affiche tout, comme avant.
+        }
+      })
+      .catch(() => {});
+    return () => { annule = true; };
+  }, [cleMasques]);
 
   // ---- Rappel de SUIVI : le point hebdo sur le volume (≠ rappel de séance) ----
   const [suiviJour, setSuiviJour] = useState('dimanche');
@@ -3107,7 +3131,25 @@ export default function EntrainementScreen({
   const manquees = seancesARattraper({
     programmes, planning, entrainements, lundiISO: debutSemaineISO, jourJ,
   });
+  // ⚠️ Le CALENDRIER garde TOUTES les séances manquées (son « ! » rouge) ;
+  // seule la section « À rattraper » de l'accueil tient compte du masquage.
+  // C'est ce qui fait que masquer ne perd aucune information.
   const datesManquees = new Set(manquees.map((m) => m.date));
+  const manqueesVisibles = rattrapagesVisibles(manquees, rattrapagesMasques);
+
+  // Masque les séances affichées À CET INSTANT. Une séance manquée plus tard
+  // fera revenir la section, avec elle seule (voir src/logic/rattrapage.js).
+  function masquerRattrapages() {
+    const nouvelle = masquesAGarder(
+      [...rattrapagesMasques, ...manqueesVisibles.map(cleRattrapage)],
+      debutSemaineISO,
+    );
+    setRattrapagesMasques(nouvelle);
+    AsyncStorage.setItem(cleMasques, JSON.stringify(nouvelle)).catch(() => {
+      // Pas grave : la section est masquée pour cette ouverture de l'app, elle
+      // reviendra simplement au prochain lancement.
+    });
+  }
 
   // UN PROGRAMME EST-IL EN SERVICE ? (27/08/2026, demande de Hafiz : « si un
   // programme est enregistré et utilisé, la semaine type disparaît »)
@@ -4390,17 +4432,31 @@ export default function EntrainementScreen({
       ))}
 
       {/* ---- Les séances manquées de la semaine, et leur rattrapage ---- */}
-      {manquees.length > 0 && (
+      {manqueesVisibles.length > 0 && (
         <View style={styles.carteRattrapage}>
-          <TexteIcone nom="horloge" taille={16} style={styles.titreRattrapage}>
-            À rattraper cette semaine ({manquees.length})
-          </TexteIcone>
+          <View style={styles.enteteRattrapage}>
+            <TexteIcone nom="horloge" taille={16} style={styles.titreRattrapage}>
+              À rattraper cette semaine ({manqueesVisibles.length})
+            </TexteIcone>
+            {/* « Masquer » (08/11/2026, « c'est encombrant ») : cache ces
+                séances-là ; une NOUVELLE séance manquée fera revenir la
+                section. Les jours restent marqués « ! » au calendrier. */}
+            <TouchableOpacity
+              style={styles.boutonMasquerRattrapage}
+              onPress={masquerRattrapages}
+              accessibilityLabel="Masquer les séances à rattraper"
+            >
+              <LibelleIcone nom="croix" taille={13} ecart={5} style={styles.texteMasquerRattrapage}>
+                Masquer
+              </LibelleIcone>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.indice}>
             Ces séances étaient prévues et n'ont pas été faites. La rattraper
             l'enregistre à la date d'AUJOURD'HUI — on ne réécrit pas le
             calendrier, on comble le trou.
           </Text>
-          {manquees.map(({ date, programme }) => (
+          {manqueesVisibles.map(({ date, programme }) => (
             <View key={`${date}-${programme.id}`} style={styles.detailJour}>
               <Text style={styles.nomProgrammeTexte}>{programme.nom}</Text>
               <Text style={styles.indice}>prévue {libelleDate(date)}</Text>
@@ -5077,7 +5133,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
     borderWidth: 1, borderColor: colors.rouge, marginBottom: espacement.m,
   },
-  titreRattrapage: { color: colors.rouge, fontWeight: '800', marginBottom: 4 },
+  enteteRattrapage: { flexDirection: 'row', alignItems: 'center', gap: espacement.s, marginBottom: 4 },
+  titreRattrapage: { flex: 1, color: colors.rouge, fontWeight: '800' },
+  // Un geste qui ne détruit rien : bordé, discret, gris — pas rouge.
+  boutonMasquerRattrapage: {
+    minHeight: 40, justifyContent: 'center', paddingHorizontal: 12,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.bordure,
+  },
+  texteMasquerRattrapage: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
   bandeauRattrapage: {
     color: colors.or, fontSize: 12, lineHeight: 17, marginBottom: espacement.s,
   },

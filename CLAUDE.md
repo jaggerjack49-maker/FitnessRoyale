@@ -4780,6 +4780,47 @@ dans une parenthèse qui n'en attend qu'une) — page blanche. Vu au rechargemen
 corrigé en rentrant le commentaire dans le bouton. D'où le passage de TOUS les
 fichiers au parseur avant la vérification finale.
 
+## « Masquer » les séances à rattraper — 08/11/2026
+
+Demande de Hafiz : « ajoute un moyen de supprimer l'affichage des séances à
+rattraper, c'est encombrant ». Sur un compte qui rate quelques jours, la carte
+rouge « À rattraper cette semaine » empilait une carte par séance manquée, en
+plein milieu de l'accueil.
+
+- Un bouton **« Masquer »** dans l'en-tête de la carte (bordé, gris : un geste
+  qui ne détruit rien n'a pas à être rouge ; 40 px de haut).
+- ⚠️ **IL MASQUE LES SÉANCES AFFICHÉES, PAS LA SECTION POUR TOUJOURS.** Chaque
+  séance manquée a une clé (date prévue + programme, `cleRattrapage`) ; on
+  retient celles qu'on a vues. Une séance manquée ENSUITE fait revenir la
+  carte, avec elle seule. Raison : un « masquer pour toujours » touché par
+  distraction ferait perdre l'info pour de bon — on ne saurait plus jamais
+  qu'on a raté une séance.
+- **Rien n'est perdu** : le calendrier garde son « ! » rouge sur les jours
+  manqués (`datesManquees` continue de lire TOUTES les séances manquées ; seule
+  la carte lit `manqueesVisibles`), et « Rattraper » reste possible depuis le
+  jour du calendrier.
+- Une PRÉFÉRENCE D'AFFICHAGE, donc dans AsyncStorage, par joueur
+  (`fitnessRoyale.rattrapagesMasques.<id>`), jamais sur le serveur. Mémoire
+  illisible → tout s'affiche, comme avant.
+- Le ménage est automatique (`masquesAGarder`) : les clés d'une semaine passée
+  sont jetées à chaque masquage, sinon la liste grossirait sans fin.
+- Les trois règles vivent dans `src/logic/rattrapage.js`, pas dans l'écran.
+
+Vérifié : `harnais_masquage_rattrapage.mjs` + `TestMasquageRattrapage`
+(15 cas, dont des mémoires corrompues) ; **5 mutations vues échouer** chacune
+sur son cas (clé sans le programme, tout masquer d'un coup, entrées abîmées non
+filtrées, ménage qui ne jette rien, ménage qui jette le lundi). Suite complète :
+**350 tests, tous OK.** Dans l'app (backend LOCAL, `SondeTest`, 400 px) : carte
+« (3) » → « Masquer » → carte disparue, 3 clés en mémoire, les deux « ! »
+toujours au calendrier ; carte toujours masquée après rechargement ; une clé
+retirée de la mémoire (= une séance manquée « neuve ») → la carte revient avec
+« (1) Épaules » seule. Zéro erreur console après rechargement propre.
+
+À SAVOIR (vu au passage, pas touché) : sur ce compte de test, « Push prévue
+lundi 2 novembre » apparaît DEUX fois — deux programmes distincts nommés
+« Push » (ids 19 et 20) prévus le même jour. C'est fidèle aux données, pas un
+doublon d'affichage.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4792,7 +4833,7 @@ fichiers au parseur avant la vérification finale.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (349 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (350 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
