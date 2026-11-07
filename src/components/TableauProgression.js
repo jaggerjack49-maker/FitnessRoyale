@@ -6,11 +6,21 @@
 // qui rejoue la règle de surcharge progressive semaine après semaine. Rien
 // n'est stocké, rien n'est inventé : un exercice jamais loggé n'a pas de ligne.
 //
-// ⚠️ LA COLONNE DES EXERCICES EST FIGÉE à gauche pendant que les semaines
-// défilent horizontalement — sinon, à la troisième semaine, on ne sait plus de
-// quel exercice parle la ligne qu'on lit. C'est ce qui impose des HAUTEURS DE
-// LIGNE FIXES : les deux colonnes sont deux listes séparées, elles ne
-// s'alignent que si chaque ligne fait exactement la même hauteur des deux côtés.
+// UNE SEMAINE À LA FOIS (08/11/2026, retour de Hafiz sur l'APK : « on n'arrive
+// pas à voir les autres semaines après la semaine 1 »).
+// La première version mettait toutes les semaines côte à côte, avec un
+// défilement HORIZONTAL. Sur téléphone, il ne marchait pas : ce tableau vit
+// dans une page d'onglet, elle-même posée dans le défilement horizontal qui
+// sert à glisser d'un onglet à l'autre (voir App.js). Deux défilements
+// horizontaux imbriqués : sur Android, c'est l'extérieur qui gagne le geste.
+// Et la colonne figée des exercices imposait des hauteurs de ligne fixes, qui
+// laissaient déborder les noms longs (« Overhead Triceps Ext… »).
+// Désormais des PUCES choisissent la semaine, et le tableau n'a que quatre
+// colonnes (exercice, séries, reps, kg) qui tiennent dans la largeur : plus
+// aucun défilement horizontal, et chaque ligne prend la hauteur de son nom.
+// Ce qu'on perdait en ne voyant plus deux semaines côte à côte, la petite
+// ligne « +2,5 kg » sous chaque exercice le rend : elle dit ce qui change
+// depuis la semaine précédente.
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet,
@@ -21,13 +31,24 @@ import { TexteIcone, LibelleIcone } from './Icones';
 import { projeterProgramme, SEMAINES_MAX } from '../logic/projectionProgramme';
 import { semaineDuBloc, finDuBloc, blocADerive } from '../logic/bloc';
 
-const LARGEUR_NOMS = 116;   // la colonne figée
-const LARGEUR_CASE = 54;    // une sous-colonne (séries / reps / charge)
-const HAUTEUR_ENTETE = 46;
-const HAUTEUR_JOUR = 34;
-const HAUTEUR_LIGNE = 56;
+const LARGEUR_CASE = 54;    // une colonne de valeur (séries / reps / charge)
 
 const CHOIX_SEMAINES = [3, 4, 5, 6, 8];
+
+// Ce qui change d'une semaine à la suivante, en clair : « +2,5 kg »,
+// « +1 rep », « +1 série ». Rien si rien ne bouge.
+function progresDepuis(avant, apres) {
+  if (!avant || !apres) return null;
+  const morceaux = [];
+  const dPoids = Math.round(((apres.poids || 0) - (avant.poids || 0)) * 100) / 100;
+  const dReps = (apres.reps || 0) - (avant.reps || 0);
+  const dSeries = (apres.series || 0) - (avant.series || 0);
+  const signe = (n) => (Number(n) > 0 ? `+${n}` : `${n}`);
+  if (dSeries) morceaux.push(`${signe(dSeries)} série${Math.abs(dSeries) > 1 ? 's' : ''}`);
+  if (dReps) morceaux.push(`${signe(dReps)} rep${Math.abs(dReps) > 1 ? 's' : ''}`);
+  if (dPoids) morceaux.push(`${signe(dPoids).replace('.', ',')} kg`);
+  return morceaux.length ? `${morceaux.join(' · ')} vs semaine d'avant` : null;
+}
 
 function enTeteSemaine(semaine) {
   return semaine === 'decharge' ? 'Décharge' : `Semaine ${semaine}`;
@@ -304,6 +325,15 @@ export default function TableauProgression({
       avec_deload: avecDeload }, aujourdhui)
     : null;
 
+  // La semaine affichée : celle qu'on a touchée, sinon celle où l'on EST dans
+  // le bloc, sinon la première. Si la semaine touchée disparaît (bloc
+  // raccourci), on retombe sur ces choix par défaut.
+  const [semaineVue, setSemaineVue] = useState(null);
+  const existe = (x) => x != null && colonnes.some((c) => String(c) === String(x));
+  const semaineAffichee = existe(semaineVue) ? semaineVue
+    : existe(semaineEnCours) ? semaineEnCours
+      : colonnes[0];
+
   return (
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
       <TexteIcone nom="tableau" taille={20} couleur={colors.or} style={styles.titre}>{nom}</TexteIcone>
@@ -377,98 +407,94 @@ export default function TableauProgression({
           que tu as vraiment soulevé, il n'invente pas de charge de départ.
         </Text>
       ) : (
-        <View style={styles.grille}>
-          {/* ---- Colonne FIGÉE : les exercices ---- */}
-          <View style={{ width: LARGEUR_NOMS }}>
-            <View style={[styles.celluleEntete, { height: HAUTEUR_ENTETE }]}>
-              <Text style={styles.texteEntete}>EXERCICE</Text>
-            </View>
-            {tableau.map((bloc) => (
-              <View key={bloc.seance.id}>
-                <View style={[styles.celluleJour, { height: HAUTEUR_JOUR }]}>
-                  <Text style={styles.texteJour} numberOfLines={1}>{bloc.seance.nom}</Text>
-                </View>
-                {bloc.lignes.map((ligne) => (
-                  <View key={ligne.exercice} style={[styles.celluleNom, { height: HAUTEUR_LIGNE }]}>
-                    <Text style={styles.texteNom} numberOfLines={2}>{ligne.exercice}</Text>
-                    {ligne.fourchette ? (
-                      <Text style={styles.texteFourchette}>{ligne.fourchette} reps</Text>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            ))}
+        <>
+          {/* ---- UNE SEMAINE À LA FOIS (08/11/2026) ----
+              Les puces choisissent la semaine affichée. Elles passent à la
+              ligne au lieu de défiler : aucun défilement horizontal ici. */}
+          <Text style={styles.libelleSection}>SEMAINE AFFICHÉE</Text>
+          <View style={styles.puces}>
+            {colonnes.map((semaine) => {
+              const active = String(semaine) === String(semaineAffichee);
+              const courante = String(semaine) === String(semaineEnCours);
+              return (
+                <TouchableOpacity
+                  key={semaine}
+                  style={[styles.puceSemaine, active && styles.puceActive]}
+                  onPress={() => setSemaineVue(semaine)}
+                >
+                  <Text style={[styles.puceTexte, active && styles.puceTexteActif]}>
+                    {semaine === 'decharge' ? 'Décharge' : `Sem. ${semaine}`}
+                  </Text>
+                  {courante ? <Text style={styles.marqueCourante}>en cours</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {/* ---- Les semaines, qui défilent ---- */}
-          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ paddingRight: 4 }}>
-            <View>
-              {/* En-tête : une semaine = trois sous-colonnes */}
-              <View style={{ flexDirection: 'row' }}>
-                {colonnes.map((semaine) => (
-                  <View
-                    key={semaine}
-                    style={[
-                      styles.celluleEntete,
-                      { width: LARGEUR_CASE * 3, height: HAUTEUR_ENTETE },
-                      semaine === 'decharge' && styles.celluleDecharge,
-                      String(semaine) === String(semaineEnCours) && styles.celluleCourante,
-                    ]}
-                  >
-                    <Text style={[styles.texteEntete,
-                      String(semaine) === String(semaineEnCours) && styles.texteEnteteCourante,
-                    ]} numberOfLines={1}>
-                      {enTeteSemaine(semaine)}
-                    </Text>
-                    <Text style={styles.texteSousEntete}>Séries · Reps · Kg</Text>
-                  </View>
-                ))}
-              </View>
+          <View style={styles.grille}>
+            <View style={[styles.ligneTableau, styles.ligneEntete]}>
+              <Text style={[styles.texteEntete, styles.colNom]}>
+                {enTeteSemaine(semaineAffichee).toUpperCase()}
+              </Text>
+              <Text style={[styles.texteEntete, styles.colValeur]}>SÉRIES</Text>
+              <Text style={[styles.texteEntete, styles.colValeur]}>REPS</Text>
+              <Text style={[styles.texteEntete, styles.colValeur]}>KG</Text>
+            </View>
 
-              {tableau.map((bloc) => (
-                <View key={bloc.seance.id}>
-                  <View style={[styles.celluleJour, {
-                    height: HAUTEUR_JOUR, width: LARGEUR_CASE * 3 * Math.max(1, colonnes.length),
-                  }]}>
-                    <Text style={styles.texteJour} numberOfLines={1}>
-                      {(bloc.seance.jours || []).join(' · ') || 'sans jour fixé'}
+            {tableau.map((bloc) => (
+              <View key={bloc.seance.id}>
+                <View style={styles.celluleJour}>
+                  <Text style={styles.texteJour}>
+                    {bloc.seance.nom}
+                    <Text style={styles.texteJourDiscret}>
+                      {'  ·  '}{(bloc.seance.jours || []).join(' · ') || 'sans jour fixé'}
                     </Text>
-                  </View>
-                  {bloc.lignes.map((ligne) => (
-                    <View key={ligne.exercice} style={{ flexDirection: 'row' }}>
-                      {ligne.semaines.length === 0 ? (
-                        <View style={[styles.caseVide, {
-                          height: HAUTEUR_LIGNE, width: LARGEUR_CASE * 3 * Math.max(1, colonnes.length),
-                        }]}>
-                          <Text style={styles.texteVide}>
-                            jamais fait — rien à projeter
-                          </Text>
-                        </View>
-                      ) : ligne.semaines.map((s) => (
-                        <TouchableOpacity
-                          key={s.semaine}
-                          style={[
-                            styles.groupeSemaine,
-                            { height: HAUTEUR_LIGNE },
-                            s.semaine === 'decharge' && styles.celluleDecharge,
-                            s.source === 'manuel' && styles.celluleManuelle,
-                          ]}
-                          onPress={() => setCaseOuverte({
-                            programmeId: bloc.seance.id, exercice: ligne.exercice, ligne: s,
-                          })}
-                        >
+                  </Text>
+                </View>
+                {bloc.lignes.map((ligne) => {
+                  const index = ligne.semaines.findIndex(
+                    (x) => String(x.semaine) === String(semaineAffichee));
+                  const s = index >= 0 ? ligne.semaines[index] : null;
+                  const progres = s && index > 0 && s.semaine !== 'decharge'
+                    ? progresDepuis(ligne.semaines[index - 1], s) : null;
+                  return (
+                    <TouchableOpacity
+                      key={ligne.exercice}
+                      disabled={!s}
+                      style={[
+                        styles.ligneTableau,
+                        s && s.semaine === 'decharge' && styles.celluleDecharge,
+                        s && s.source === 'manuel' && styles.celluleManuelle,
+                      ]}
+                      onPress={() => setCaseOuverte({
+                        programmeId: bloc.seance.id, exercice: ligne.exercice, ligne: s,
+                      })}
+                    >
+                      <View style={styles.colNom}>
+                        <Text style={styles.texteNom}>{ligne.exercice}</Text>
+                        {ligne.fourchette ? (
+                          <Text style={styles.texteFourchette}>{ligne.fourchette} reps</Text>
+                        ) : null}
+                        {progres ? <Text style={styles.texteProgres}>{progres}</Text> : null}
+                      </View>
+                      {s ? (
+                        <>
                           <Case valeur={s.series ?? '—'} />
                           <Case valeur={s.reps} />
                           <Case valeur={s.poids > 0 ? s.poids : '—'} fort />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
+                        </>
+                      ) : (
+                        <Text style={[styles.texteVide, styles.colVide]}>
+                          jamais fait — rien à projeter
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </>
       )}
 
       {caseOuverte ? (
@@ -526,47 +552,55 @@ const styles = StyleSheet.create({
   puceTexte: { color: colors.texteGris, fontSize: 12, fontWeight: '700' },
   puceTexteActif: { color: colors.or },
 
-  grille: { flexDirection: 'row', borderWidth: 1, borderColor: colors.bordure, borderRadius: 10 },
-  celluleEntete: {
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: colors.carteClaire,
-    borderBottomWidth: 1, borderRightWidth: 1, borderColor: colors.bordure,
+  libelleSection: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800',
+    letterSpacing: 1.5, marginBottom: espacement.s,
   },
+  puces: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: espacement.m,
+  },
+  // 44 px de haut : on la touche souvent, et debout.
+  puceSemaine: {
+    minHeight: 44, minWidth: 64, borderWidth: 1, borderColor: colors.bordure,
+    borderRadius: 12, paddingHorizontal: 12, justifyContent: 'center',
+    alignItems: 'center',
+  },
+  marqueCourante: { color: colors.or, fontSize: 9, fontWeight: '700', marginTop: 1 },
+
+  grille: {
+    borderWidth: 1, borderColor: colors.bordure, borderRadius: 10, overflow: 'hidden',
+  },
+  ligneTableau: {
+    flexDirection: 'row', alignItems: 'center', minHeight: 52,
+    paddingLeft: 10, paddingVertical: 8,
+    backgroundColor: colors.carte, borderBottomWidth: 1, borderColor: colors.bordure,
+  },
+  ligneEntete: { backgroundColor: colors.carteClaire, minHeight: 40 },
+  colNom: { flex: 1, paddingRight: 6 },
+  colValeur: { width: LARGEUR_CASE, textAlign: 'center' },
+  colVide: { width: LARGEUR_CASE * 3, textAlign: 'center' },
   texteEntete: {
     color: colors.or, fontSize: 10, fontWeight: '800', letterSpacing: 1,
   },
-  texteSousEntete: { color: colors.texteGris, fontSize: 9, marginTop: 2 },
   // Le bandeau du JOUR : c'est la barre rouge de l'image, en couleur de marque.
   celluleJour: {
-    justifyContent: 'center', paddingHorizontal: 8,
+    justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 8,
     backgroundColor: 'rgba(232, 178, 58, 0.12)',
-    borderBottomWidth: 1, borderRightWidth: 1, borderColor: colors.bordure,
+    borderBottomWidth: 1, borderColor: colors.bordure,
   },
-  texteJour: { color: colors.or, fontSize: 11, fontWeight: '800' },
-  celluleNom: {
-    justifyContent: 'center', paddingHorizontal: 8,
-    backgroundColor: colors.carte,
-    borderBottomWidth: 1, borderRightWidth: 1, borderColor: colors.bordure,
-  },
-  texteNom: { color: colors.texte, fontSize: 11, fontWeight: '700' },
-  texteFourchette: { color: colors.texteGris, fontSize: 10, marginTop: 2 },
+  texteJour: { color: colors.or, fontSize: 12, fontWeight: '800' },
+  texteJourDiscret: { color: colors.texteGris, fontWeight: '600' },
+  texteNom: { color: colors.texte, fontSize: 13, fontWeight: '700' },
+  texteFourchette: { color: colors.texteGris, fontSize: 11, marginTop: 2 },
+  texteProgres: { color: colors.vert, fontSize: 11, marginTop: 2 },
 
-  groupeSemaine: {
-    flexDirection: 'row', borderBottomWidth: 1, borderRightWidth: 1,
-    borderColor: colors.bordure, backgroundColor: colors.carte,
-  },
   celluleDecharge: { backgroundColor: colors.carteClaire },
-  // La semaine où l'on est, repérable d'un coup d'œil dans la grille.
-  celluleCourante: { backgroundColor: 'rgba(232, 178, 58, 0.12)' },
-  texteEnteteCourante: { color: colors.or },
   // Une case corrigée à la main se voit : c'est TA valeur, pas une proposition.
   celluleManuelle: { backgroundColor: 'rgba(85, 200, 240, 0.10)' },
   case: { width: LARGEUR_CASE, justifyContent: 'center', alignItems: 'center' },
   valeur: { color: colors.texte, fontSize: 13, fontFamily: monospace },
   valeurForte: { color: colors.or, fontWeight: '800', fontSize: 14 },
   suffixe: { color: colors.texteGris, fontSize: 10 },
-  caseVide: { justifyContent: 'center', paddingHorizontal: 10, backgroundColor: colors.carte,
-    borderBottomWidth: 1, borderRightWidth: 1, borderColor: colors.bordure },
   texteVide: { color: colors.texteGris, fontSize: 11, fontStyle: 'italic' },
 
   // ---- Le panneau du bloc (05/10/2026) ----

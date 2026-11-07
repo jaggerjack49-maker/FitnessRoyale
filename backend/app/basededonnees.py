@@ -499,6 +499,13 @@ def initialiser():
             conn.execute("ALTER TABLE programmes ADD COLUMN duree_semaines INTEGER")
         if not _colonne_existe(conn, "programmes", "date_debut"):
             conn.execute("ALTER TABLE programmes ADD COLUMN date_debut TEXT")
+        # LA CLÉ LOCALE D'UNE SÉANCE (08/11/2026) — l'identifiant « local-… »
+        # que l'app donne à une séance terminée. Il sert à reconnaître une
+        # séance DÉJÀ REÇUE quand l'app la renvoie (réponse perdue en route,
+        # délai dépassé) : sans elle, chaque renvoi créait un doublon.
+        # NULL pour toutes les séances d'avant : comportement inchangé.
+        if not _colonne_existe(conn, "entrainements", "cle_locale"):
+            conn.execute("ALTER TABLE entrainements ADD COLUMN cle_locale TEXT")
         # LE TABLEAU DE PROGRESSION (04/10/2026) — trois ajouts, tous additifs.
         # 1) Une FOURCHETTE de reps (« 5 - 10 ») : `reps_cibles` reste le bas,
         #    `reps_cibles_max` le haut. NULL = objectif simple, comportement
@@ -1995,21 +2002,128 @@ def ajouter_serie(entrainement_id: int, exercice: str, numero_serie: int,
         )
 
 
+def _lire_entrainement(conn, entrainement_id: int) -> dict | None:
+    ligne = conn.execute("SELECT * FROM entrainements WHERE id = ?", (entrainement_id,)).fetchone()
+    if ligne is None:
+        return None
+    entrainement = dict(ligne)
+    entrainement["series"] = [
+        dict(r) for r in conn.execute(
+            "SELECT exercice, numero_serie, reps, poids FROM series_journal "
+            "WHERE entrainement_id = ? ORDER BY id",
+            (entrainement_id,),
+        )
+    ]
+    return entrainement
+
+
 def lire_entrainement(entrainement_id: int) -> dict | None:
     """Une séance loggée avec toutes ses séries réellement effectuées."""
     with connexion() as conn:
-        ligne = conn.execute("SELECT * FROM entrainements WHERE id = ?", (entrainement_id,)).fetchone()
-        if ligne is None:
-            return None
-        entrainement = dict(ligne)
-        entrainement["series"] = [
-            dict(r) for r in conn.execute(
-                "SELECT exercice, numero_serie, reps, poids FROM series_journal "
-                "WHERE entrainement_id = ? ORDER BY id",
-                (entrainement_id,),
+        return _lire_entrainement(conn, entrainement_id)
+
+
+def _memes_series(a: list, b: list) -> bool:
+    """Deux listes de séries identiques, dans le même ordre (poids comparés en
+    nombres : 100 et 100.0 sont la même charge)."""
+    if len(a) != len(b):
+        return False
+    return all(
+        x["exercice"] == y["exercice"] and int(x["numero_serie"]) == int(y["numero_serie"])
+        and int(x["reps"]) == int(y["reps"]) and float(x["poids"]) == float(y["poids"])
+        for x, y in zip(a, b)
+    )
+
+
+def enregistrer_entrainement_complet(joueur_id: int, programme_id: int | None, jour: str,
+                                     cree_le: str, series: list, minutes: int,
+                                     cle_locale: str | None = None) -> dict:
+    """Enregistre UNE séance terminée — d'un seul bloc (08/11/2026).
+
+    Retour de Hafiz : « 14 séances gardées sur ce téléphone », qui ne
+    partaient jamais. TROIS défauts de l'ancien enregistrement, corrigés ici :
+
+    1. UN PROGRAMME SUPPRIMÉ ENTRE-TEMPS FAISAIT TOUT REFUSER. Une séance
+       attendant dans la file du téléphone pointe vers son programme ; si ce
+       programme a été supprimé depuis, la clé étrangère rejetait l'insertion
+       (erreur 500), et ce À CHAQUE renvoi, pour toujours. Le lien vers le
+       programme n'est qu'une étiquette : on le retire (comme le fait déjà
+       `ON DELETE SET NULL` pour une séance déjà enregistrée) et on garde les
+       séries, qui sont ce qui compte. Même traitement pour un programme qui
+       n'est pas à ce joueur.
+
+    2. UNE SÉANCE DÉJÀ REÇUE ÉTAIT RECRÉÉE. Si la réponse du serveur se perd
+       (délai dépassé alors que l'enregistrement a réussi), l'app renvoie la
+       séance — et le serveur en créait une deuxième. La `cle_locale` (l'id
+       « local-… » de l'app) la fait reconnaître : on renvoie celle qui existe.
+       Pour les séances envoyées AVANT cette clé, on reconnaît une séance du
+       même jour aux séries STRICTEMENT identiques (mêmes exercices, numéros,
+       reps et charges, dans le même ordre) — refaire exactement la même
+       séance deux fois le même jour, au kilo près, n'arrive pas.
+
+    3. UNE CONNEXION PAR SÉRIE. L'ancien code empruntait une connexion pour
+       la séance, puis une PAR SÉRIE, puis une pour la séance du jour : le
+       motif qui a déjà fait disparaître l'onglet le 23/09/2026. Ici tout tient
+       dans UNE connexion et UNE transaction : soit la séance est enregistrée
+       entière (séries + séance du jour), soit rien ne l'est.
+
+    Renvoie la séance enregistrée (ou celle déjà reçue), avec ses séries."""
+    with connexion() as conn:
+        # 2. Déjà reçue ?
+        if cle_locale:
+            ligne = conn.execute(
+                "SELECT id FROM entrainements WHERE joueur_id = ? AND cle_locale = ?",
+                (joueur_id, cle_locale),
+            ).fetchone()
+            if ligne is not None:
+                return _lire_entrainement(conn, ligne["id"])
+            for candidat in conn.execute(
+                "SELECT id FROM entrainements WHERE joueur_id = ? AND date = ? "
+                "AND cle_locale IS NULL ORDER BY id",
+                (joueur_id, jour),
+            ).fetchall():
+                existant = _lire_entrainement(conn, candidat["id"])
+                if _memes_series(existant["series"], series):
+                    conn.execute("UPDATE entrainements SET cle_locale = ? WHERE id = ?",
+                                 (cle_locale, candidat["id"]))
+                    existant["cle_locale"] = cle_locale
+                    return existant
+
+        # 1. Le programme existe-t-il encore, et est-il à ce joueur ?
+        if programme_id is not None:
+            proprio = conn.execute(
+                "SELECT id FROM programmes WHERE id = ? AND joueur_id = ?",
+                (programme_id, joueur_id),
+            ).fetchone()
+            if proprio is None:
+                programme_id = None
+
+        # 3. Tout d'un bloc.
+        entrainement_id = conn.execute(
+            "INSERT INTO entrainements (joueur_id, programme_id, date, cree_le, cle_locale) "
+            "VALUES (?, ?, ?, ?, ?) RETURNING id",
+            (joueur_id, programme_id, jour, cree_le, cle_locale),
+        ).lastrowid
+        if series:
+            conn.execute(
+                "INSERT INTO series_journal (entrainement_id, exercice, numero_serie, reps, poids) "
+                "VALUES " + ", ".join(["(?, ?, ?, ?, ?)"] * len(series)),
+                tuple(v for s in series for v in (
+                    entrainement_id, s["exercice"], s["numero_serie"], s["reps"], s["poids"])),
             )
-        ]
-        return entrainement
+        # La séance du jour (même règle que `enregistrer_seance_du_jour` : UNE
+        # par jour, minutes additionnées), dans la même transaction.
+        seance = conn.execute(
+            "SELECT id, minutes FROM seances WHERE joueur_id = ? AND date = ?",
+            (joueur_id, jour),
+        ).fetchone()
+        if seance is None:
+            conn.execute("INSERT INTO seances (joueur_id, date, minutes) VALUES (?, ?, ?)",
+                         (joueur_id, jour, minutes))
+        else:
+            conn.execute("UPDATE seances SET minutes = ? WHERE id = ?",
+                         (seance["minutes"] + minutes, seance["id"]))
+        return _lire_entrainement(conn, entrainement_id)
 
 
 def entrainements_du_joueur(joueur_id: int) -> list:

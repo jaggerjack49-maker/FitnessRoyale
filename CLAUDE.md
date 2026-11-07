@@ -4821,6 +4821,91 @@ lundi 2 novembre » apparaît DEUX fois — deux programmes distincts nommés
 « Push » (ids 19 et 20) prévus le même jour. C'est fidèle aux données, pas un
 doublon d'affichage.
 
+## Trois retours d'APK : la file bloquée, le tableau, la stagnation — 08/11/2026
+
+Deux captures de Hafiz (`icones/Screenshot_2026-11-07-19-3*.jpg`) et trois demandes :
+« je ne comprends pas le message des 14 séances gardées dans le téléphone »,
+« on n'arrive pas à voir les autres semaines après la semaine 1 », et « retire le
+message qui indique qu'on est bloqué sur tel poids, c'est encombrant ».
+
+### 1. « 14 séances gardées sur ce téléphone » : une file BLOQUÉE, pas un réseau absent
+
+Le message disait « elles partiront au retour du réseau » — or le réseau allait
+bien. REPRODUIT avant de corriger : une séance qui attend dans la file pointe
+vers son programme ; si ce programme a été SUPPRIMÉ entre-temps, le serveur la
+refusait (500, clé étrangère `programme_id`), à CHAQUE renvoi. Et
+`viderLaFileDAttente` s'arrêtait (`break`) à la PREMIÈRE erreur, quelle qu'elle
+soit : une seule séance refusée bloquait toutes les autres, pour toujours.
+Rien n'était perdu (tout est dans la file du téléphone), mais rien ne partait.
+
+CÔTÉ SERVEUR — `db.enregistrer_entrainement_complet` remplace les trois appels
+séparés (`creer_entrainement` + un `ajouter_serie` PAR SÉRIE +
+`enregistrer_seance_du_jour`) :
+- **programme disparu ou pas à moi → étiquette retirée** (`programme_id` NULL),
+  séries gardées. C'est le même sort que `ON DELETE SET NULL` réserve déjà à
+  une séance enregistrée. Ça vaut aussi pour l'APK DÉJÀ INSTALLÉ : c'est ce
+  correctif-là qui débloque les 14 séances de Hafiz, dès le déploiement.
+- **jamais de doublon** : colonne `cle_locale` sur `entrainements` (l'id
+  « local-… » de l'app, migration additive). Une séance renvoyée avec une clé
+  déjà vue renvoie celle qui existe. Pour une séance reçue AVANT la clé (ancien
+  serveur, réponse perdue), on la reconnaît à des séries STRICTEMENT identiques
+  le même jour — seulement quand l'envoi porte une clé, donc seulement pour un
+  RENVOI. Sans clé, comportement inchangé.
+- **une connexion, une transaction** : séance, séries (un seul INSERT
+  multi-lignes) et séance du jour, tout ou rien. L'ancien chemin empruntait
+  une connexion par série — le motif du 23/09/2026.
+
+CÔTÉ APP (`EntrainementScreen`, demande un nouvel APK) :
+- la file distingue « le serveur n'a PAS RÉPONDU » (pas de `status` → on
+  s'arrête, on réessaiera) de « le serveur a dit NON » (`status` → on note la
+  raison et on PASSE À LA SUIVANTE) ;
+- un verrou (`verrouFile`) empêche deux envois simultanés de la même séance ;
+- le bandeau a quitté l'écran de séance (il encombrait l'effort) pour le haut
+  de l'accueil, et dit la vérité : « Envoi au serveur de N séances… », ou
+  « N séances n'ont pas encore été enregistrées (le serveur n'a pas répondu à
+  temps) » + « Envoyer maintenant », ou « Le serveur a refusé N séances » + la
+  RAISON + « Réessayer » / « Les effacer du téléphone » (confirmation en deux
+  temps ; seules les séances REFUSÉES sont proposées à l'effacement).
+
+Tests : `backend/tests/test_api_file_seances.py` — 9 cas (programme supprimé,
+programme d'un autre, même clé deux fois, séance d'avant la clé reconnue, autre
+séance du même jour non confondue, même clé chez deux joueurs, sans clé
+inchangé, coût en connexions identique pour 2 et 30 séries). **8 mutations vues
+échouer**, chacune sur son cas.
+Navigateur (backend local, `SondeTest`) : file de 4 séances — n°1 sur un
+programme inexistant, n°3 invalide (0 rep) — → 1, 2 et 4 partent (la n°4 malgré
+le refus de la n°3), en base une seule fois chacune avec leur clé ; bandeau
+« Le serveur a refusé 1 séance… Raison : une série contient une valeur
+impossible » ; « Les effacer du téléphone » → question → file vide.
+
+⚠️ À SAVOIR : si une séance de la file avait en réalité été reçue par l'ancien
+serveur (réponse perdue) puis renvoyée avec succès, l'historique peut contenir
+un DOUBLON d'avant ce correctif — le nouveau code n'en crée plus, il ne
+nettoie pas ceux d'avant.
+
+### 2. Le tableau de progression : une semaine à la fois
+
+Le défilement HORIZONTAL des semaines ne marchait pas sur téléphone : le tableau
+vit dans une page d'onglet, posée dans le défilement horizontal qui sert à
+glisser entre onglets (14/09/2026) — deux défilements horizontaux imbriqués, et
+sur Android c'est l'extérieur qui gagne. (Invisible sur le web, où les deux
+cohabitent.) La colonne figée imposait aussi des hauteurs de ligne fixes qui
+laissaient déborder les noms longs (visible sur la capture).
+`TableauProgression` affiche maintenant UNE semaine, choisie par des puces
+(« Sem. 1 … Décharge », qui passent à la ligne — aucun défilement horizontal),
+la semaine en cours du bloc marquée « en cours » et choisie par défaut. Quatre
+colonnes (exercice, séries, reps, kg), des lignes de hauteur libre, et sous
+chaque exercice « +2,5 kg vs semaine d'avant » pour ne pas perdre la lecture
+de la progression. Les constantes `HAUTEUR_*` ont disparu.
+
+### 3. L'alerte « Bloqué à X kg depuis 3 séances » est retirée de la séance
+
+Seul l'affichage disparaît ; `detecterStagnation` reste dans
+`src/logic/surchargeProgressive.js` (et dans le harnais de robustesse), prête
+pour un bilan si on la veut ailleurs.
+
+Suite complète : **359 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4833,7 +4918,7 @@ doublon d'affichage.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (350 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (359 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

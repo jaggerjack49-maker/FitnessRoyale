@@ -310,6 +310,9 @@ class NouvelEntrainement(BaseModel):
     programme_id: int | None = None
     date: str | None = None  # 'AAAA-MM-JJ' — par défaut : aujourd'hui
     series: list[SerieLoggee] = Field(min_length=1)
+    # L'identifiant « local-… » donné par l'app (08/11/2026) : il fait
+    # reconnaître une séance déjà reçue quand l'app la renvoie. Facultatif.
+    cle_locale: str | None = Field(default=None, max_length=64)
 
 
 # ----- Endpoints -----
@@ -1690,20 +1693,23 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
         date.fromisoformat(jour)
     except ValueError:
         raise HTTPException(400, "Date invalide : utilise le format AAAA-MM-JJ.")
-    entrainement_id = db.creer_entrainement(
-        joueur_id, entrainement.programme_id, jour, datetime.now().isoformat(timespec="milliseconds")
-    )
-    for serie in entrainement.series:
-        db.ajouter_serie(entrainement_id, serie.exercice, serie.numero_serie, serie.reps, serie.poids)
+    # TOUT D'UN BLOC (08/11/2026) — séance, séries et séance du jour dans une
+    # seule transaction, sans doublon si l'app renvoie une séance déjà reçue,
+    # et sans refus si son programme a été supprimé entre-temps. Voir
+    # `db.enregistrer_entrainement_complet` : c'est ce qui bloquait les
+    # « 14 séances gardées sur ce téléphone » de Hafiz.
     # LA SÉANCE DU JOUR EST ENREGISTRÉE ICI (24/09/2026), plus seulement dans
     # l'app. Sans ça, le compteur « Cette semaine » du Profil repartait à zéro à
     # chaque connexion (il ne vivait que dans l'état React) et les défis, qui se
     # basent sur les séances du serveur, n'étaient JAMAIS réussis — le joueur
     # devait les valider à la main alors qu'il s'était bien entraîné.
-    db.enregistrer_seance_du_jour(
-        joueur_id, jour, regles_seances.duree_estimee(len(entrainement.series))
+    return db.enregistrer_entrainement_complet(
+        joueur_id, entrainement.programme_id, jour,
+        datetime.now().isoformat(timespec="milliseconds"),
+        [s.model_dump() for s in entrainement.series],
+        regles_seances.duree_estimee(len(entrainement.series)),
+        entrainement.cle_locale,
     )
-    return db.lire_entrainement(entrainement_id)
 
 
 @app.get("/joueurs/{joueur_id}/entrainements")

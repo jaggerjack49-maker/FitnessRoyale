@@ -26,7 +26,7 @@ import {
 } from '../data/groupesMusculaires';
 import {
   suggererProchaineSerie, recordPersonnel, bat_le_record,
-  detecterStagnation, tousLesRecords, AXES_PROGRESSION, AXES_PAR_DEFAUT,
+  tousLesRecords, AXES_PROGRESSION, AXES_PAR_DEFAUT,
 } from '../logic/surchargeProgressive';
 import {
   jourDeLaSeance, seriesSansJour, joursTravailles,
@@ -1193,6 +1193,12 @@ export default function EntrainementScreen({
   const [daterAujourdhui, setDaterAujourdhui] = useState(false);
   // Combien de séances terminées attendent encore d'être envoyées au serveur.
   const [nbEnAttente, setNbEnAttente] = useState(0);
+  // La file d'attente des séances terminées (08/11/2026) : est-elle en train
+  // de partir, et le serveur en a-t-il REFUSÉ certaines (id -> raison) ?
+  const [envoiFileEnCours, setEnvoiFileEnCours] = useState(false);
+  const [refusFile, setRefusFile] = useState({});
+  const [confirmerOubliFile, setConfirmerOubliFile] = useState(false);
+  const verrouFile = useRef(false);
 
   // RETOUR ANDROID (16/09/2026) : ferme le détail d'une séance passée ou le
   // formulaire de nouveau programme (sa saisie est gardée, contrairement à
@@ -1399,28 +1405,80 @@ export default function EntrainementScreen({
   // Une séance ne quitte la file QUE lorsque le serveur a confirmé l'avoir
   // enregistrée : en cas d'échec elle y reste et repartira au prochain
   // chargement. On préfère renvoyer une séance une fois de trop que la perdre.
+  //
+  // ⚠️ LE BUG DES « 14 SÉANCES GARDÉES SUR CE TÉLÉPHONE » (08/11/2026) : la
+  // boucle s'arrêtait (`break`) à la PREMIÈRE erreur, quelle qu'elle soit. Or
+  // une séance dont le programme avait été supprimé entre-temps était REFUSÉE
+  // par le serveur, à chaque fois : elle bloquait toutes celles d'après, pour
+  // toujours, sous un message qui parlait de « retour du réseau » alors que le
+  // réseau allait très bien. Deux distinctions désormais :
+  //   - le serveur n'a PAS RÉPONDU (pas de `status`) → inutile d'insister sur
+  //     les suivantes, on s'arrête et on réessaiera ;
+  //   - le serveur a répondu NON (`status`) → on note la raison, on garde la
+  //     séance, et on PASSE À LA SUIVANTE.
+  // (Le refus pour programme supprimé n'existe plus côté serveur, voir
+  // `db.enregistrer_entrainement_complet` — mais un autre refus ne doit plus
+  // jamais bloquer toute la file.)
+  // Le verrou empêche deux envois simultanés de la même séance (le chargement
+  // se relance à chaque retour sur l'onglet).
   async function viderLaFileDAttente() {
+    if (verrouFile.current) return;
     const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
-    if (enAttente.length === 0) return;
-    for (const seance of enAttente) {
-      try {
-        // Un programme dont la création a échoué porte encore un id
-        // « local-… » que le serveur ne connaît pas : la séance part alors
-        // sans programme plutôt que d'être refusée. Les séries sont intactes.
-        const programmeId = seance.programme_id
-          && !String(seance.programme_id).startsWith('local-')
-          ? seance.programme_id : null;
-        const cree = await api.creerEntrainement(
-          moi.id, programmeId, seance.date, seance.series
-        );
-        await stockageSeance.retirerSeanceEnAttente(seance.id);
-        setEntrainements((liste) =>
-          liste.map((ent) => (ent.id === seance.id ? cree : ent))
-        );
-      } catch {
-        break; // réseau coupé : inutile d'insister sur les suivantes
-      }
+    if (enAttente.length === 0) {
+      setRefusFile({});
+      return;
     }
+    verrouFile.current = true;
+    setEnvoiFileEnCours(true);
+    const refus = {};
+    try {
+      for (const seance of enAttente) {
+        try {
+          // Un programme dont la création a échoué porte encore un id
+          // « local-… » que le serveur ne connaît pas : la séance part alors
+          // sans programme plutôt que d'être refusée. Les séries sont intactes.
+          const programmeId = seance.programme_id
+            && !String(seance.programme_id).startsWith('local-')
+            ? seance.programme_id : null;
+          const cree = await api.creerEntrainement(
+            moi.id, programmeId, seance.date, seance.series, seance.id
+          );
+          await stockageSeance.retirerSeanceEnAttente(seance.id);
+          setEntrainements((liste) =>
+            liste.map((ent) => (ent.id === seance.id ? cree : ent))
+          );
+        } catch (err) {
+          if (err && err.status) {
+            // Un 422 = une donnée invalide dans la séance (ex. 0 rep) ; le
+            // détail technique du serveur est en anglais, on le met entre
+            // parenthèses derrière une phrase française.
+            refus[seance.id] = err.status === 422
+              ? `une série contient une valeur impossible (${err.message})`
+              : (err.message || `erreur ${err.status}`);
+            continue; // le serveur a répondu : on tente les suivantes
+          }
+          break; // pas de réponse du serveur : inutile d'insister
+        }
+      }
+    } finally {
+      verrouFile.current = false;
+      setEnvoiFileEnCours(false);
+    }
+    setRefusFile(refus);
+    setNbEnAttente((await stockageSeance.lireSeancesEnAttente(idLocal)).length);
+  }
+
+  // Effacer DU TÉLÉPHONE les séances que le serveur refuse — seulement sur
+  // confirmation explicite, et seulement celles-là : une séance qui attend
+  // juste le réseau n'est jamais proposée à l'effacement.
+  async function oublierSeancesRefusees() {
+    const ids = Object.keys(refusFile);
+    for (const id of ids) {
+      await stockageSeance.retirerSeanceEnAttente(id);
+    }
+    setEntrainements((liste) => liste.filter((e) => !ids.includes(String(e.id))));
+    setRefusFile({});
+    setConfirmerOubliFile(false);
     setNbEnAttente((await stockageSeance.lireSeancesEnAttente(idLocal)).length);
   }
 
@@ -2472,7 +2530,7 @@ export default function EntrainementScreen({
     try {
       const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
         ? programmeActif.id : null;
-      const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries);
+      const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries, local.id);
       // Confirmée par le serveur : elle peut enfin sortir de la file.
       await stockageSeance.retirerSeanceEnAttente(local.id);
       setNbEnAttente((n) => Math.max(0, n - 1));
@@ -2838,13 +2896,10 @@ export default function EntrainementScreen({
             enregistrée au jour où tu la fais, pas à cette date-là.
           </TexteIcone>
         )}
-        {nbEnAttente > 0 && (
-          <TexteIcone nom="horloge" taille={14} hautAligne style={styles.bandeauRattrapage}>
-            {nbEnAttente} séance{nbEnAttente > 1 ? 's' : ''} gardée
-            {nbEnAttente > 1 ? 's' : ''} sur ce téléphone — elle
-            {nbEnAttente > 1 ? 's partiront' : ' partira'} au retour du réseau.
-          </TexteIcone>
-        )}
+        {/* Le bandeau « N séances gardées sur ce téléphone » vivait ici, en
+            pleine séance. Il est passé en haut de l'accueil (bandeauFile,
+            08/11/2026) : c'est là qu'on peut agir dessus, et pendant l'effort
+            il ne faisait qu'encombrer. */}
 
         {exercicesSession.map((exercice) => {
           const dernieres = trouverDernieresSeries(entrainements, exercice, jour);
@@ -2873,7 +2928,6 @@ export default function EntrainementScreen({
             : null;
           const record = recordPersonnel(entrainements, exercice);
           const nouveauRecord = bat_le_record(seriesFaites, record);
-          const stagnation = detecterStagnation(entrainements, exercice, 3);
           return (
             <View key={exercice} style={styles.carteExercice}>
               <Text style={styles.nomExercice}>{exercice}</Text>
@@ -2930,13 +2984,12 @@ export default function EntrainementScreen({
                 </TexteIcone>
               )}
 
-              {/* Alerte stagnation */}
-              {stagnation && (
-                <TexteIcone nom="alerte" taille={13} hautAligne style={styles.stagnation}>
-                  Bloqué à {stagnation.poids} kg depuis {stagnation.seances} séances — change
-                  quelque chose (charge, reps, ou varie l'exercice).
-                </TexteIcone>
-              )}
+              {/* L'alerte « Bloqué à X kg depuis 3 séances » a été RETIRÉE le
+                  08/11/2026 à la demande de Hafiz (« c'est encombrant ») :
+                  elle s'ajoutait sous chaque exercice, en rouge, pendant
+                  l'effort. `detecterStagnation` reste dans
+                  src/logic/surchargeProgressive.js, prête si on veut la
+                  remontrer ailleurs (un bilan, par exemple). */}
 
               {/* Toucher une série l'ouvre en modification (04/09/2026). */}
               {seriesFaites.map((s, i) => {
@@ -3238,6 +3291,51 @@ export default function EntrainementScreen({
               <LibelleIcone nom="recharger" taille={13} ecart={5} style={styles.lienReessayer}>Réessayer maintenant</LibelleIcone>
             </TouchableOpacity>
           )}
+        </View>
+      )}
+
+      {/* LES SÉANCES QUI N'ONT PAS ENCORE ATTEINT LE SERVEUR (08/11/2026).
+          L'ancien message (« 14 séances gardées sur ce téléphone — elles
+          partiront au retour du réseau ») n'était pas compris, et il mentait :
+          le réseau allait bien, c'est le serveur qui refusait une séance. Il
+          dit maintenant ce qui se passe vraiment, et propose d'agir. */}
+      {nbEnAttente > 0 && (
+        <View style={[styles.bandeauChargement,
+          Object.keys(refusFile).length > 0 && styles.bandeauEchec]}>
+          <TexteIcone nom={Object.keys(refusFile).length > 0 ? 'alerte' : 'horloge'}
+            taille={14} hautAligne style={styles.texteBandeau}>
+            {envoiFileEnCours
+              ? `Envoi au serveur de ${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''}…`
+              : Object.keys(refusFile).length > 0
+                ? `Le serveur a refusé ${Object.keys(refusFile).length} séance${Object.keys(refusFile).length > 1 ? 's' : ''} terminée${Object.keys(refusFile).length > 1 ? 's' : ''}. ${Object.keys(refusFile).length > 1 ? 'Elles restent' : 'Elle reste'} sur ce téléphone, rien n'est perdu.`
+                : `${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''} ${nbEnAttente > 1 ? "n'ont" : "n'a"} pas encore été enregistrée${nbEnAttente > 1 ? 's' : ''} sur le serveur (il n'a pas répondu à temps). ${nbEnAttente > 1 ? 'Elles sont' : 'Elle est'} en sécurité sur ce téléphone et ${nbEnAttente > 1 ? 'partiront' : 'partira'} toute${nbEnAttente > 1 ? 's' : ''} seule${nbEnAttente > 1 ? 's' : ''}.`}
+          </TexteIcone>
+          {!envoiFileEnCours && Object.keys(refusFile).length > 0 ? (
+            <Text style={styles.detailBandeau}>
+              Raison : {[...new Set(Object.values(refusFile))].join(' · ')}
+            </Text>
+          ) : null}
+          {!envoiFileEnCours && (
+            <View style={styles.ligneBoutonsFile}>
+              <TouchableOpacity style={styles.boutonFile} onPress={() => viderLaFileDAttente()}>
+                <LibelleIcone nom="recharger" taille={13} ecart={5} style={styles.texteBoutonFile}>
+                  {Object.keys(refusFile).length > 0 ? 'Réessayer' : 'Envoyer maintenant'}
+                </LibelleIcone>
+              </TouchableOpacity>
+              {Object.keys(refusFile).length > 0 && !confirmerOubliFile && (
+                <TouchableOpacity style={styles.boutonFile} onPress={() => setConfirmerOubliFile(true)}>
+                  <Text style={styles.texteBoutonFileDiscret}>Les effacer du téléphone</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+          <ConfirmationSuppression
+            actif={confirmerOubliFile && Object.keys(refusFile).length > 0}
+            question={`Effacer ${Object.keys(refusFile).length > 1 ? `ces ${Object.keys(refusFile).length} séances` : 'cette séance'} de ce téléphone ? Le serveur ne les a jamais reçues : elles seront perdues pour de bon.`}
+            libelleConfirmer="Oui, effacer"
+            onConfirmer={oublierSeancesRefusees}
+            onAnnuler={() => setConfirmerOubliFile(false)}
+          />
         </View>
       )}
 
@@ -4872,6 +4970,14 @@ const styles = StyleSheet.create({
   bandeauEchec: { borderWidth: 1, borderColor: colors.rouge },
   texteBandeau: { color: colors.texte, fontSize: 13, lineHeight: 18 },
   lienReessayer: { color: colors.or, fontWeight: '800', marginTop: 6 },
+  // Les actions du bandeau de la file d'attente (08/11/2026) : 40 px de haut.
+  ligneBoutonsFile: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  boutonFile: {
+    minHeight: 40, justifyContent: 'center', paddingHorizontal: 12,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.bordure,
+  },
+  texteBoutonFile: { color: colors.or, fontWeight: '800', fontSize: 13 },
+  texteBoutonFileDiscret: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
   // Bandeau « de quel compte parle cet écran » (23/09/2026).
   bandeauCompte: {
     backgroundColor: '#12161d',
@@ -5077,7 +5183,6 @@ const styles = StyleSheet.create({
   raisonSuggestion: { color: colors.texteGris, fontSize: 11, fontWeight: '400' },
   record: { color: colors.texteGris, fontSize: 11, marginBottom: 3 },
   recordBattu: { color: colors.or, fontSize: 12, fontWeight: '800', marginBottom: 3 },
-  stagnation: { color: colors.rouge, fontSize: 11, marginBottom: 3, lineHeight: 15 },
   ligneRecord: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   nomRecord: { color: colors.texte, fontSize: 12, flex: 1 },
   valeurRecord: { color: colors.or, fontSize: 12, fontWeight: '700' },
