@@ -4398,6 +4398,94 @@ s'ouvre dans le calendrier. Les 39 cibles tactiles de l'accueil sont toutes à
   boucle. Il faudrait la faire servir par l'API.
 - Les icônes (passe 2) et la bibliothèque d'exercices (passe 3).
 
+## Refonte de l'onglet Entraînement, passe 2 : nos propres icônes — 07/11/2026
+
+Demande de Hafiz, dans la même phrase que la refonte : « change les icônes et
+**crée toi-même tes propres icônes** ». C'est la PASSE 2 sur 3 ; la passe 1
+(réorganisation de l'accueil + largeur de lecture) est validée depuis le
+26/10 (« oui ça me plaît »). La passe 3 — la bibliothèque d'exercices — n'est
+PAS commencée.
+
+### `src/components/Icones.js` : un SYSTÈME, pas une collection
+
+~40 icônes dessinées à la main en `react-native-svg` (déjà installé depuis
+l'arène — **aucune dépendance ajoutée**, le projet y tient).
+
+- UNE SEULE grille 24×24, UN SEUL `EPAISSEUR_TRAIT = 2`, posés une fois sur le
+  composant `Cadre` et hérités par tous les tracés. C'est ce qui donne un
+  alignement optique sans réglage au cas par cas.
+- La couleur est TOUJOURS reçue en prop — aucune couleur en dur, comme partout
+  ailleurs depuis la DA du 12/08/2026.
+- `LibelleIcone` accole une icône à un texte : c'est lui qui a remplacé les
+  emojis collés devant les libellés de boutons.
+
+⚠️ **CE FICHIER EST LE SOCLE DE LA PASSE 3.** Les pictogrammes d'exercices et
+de matériel devront être dessinés DANS ce système (même grille, même trait),
+sinon la bibliothèque aura l'air d'un assortiment dépareillé posé sur l'app.
+
+### Pourquoi les emojis devaient partir
+
+Un emoji **ne se teinte pas** (impossible de le passer en or quand l'onglet est
+actif), **ne s'aligne pas** sur une grille, et **change de dessin** d'un
+téléphone à l'autre — Android, iOS et le web n'affichent pas le même 🏋️.
+Ils sont remplacés partout dans l'interface de l'onglet.
+⚠️ GARDÉS VOLONTAIREMENT quand ils sont du CONTENU et non de l'interface : le
+✅ d'un jour fait dans le calendrier, le 🔥 d'une série. Les retirer aurait
+appauvri le sens sans rien gagner.
+Vérifié après coup : les trois seuls emojis restants dans
+`EntrainementScreen.js` sont dans des COMMENTAIRES, pas à l'écran.
+
+### Les six icônes d'onglets sont redessinées
+
+`IconesOnglets.js` ne recopie plus les tracés de Lucide : il réexporte les
+icônes de `Icones.js`. `ICONES_ONGLETS` garde EXACTEMENT la même forme et les
+mêmes clés — App.js n'a pas changé d'une ligne.
+⚠️ **LES MÉTAPHORES SONT INCHANGÉES** : Paliers reste une COURONNE, Compétition
+un TROPHÉE. Elles viennent d'une maquette de Hafiz lui-même (08/09/2026, où
+`swords` et `medal` figurent explicitement comme écartées) — on change le
+dessin, pas le sens.
+
+### ⚠️ L'INCIDENT : le run de l'agent est mort en plein travail
+
+L'agent `designer-ux` a été coupé par une **erreur réseau** (`ENOTFOUND`) avant
+d'avoir vérifié quoi que ce soit, et il a rendu un rapport qui n'avait rien à
+voir avec la tâche. MAIS il avait déjà écrit la quasi-totalité du code — le
+dépôt n'était PAS propre, contrairement à ce qu'on aurait pu croire d'un run
+« échoué ».
+
+**Et il avait laissé `app.json` sur `apiUrl: null`** — la valeur qu'on pose le
+temps de tester contre le backend LOCAL. C'est exactement l'incident du
+24/09/2026 : commité tel quel, le déploiement suivant du site web aurait fait
+appeler `localhost` à tout le monde. Restauré avec `git checkout -- app.json`
+avant toute autre chose.
+
+LEÇON DE MÉTHODE : **un run d'agent « échoué » n'est pas un run sans effet.**
+Toujours lire `git status` après, et restaurer `app.json` AVANT de regarder le
+reste. Le travail, lui, valait d'être gardé : il ne manquait que la
+vérification, qui a donc été faite à la main.
+
+### Vérifié (à la main, après la coupure)
+
+- `cd backend && python -m unittest discover tests` → **343 tests, tous OK** ;
+- format téléphone (390 px), compte `SondeTest`, backend LOCAL : **22 SVG** à
+  l'écran, **plus un seul emoji d'interface** ;
+- les six icônes de la barre mesurent **20 × 20 px** et se lisent chacune sans
+  son libellé — c'est LE contrôle qui compte, celui que ce projet a déjà raté
+  une fois (les épées illisibles du 08/09/2026) ;
+- aucun débordement horizontal (`body.scrollWidth` = fenêtre) ;
+- **zéro erreur console** ;
+- `git diff app.json` vide avant le commit.
+
+### ⏳ SIGNALÉ, PAS CORRIGÉ — le cyan des boutons secondaires
+
+Vu à l'écran : les trois boutons « Rattraper maintenant » sont en **cyan vif**
+(`colors.accent`, `boutonUtiliserModele`) et dominent la page, ce qui jure avec
+l'identité or de l'app.
+⚠️ CE N'EST PAS UNE RÉGRESSION de cette passe : ce style est **pré-existant**
+(vérifié dans le diff — seul l'emoji a été remplacé sur ces lignes). Mais
+`colors.accent` habille plusieurs boutons de l'onglet, donc le changer est une
+décision de DA à prendre avec Hafiz, pas un détail à trancher en passant.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

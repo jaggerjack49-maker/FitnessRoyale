@@ -16,6 +16,7 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet 
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { colors, espacement } from '../theme';
+import { Icone, TexteIcone, LibelleIcone } from './Icones';
 import * as api from '../api';
 import { enISO } from '../logic/rattrapage';
 import {
@@ -118,7 +119,7 @@ export default function CarteNutrition({ moi, actif = true }) {
     try {
       await api.ajouterRepas(moi.id, { nom: nom.trim() || 'Repas', date: jour, source, aliments });
       await charger();
-      setMessage({ texte: '✅ Repas ajouté à ton journal.', erreur: false });
+      setMessage({ texte: 'Repas ajouté à ton journal.', erreur: false });
       return true;
     } catch (erreur) {
       setMessage({ texte: `Pas enregistré : ${erreur.message}`, erreur: true });
@@ -186,7 +187,7 @@ export default function CarteNutrition({ moi, actif = true }) {
 
   return (
     <View style={styles.carte}>
-      <Text style={styles.titre}>🍽 Nutrition — aujourd'hui</Text>
+      <TexteIcone nom="couverts" taille={15} couleur={colors.or} style={styles.titre}>Nutrition — aujourd'hui</TexteIcone>
 
       {/* ---- Bilan du jour ---- */}
       <Text style={styles.ligneBilan}>
@@ -207,7 +208,7 @@ export default function CarteNutrition({ moi, actif = true }) {
 
       {!editionObjectifs ? (
         <TouchableOpacity onPress={ouvrirObjectifs}>
-          <Text style={styles.lien}>🎯 {objectifs.kcal ? 'Modifier mon objectif du jour' : 'Fixer mon objectif du jour'}</Text>
+          <TexteIcone nom="cible" taille={13} ecart={6} style={styles.lien}>{objectifs.kcal ? 'Modifier mon objectif du jour' : 'Fixer mon objectif du jour'}</TexteIcone>
         </TouchableOpacity>
       ) : (
         <View style={styles.bloc}>
@@ -236,17 +237,21 @@ export default function CarteNutrition({ moi, actif = true }) {
       {!brouillon && !analyseEnCours && !saisieManuelle && (
         <>
           <TouchableOpacity style={[styles.boutonOr, styles.boutonLarge]} onPress={() => analyser(false)}>
-            <Text style={styles.boutonOrTexte}>📷 Photographier mon repas</Text>
+            <LibelleIcone nom="appareil-photo" taille={15} style={styles.boutonOrTexte}>Photographier mon repas</LibelleIcone>
           </TouchableOpacity>
           <View style={styles.ligne}>
             <TouchableOpacity style={[styles.boutonBord, styles.boutonLarge]} onPress={() => analyser(true)}>
-              <Text style={styles.boutonBordTexte}>🖼 Depuis mes photos</Text>
+              {/* « Depuis mes photos » passait a la ligne une fois l'icone
+                  posee devant (61 px de haut contre 43 pour son voisin,
+                  mesure a l'ecran). L'icone DIT deja « une photo que tu as
+                  deja » : les deux premiers mots etaient redondants. */}
+              <LibelleIcone nom="image" taille={14} ecart={6} style={styles.boutonBordTexte}>Mes photos</LibelleIcone>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.boutonBord, styles.boutonLarge]}
               onPress={() => setSaisieManuelle({ nom: '', kcal: '', proteines: '' })}
             >
-              <Text style={styles.boutonBordTexte}>✍️ À la main</Text>
+              <LibelleIcone nom="crayon" taille={14} ecart={6} style={styles.boutonBordTexte}>À la main</LibelleIcone>
             </TouchableOpacity>
           </View>
         </>
@@ -298,7 +303,7 @@ export default function CarteNutrition({ moi, actif = true }) {
               <View style={styles.ligne}>
                 <Text style={[styles.texte, { flex: 1 }]} numberOfLines={2}>{a.nom}</Text>
                 <TouchableOpacity onPress={() => setBrouillon((b) => ({ ...b, aliments: b.aliments.filter((_, j) => j !== i) }))}>
-                  <Text style={styles.croix}>✕</Text>
+                  <Icone nom="croix" taille={14} couleur={colors.texteGris} />
                 </TouchableOpacity>
               </View>
               <View style={styles.ligne}>
@@ -319,13 +324,19 @@ export default function CarteNutrition({ moi, actif = true }) {
             Confiance de l'IA : {LIBELLES_CONFIANCE[brouillon.confiance] || 'faible'}
             {brouillon.remarque ? ` — ${brouillon.remarque}` : ''}
           </Text>
-          <Text style={styles.avertissement}>
-            ⚠️ C'est une estimation : l'huile, les sauces et le poids exact ne se voient pas toujours
+          <TexteIcone nom="alerte" taille={13} hautAligne style={styles.avertissement}>
+            C'est une estimation : l'huile, les sauces et le poids exact ne se voient pas toujours
             sur une photo. Corrige les grammes si besoin.
-          </Text>
+          </TexteIcone>
           <View style={styles.ligne}>
             <TouchableOpacity style={[styles.boutonOr, styles.boutonLarge]} onPress={enregistrerBrouillon} disabled={envoiEnCours}>
-              <Text style={styles.boutonOrTexte}>{envoiEnCours ? '…' : '✅ Ajouter au journal'}</Text>
+              {envoiEnCours ? (
+                <Text style={styles.boutonOrTexte}>…</Text>
+              ) : (
+                <LibelleIcone nom="valide" taille={15} style={styles.boutonOrTexte}>
+                  Ajouter au journal
+                </LibelleIcone>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setBrouillon(null)}>
               <Text style={styles.lienGris}>Annuler</Text>
@@ -338,7 +349,7 @@ export default function CarteNutrition({ moi, actif = true }) {
       {(journal?.repas || []).map((r) => (
         <View key={r.id} style={styles.repas}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.texte}>{r.source === 'photo' ? '📷' : '✍️'} {r.nom}</Text>
+            <TexteIcone nom={r.source === 'photo' ? 'appareil-photo' : 'crayon'} taille={13} ecart={6} couleur={colors.texteGris} style={styles.texte}>{r.nom}</TexteIcone>
             <Text style={styles.indice}>
               {r.kcal} kcal · P {Math.round(r.proteines)} g · G {Math.round(r.glucides)} g · L {Math.round(r.lipides)} g
             </Text>
@@ -349,7 +360,7 @@ export default function CarteNutrition({ moi, actif = true }) {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={() => setASupprimer(r.id)}>
-              <Text style={styles.croix}>✕</Text>
+              <Icone nom="croix" taille={14} couleur={colors.texteGris} />
             </TouchableOpacity>
           )}
         </View>
@@ -374,7 +385,9 @@ const styles = StyleSheet.create({
   texte: { color: colors.texte, fontSize: 14 },
   // `paddingVertical` ET PAS seulement `marginTop` : la marge n'agrandit pas
   // la zone touchée, le rembourrage si (26 px mesurés avant, ~44 après).
-  lien: { color: colors.or, fontWeight: '700', marginTop: 4, paddingVertical: 10 },
+  // Mesurées à l'écran le 27/10/2026 : ce lien et les deux boutons bordés
+  // s'arrêtaient à 42-43 px, juste sous le minimum de 44.
+  lien: { color: colors.or, fontWeight: '700', marginTop: 4, paddingVertical: 11, minHeight: 44 },
   lienGris: { color: colors.texteGris, marginLeft: espacement.m, textDecorationLine: 'underline' },
   bloc: { marginTop: espacement.s, padding: espacement.s, backgroundColor: colors.carteClaire, borderRadius: 10 },
   ligne: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
@@ -393,6 +406,7 @@ const styles = StyleSheet.create({
   boutonBord: {
     borderWidth: 1, borderColor: colors.or, borderRadius: 10,
     paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center',
+    minHeight: 44, justifyContent: 'center',
   },
   boutonBordTexte: { color: colors.or, fontWeight: '700', fontSize: 13 },
   message: { color: colors.vert, marginTop: espacement.s },

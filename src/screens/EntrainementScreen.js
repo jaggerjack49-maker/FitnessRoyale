@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, espacement } from '../theme';
+import { da } from '../designSystem';
 import * as api from '../api';
 import {
   programmesStandards, joursSemaine, abreviationsJours, jourDeLaDate,
@@ -35,6 +36,7 @@ import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
 import useRetour from '../useRetour';
 import CarteNutrition from '../components/CarteNutrition';
+import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import TableauProgression from '../components/TableauProgression';
 import {
   semaineDuBloc, ecartsDuBlocComplet, semainesARecalculer, ciblePrevueDansBloc,
@@ -176,10 +178,10 @@ function LigneExercicePrevu({ exo, entrainements, progressions = {} }) {
         • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
       </Text>
       {suggestion && (
-        <Text style={styles.attenduDetailJour}>
-          {'    '}🎯 Attendu : {suggestion.series ? `${suggestion.series} × ` : ''}
+        <TexteIcone nom="cible" taille={12} ecart={5} style={styles.attenduDetailJour}>
+          Attendu : {suggestion.series ? `${suggestion.series} × ` : ''}
           {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
-        </Text>
+        </TexteIcone>
       )}
     </View>
   );
@@ -222,9 +224,9 @@ function ResumeSeanceFaite({ entrainement, programmes }) {
   });
   return (
     <View style={styles.detailJour}>
-      <Text style={[styles.nomProgrammeTexte, { color: colors.vert }]}>
-        ✅ {typeDeSeance(entrainement, programmes)} <Text style={styles.indice}>(faite)</Text>
-      </Text>
+      <TexteIcone nom="valide" taille={14} style={[styles.nomProgrammeTexte, { color: colors.vert }]}>
+        {typeDeSeance(entrainement, programmes)} <Text style={styles.indice}>(faite)</Text>
+      </TexteIcone>
       {parExercice.map((g) => (
         <Text key={g.exercice} style={styles.exerciceDetailJour}>
           • {g.exercice} — {g.series
@@ -322,7 +324,7 @@ function EditeurSeance({
       return;
     }
     onSauvegarder(nomFinal, exercices);
-    setMessage('✅ Séance enregistrée');
+    setMessage('Séance enregistrée');
   }
 
   return (
@@ -379,7 +381,7 @@ function EditeurSeance({
               style={stylesEditeur.retirer}
               onPress={() => setLignes((l) => l.filter((_, k) => k !== i))}
             >
-              <Text style={stylesEditeur.retirerTexte}>✕</Text>
+              <Icone nom="croix" taille={13} couleur={colors.rouge} />
             </TouchableOpacity>
           )}
         </View>
@@ -389,7 +391,7 @@ function EditeurSeance({
         style={stylesEditeur.boutonAjout}
         onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10', repsMax: '' }])}
       >
-        <Text style={stylesEditeur.boutonAjoutTexte}>+ Ajouter un exercice</Text>
+        <LibelleIcone nom="plus" taille={13} ecart={5} style={stylesEditeur.boutonAjoutTexte}>Ajouter un exercice</LibelleIcone>
       </TouchableOpacity>
 
       {message && <Text style={stylesEditeur.message}>{message}</Text>}
@@ -515,7 +517,7 @@ function EnteteSousEcran({ titre, sousTitre, onRetour }) {
         onPress={onRetour}
         accessibilityLabel="Retour"
       >
-        <Text style={stylesHub.flecheRetour}>‹</Text>
+        <Icone nom="chevron-gauche" taille={20} couleur={colors.texte} />
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
         <Text style={stylesHub.titreSousEcran}>{titre}</Text>
@@ -531,14 +533,16 @@ function EnteteSousEcran({ titre, sousTitre, onRetour }) {
 function LigneRaccourci({ icone, titre, resume, alerte, onPress }) {
   return (
     <TouchableOpacity style={stylesHub.ligneRaccourci} onPress={onPress}>
-      <Text style={stylesHub.iconeRaccourci}>{icone}</Text>
+      <View style={stylesHub.iconeRaccourci}>
+        <Icone nom={icone} taille={20} couleur={colors.or} />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={stylesHub.titreRaccourci}>{titre}</Text>
         <Text style={[stylesHub.resumeRaccourci, alerte && { color: colors.rouge }]}>
           {resume}
         </Text>
       </View>
-      <Text style={stylesHub.chevronRaccourci}>›</Text>
+      <Icone nom="chevron-droit" taille={18} couleur={colors.texteGris} />
     </TouchableOpacity>
   );
 }
@@ -575,7 +579,6 @@ const stylesHub = StyleSheet.create({
   },
   pastilleActionOr: { backgroundColor: 'rgba(0,0,0,0.18)' },
   pastilleActionBordee: { backgroundColor: colors.carteClaire },
-  symboleAction: { fontSize: 16 },
   titreActionOr: { color: '#141319', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
   sousTitreActionOr: { color: 'rgba(20,19,25,0.72)', fontSize: 11, marginTop: 2, lineHeight: 15 },
   titreAction: { color: colors.texte, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
@@ -590,6 +593,9 @@ const stylesHub = StyleSheet.create({
   libelleSection: {
     color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
   },
+  // La légende du calendrier mêle du texte et une icône : il lui faut une
+  // rangée, un SVG ne peut pas vivre à l'intérieur d'un <Text>.
+  legendeCalendrier: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   lienSection: { color: colors.or, fontSize: 12, fontWeight: '800' },
 
   // La carte « la séance du jour » (modèle : la carte de séance des maquettes).
@@ -637,7 +643,7 @@ const stylesHub = StyleSheet.create({
   },
   texteBoutonCreer: { color: '#141319', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
 
-  iconeRaccourci: { fontSize: 18, width: 24, textAlign: 'center' },
+  iconeRaccourci: { width: 24, alignItems: 'center' },
   titreRaccourci: { color: colors.texte, fontSize: 15, fontWeight: '700' },
   resumeRaccourci: { color: colors.texteGris, fontSize: 12, marginTop: 2 },
   chevronRaccourci: { color: colors.texteGris, fontSize: 22, fontWeight: '700' },
@@ -1474,7 +1480,7 @@ export default function EntrainementScreen({
       jour: suiviJour, heure: suiviHeure.trim(), actif: true,
     }));
     setSuiviMessage({
-      texte: `✅ Point hebdo activé : chaque ${suiviJour} à ${suiviHeure.trim()}.`,
+      texte: `Point hebdo activé : chaque ${suiviJour} à ${suiviHeure.trim()}.`,
       erreur: false,
     });
   }
@@ -1952,7 +1958,7 @@ export default function EntrainementScreen({
     const morceaux = [];
     if (jours > 1) morceaux.push(`${jours} jours de la semaine`);
     if (dates > 0) morceaux.push(`${dates} date${dates > 1 ? 's' : ''} du calendrier`);
-    return `⚠️ Cette séance est utilisée sur ${morceaux.join(' et ')} : tes modifications s'y appliqueront partout.`;
+    return `Cette séance est utilisée sur ${morceaux.join(' et ')} : tes modifications s'y appliqueront partout.`;
   }
 
   async function supprimerCycle(cycle) {
@@ -2036,7 +2042,7 @@ export default function EntrainementScreen({
     await AsyncStorage.setItem('fitnessRoyale.rappel', JSON.stringify({
       jours: rappelJours, heure: rappelHeure.trim(), actif: true,
     }));
-    setRappelMessage({ texte: `✅ Rappel activé : ${rappelJours.join(', ')} à ${rappelHeure.trim()}.`, erreur: false });
+    setRappelMessage({ texte: `Rappel activé : ${rappelJours.join(', ')} à ${rappelHeure.trim()}.`, erreur: false });
   }
 
   async function desactiverRappel() {
@@ -2475,9 +2481,9 @@ export default function EntrainementScreen({
     });
     return (
       <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-        <Text style={styles.titre}>
-          📅 {typeDeSeance(entrainementSelectionne, programmes)}
-        </Text>
+        <TexteIcone nom="calendrier" taille={19} couleur={colors.or} style={styles.titre}>
+          {typeDeSeance(entrainementSelectionne, programmes)}
+        </TexteIcone>
         <Text style={styles.sousTitre}>{libelleDate(entrainementSelectionne.date)}</Text>
         {parExercice.map((groupe) => (
           <View key={groupe.exercice} style={styles.carteExercice}>
@@ -2500,7 +2506,7 @@ export default function EntrainementScreen({
   if (vue === 'nouveauProgramme') {
     return (
       <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-        <Text style={styles.titre}>➕ Nouveau programme</Text>
+        <TexteIcone nom="plus" taille={19} couleur={colors.or} style={styles.titre}>Nouveau programme</TexteIcone>
         <Text style={styles.sousTitre}>
           Un programme complet : ses jours de la semaine, et pour chaque jour
           ses exercices. Il suffira ensuite de le poser dans le calendrier —
@@ -2551,12 +2557,17 @@ export default function EntrainementScreen({
                     <Text style={styles.jourCalendrier}>
                       {jour.charAt(0).toUpperCase() + jour.slice(1)}
                     </Text>
-                    <Text style={styles.contenuCalendrier}>
-                      {nbExos === 0
-                        ? '⚠️ à remplir'
-                        : `${brouillon.nom.trim() || 'Sans nom'} · ${nbExos} exo${nbExos > 1 ? 's' : ''}`}
-                    </Text>
-                    <Text style={styles.flecheCalendrier}>{ouvert ? '▲' : '▼'}</Text>
+                    {nbExos === 0 ? (
+                      <TexteIcone nom="alerte" taille={12} ecart={5}
+                        style={[styles.contenuCalendrier, { color: colors.rouge }]}>
+                        à remplir
+                      </TexteIcone>
+                    ) : (
+                      <Text style={styles.contenuCalendrier}>
+                        {`${brouillon.nom.trim() || 'Sans nom'} · ${nbExos} exo${nbExos > 1 ? 's' : ''}`}
+                      </Text>
+                    )}
+                    <Icone nom={ouvert ? 'chevron-haut' : 'chevron-bas'} taille={13} couleur={colors.texteGris} />
                   </TouchableOpacity>
 
                   {ouvert && (
@@ -2598,7 +2609,7 @@ export default function EntrainementScreen({
                               onPress={() => retirerLigneJour(jour, i)}
                               style={styles.boutonRetirer}
                             >
-                              <Text style={styles.boutonRetirerTexte}>✕</Text>
+                              <Icone nom="croix" taille={15} couleur={colors.rouge} />
                             </TouchableOpacity>
                           )}
                         </View>
@@ -2607,7 +2618,7 @@ export default function EntrainementScreen({
                         style={styles.boutonSecondaire}
                         onPress={() => ajouterLigneJour(jour)}
                       >
-                        <Text style={styles.boutonSecondaireTexte}>+ Ajouter un exercice</Text>
+                        <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonSecondaireTexte}>Ajouter un exercice</LibelleIcone>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -2617,7 +2628,7 @@ export default function EntrainementScreen({
           </>
         )}
 
-        {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+        {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
 
         <TouchableOpacity style={styles.boutonPrincipal} onPress={enregistrerProgramme}>
           <Text style={styles.boutonPrincipalTexte}>Enregistrer le programme</Text>
@@ -2652,9 +2663,9 @@ export default function EntrainementScreen({
         contentContainerStyle={{ padding: espacement.m, paddingBottom: 340 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.titre}>
-          💪 {programmeActif ? programmeActif.nom : 'Séance libre'}
-        </Text>
+        <TexteIcone nom="entrainement" taille={19} couleur={colors.or} style={styles.titre}>
+          {programmeActif ? programmeActif.nom : 'Séance libre'}
+        </TexteIcone>
         <Text style={styles.sousTitre}>
           {jourEnregistrement === jour
             ? libelleDate(jour)
@@ -2665,26 +2676,26 @@ export default function EntrainementScreen({
             séance se fait, pas un détail. */}
         {semaineSeance !== null && (
           <View style={styles.bandeauBloc}>
-            <Text style={styles.texteBandeauBloc}>
-              📋 {semaineSeance === 'decharge'
+            <TexteIcone nom="programme" taille={14} hautAligne style={styles.texteBandeauBloc}>
+              {semaineSeance === 'decharge'
                 ? 'Semaine de DÉCHARGE de ton bloc'
                 : `Semaine ${semaineSeance} sur ${blocSeance.duree_semaines} de ton bloc`}
               {' '}— les charges ci-dessous viennent de ton plan.
-            </Text>
+            </TexteIcone>
           </View>
         )}
         {/* SÉANCE COMMENCÉE UN AUTRE JOUR (21/09/2026) : on le DIT, et on
             laisse le choix — l'app ne décide pas dans le dos de personne. */}
         {jourEnregistrement !== jour && (
           <View style={styles.bandeauJourSeance}>
-            <Text style={styles.texteJourSeance}>
-              📅 Cette séance a été faite le {libelleDate(jourEnregistrement)} :
+            <TexteIcone nom="calendrier" taille={14} hautAligne style={styles.texteJourSeance}>
+              Cette séance a été faite le {libelleDate(jourEnregistrement)} :
               c'est à ce jour-là qu'elle sera enregistrée, pas aujourd'hui.
               {joursAvecDuTravail.length > 1
                 ? ' (Des séries ont été saisies sur plusieurs jours : on garde'
                   + ' celui où tu en as fait le plus.)'
                 : ''}
-            </Text>
+            </TexteIcone>
             <TouchableOpacity onPress={() => setDaterAujourdhui(true)}>
               <Text style={styles.lienJourSeance}>
                 L'enregistrer au {libelleDate(jour)} (aujourd'hui) ›
@@ -2694,9 +2705,9 @@ export default function EntrainementScreen({
         )}
         {daterAujourdhui && joursAvecDuTravail.some((j) => j !== jour) && (
           <View style={styles.bandeauJourSeance}>
-            <Text style={styles.texteJourSeance}>
-              📅 Enregistrement forcé au {libelleDate(jour)} (aujourd'hui).
-            </Text>
+            <TexteIcone nom="calendrier" taille={14} style={styles.texteJourSeance}>
+              Enregistrement forcé au {libelleDate(jour)} (aujourd'hui).
+            </TexteIcone>
             <TouchableOpacity onPress={() => setDaterAujourdhui(false)}>
               <Text style={styles.lienJourSeance}>
                 Revenir au jour où la séance a été faite ›
@@ -2705,17 +2716,17 @@ export default function EntrainementScreen({
           </View>
         )}
         {rattrapageDe && (
-          <Text style={styles.bandeauRattrapage}>
-            ⏳ Rattrapage de la séance du {libelleDate(rattrapageDe)} — elle sera
+          <TexteIcone nom="horloge" taille={14} hautAligne style={styles.bandeauRattrapage}>
+            Rattrapage de la séance du {libelleDate(rattrapageDe)} — elle sera
             enregistrée au jour où tu la fais, pas à cette date-là.
-          </Text>
+          </TexteIcone>
         )}
         {nbEnAttente > 0 && (
-          <Text style={styles.bandeauRattrapage}>
-            📡 {nbEnAttente} séance{nbEnAttente > 1 ? 's' : ''} gardée
+          <TexteIcone nom="horloge" taille={14} hautAligne style={styles.bandeauRattrapage}>
+            {nbEnAttente} séance{nbEnAttente > 1 ? 's' : ''} gardée
             {nbEnAttente > 1 ? 's' : ''} sur ce téléphone — elle
             {nbEnAttente > 1 ? 's partiront' : ' partira'} au retour du réseau.
-          </Text>
+          </TexteIcone>
         )}
 
         {exercicesSession.map((exercice) => {
@@ -2762,8 +2773,8 @@ export default function EntrainementScreen({
 
               {/* Quoi faire aujourd'hui : LE PLAN s'il existe, sinon le calcul */}
               {cibleDuPlan ? (
-                <Text style={styles.suggestion}>
-                  📋 {cibleDuPlan.semaine === 'decharge' ? 'Décharge'
+                <TexteIcone nom="programme" taille={13} hautAligne style={styles.suggestion}>
+                  {cibleDuPlan.semaine === 'decharge' ? 'Décharge'
                     : `Semaine ${cibleDuPlan.semaine}`} :{' '}
                   {cibleDuPlan.series
                     ? `${cibleDuPlan.series} série${cibleDuPlan.series > 1 ? 's' : ''} × `
@@ -2773,13 +2784,13 @@ export default function EntrainementScreen({
                   <Text style={styles.raisonSuggestion}>
                     {cibleDuPlan.corrigee ? ' — ta valeur' : ' — ton plan'}
                   </Text>
-                </Text>
+                </TexteIcone>
               ) : suggestion ? (
-                <Text style={styles.suggestion}>
-                  🎯 Aujourd'hui : {suggestion.series ? `${suggestion.series} séries × ` : ''}
+                <TexteIcone nom="cible" taille={13} hautAligne style={styles.suggestion}>
+                  Aujourd'hui : {suggestion.series ? `${suggestion.series} séries × ` : ''}
                   {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
                   <Text style={styles.raisonSuggestion}> — {suggestion.raison}</Text>
-                </Text>
+                </TexteIcone>
               ) : null}
               <ChoixAxesProgression
                 exercice={exercice}
@@ -2789,22 +2800,25 @@ export default function EntrainementScreen({
 
               {/* Record personnel + badge quand il tombe en direct */}
               {record && (
-                <Text style={nouveauRecord ? styles.recordBattu : styles.record}>
+                <TexteIcone nom="competition" taille={13} hautAligne
+                  style={nouveauRecord ? styles.recordBattu : styles.record}>
                   {nouveauRecord
-                    ? `🏆 NOUVEAU RECORD ! (ancien : ${record.poids} kg × ${record.reps})`
-                    : `🏆 Record : ${record.poids} kg × ${record.reps} (${record.date})`}
-                </Text>
+                    ? `NOUVEAU RECORD ! (ancien : ${record.poids} kg × ${record.reps})`
+                    : `Record : ${record.poids} kg × ${record.reps} (${record.date})`}
+                </TexteIcone>
               )}
               {!record && nouveauRecord && (
-                <Text style={styles.recordBattu}>🏆 Premier record sur cet exercice !</Text>
+                <TexteIcone nom="competition" taille={13} style={styles.recordBattu}>
+                  Premier record sur cet exercice !
+                </TexteIcone>
               )}
 
               {/* Alerte stagnation */}
               {stagnation && (
-                <Text style={styles.stagnation}>
-                  ⚠️ Bloqué à {stagnation.poids} kg depuis {stagnation.seances} séances — change
+                <TexteIcone nom="alerte" taille={13} hautAligne style={styles.stagnation}>
+                  Bloqué à {stagnation.poids} kg depuis {stagnation.seances} séances — change
                   quelque chose (charge, reps, ou varie l'exercice).
-                </Text>
+                </TexteIcone>
               )}
 
               {/* Toucher une série l'ouvre en modification (04/09/2026). */}
@@ -2814,10 +2828,12 @@ export default function EntrainementScreen({
                 if (!enEdition) {
                   return (
                     <TouchableOpacity key={i} onPress={() => setSerieEnEdition(cle)}>
-                      <Text style={styles.serieFaite}>
-                        Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
-                        <Text style={styles.indiceModifier}>  ✏️</Text>
-                      </Text>
+                      <View style={styles.ligneSerieFaite}>
+                        <Text style={styles.serieFaite}>
+                          Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
+                        </Text>
+                        <Icone nom="crayon" taille={12} couleur={colors.texteGris} />
+                      </View>
                     </TouchableOpacity>
                   );
                 }
@@ -2850,7 +2866,7 @@ export default function EntrainementScreen({
                       style={styles.boutonRetirer}
                       onPress={() => supprimerSerie(exercice, i)}
                     >
-                      <Text style={styles.boutonRetirerTexte}>🗑</Text>
+                      <Icone nom="corbeille" taille={16} couleur={colors.rouge} />
                     </TouchableOpacity>
                   </View>
                 );
@@ -2865,9 +2881,9 @@ export default function EntrainementScreen({
                   style={styles.boutonSecondaire}
                   onPress={() => ajouterExerciceAuProgramme(exercice)}
                 >
-                  <Text style={styles.boutonSecondaireTexte}>
-                    ➕ Ajouter au programme « {programmeActif.nom} »
-                  </Text>
+                  <LibelleIcone nom="plus" taille={13} style={styles.boutonSecondaireTexte}>
+                    Ajouter au programme « {programmeActif.nom} »
+                  </LibelleIcone>
                 </TouchableOpacity>
               )}
 
@@ -2898,7 +2914,7 @@ export default function EntrainementScreen({
                   style={[styles.boutonAjouterSerie, styles.boutonSerieAligne]}
                   onPress={() => ajouterSerie(exercice)}
                 >
-                  <Text style={styles.boutonAjouterSerieTexte}>+ Série</Text>
+                  <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonAjouterSerieTexte}>Série</LibelleIcone>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2918,25 +2934,25 @@ export default function EntrainementScreen({
             placeholderTextColor={colors.texteGris}
           />
           <TouchableOpacity style={styles.boutonAjouterSerie} onPress={ajouterExerciceLibre}>
-            <Text style={styles.boutonAjouterSerieTexte}>+ Exo</Text>
+            <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonAjouterSerieTexte}>Exo</LibelleIcone>
           </TouchableOpacity>
         </View>
 
-        {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+        {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
 
         <TouchableOpacity style={styles.boutonPrincipal} onPress={terminerSeance} disabled={enregistrementEnCours}>
           {enregistrementEnCours ? <ActivityIndicator color={colors.texte} /> : (
-            <Text style={styles.boutonPrincipalTexte}>✅ Terminer la séance</Text>
+            <LibelleIcone nom="valide" taille={15} style={styles.boutonPrincipalTexte}>Terminer la séance</LibelleIcone>
           )}
         </TouchableOpacity>
         {/* Sortir SANS enregistrer. C'était un lien gris discret (« Abandonner »)
             que Hafiz n'a pas trouvé — c'est maintenant un vrai bouton. */}
         <TouchableOpacity style={styles.boutonSortir} onPress={abandonnerSeance}>
-          <Text style={styles.boutonSortirTexte}>
+          <LibelleIcone nom="sortie" taille={14} style={styles.boutonSortirTexte}>
             {programmeActif
-              ? '🚪 Sortir du programme (sans enregistrer)'
-              : '🚪 Quitter la séance (sans enregistrer)'}
-          </Text>
+              ? 'Sortir du programme (sans enregistrer)'
+              : 'Quitter la séance (sans enregistrer)'}
+          </LibelleIcone>
         </TouchableOpacity>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -3016,7 +3032,7 @@ export default function EntrainementScreen({
       id: `partage-${o.id}`,
       officielId: o.id,
       nom: o.nom,
-      emoji: '⭐',
+      icone: 'etoile',
       description: o.description || 'Programme partagé.',
       seances: o.seances || [],
     };
@@ -3026,7 +3042,7 @@ export default function EntrainementScreen({
   // complets + les modèles standards, ramenés à la même forme.
   const cyclesPlacables = [
     ...cycles.map((c) => ({
-      id: `mien-${c.id}`, nom: c.nom, emoji: '📋',
+      id: `mien-${c.id}`, nom: c.nom, icone: 'programme',
       seances: c.seances.map((s) => ({
         nom: s.nom, jours: s.jours || [], exercices: s.exercices,
       })),
@@ -3054,17 +3070,18 @@ export default function EntrainementScreen({
           sans explication faisait croire que tout avait été effacé. */}
       {donneesIncertaines && (
         <View style={[styles.bandeauChargement, etatChargement === 'echec' && styles.bandeauEchec]}>
-          <Text style={styles.texteBandeau}>
+          <TexteIcone nom={etatChargement === 'echec' ? 'alerte' : 'horloge'}
+            taille={14} hautAligne style={styles.texteBandeau}>
             {etatChargement === 'echec'
-              ? "⚠️ Tes séances et programmes n'ont pas pu être chargés — le serveur met parfois du temps à se réveiller. Ils ne sont PAS perdus : l'app réessaie toute seule."
-              : '⏳ Chargement de tes séances et programmes…'}
-          </Text>
+              ? "Tes séances et programmes n'ont pas pu être chargés — le serveur met parfois du temps à se réveiller. Ils ne sont PAS perdus : l'app réessaie toute seule."
+              : 'Chargement de tes séances et programmes…'}
+          </TexteIcone>
           {etatChargement === 'echec' && erreur ? (
             <Text style={styles.detailBandeau}>Détail : {erreur}</Text>
           ) : null}
           {etatChargement === 'echec' && (
             <TouchableOpacity onPress={() => { tentativesChargement.current = 0; chargerTout(); }}>
-              <Text style={styles.lienReessayer}>↻ Réessayer maintenant</Text>
+              <LibelleIcone nom="recharger" taille={13} ecart={5} style={styles.lienReessayer}>Réessayer maintenant</LibelleIcone>
             </TouchableOpacity>
           )}
         </View>
@@ -3080,10 +3097,11 @@ export default function EntrainementScreen({
       {!donneesIncertaines
         && programmes.length === 0 && cycles.length === 0 && entrainements.length === 0 && (
         <View style={styles.bandeauCompte}>
-          <Text style={styles.texteBandeau}>
-            ✅ Chargement réussi — mais le serveur n'a renvoyé AUCUNE séance ni
+          <TexteIcone nom="valide" taille={14} hautAligne couleur={colors.vert}
+            style={styles.texteBandeau}>
+            Chargement réussi — mais le serveur n'a renvoyé AUCUNE séance ni
             programme pour « {moi.pseudo} » (compte n°{moi.id}).
-          </Text>
+          </TexteIcone>
           <Text style={styles.detailBandeau}>
             Si ce n'est pas ton compte habituel, déconnecte-toi depuis le Profil
             et reconnecte-toi avec le bon pseudo.
@@ -3126,7 +3144,9 @@ export default function EntrainementScreen({
           style={stylesHub.boutonCreer}
           onPress={() => setVue('nouveauProgramme')}
         >
-          <Text style={stylesHub.texteBoutonCreer}>+  NOUVEAU PROGRAMME</Text>
+          <LibelleIcone nom="plus" taille={15} style={stylesHub.texteBoutonCreer}>
+            NOUVEAU PROGRAMME
+          </LibelleIcone>
         </TouchableOpacity>
         {!donneesIncertaines && cycles.length === 0 && programmesSeuls.length === 0 && (
           <Text style={styles.indice}>Aucun programme pour l'instant.</Text>
@@ -3152,22 +3172,23 @@ export default function EntrainementScreen({
                 la même ligne, il était comprimé à une largeur nulle et se
                 repliait sur des dizaines de lignes invisibles (d'où les grands
                 vides de la capture), pendant que la croix débordait à droite. */}
-            <Text style={styles.nomProgrammeTexte}>📋 {cycle.nom}</Text>
+            <TexteIcone nom="programme" taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{cycle.nom}</TexteIcone>
             <View style={styles.ligneActionsProgramme}>
               <TouchableOpacity
                 style={styles.boutonModifier}
                 onPress={() => basculerDetailCycle(cycle.id)}
               >
-                <Text style={styles.boutonModifierTexte}>
-                  {detailOuvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
-                </Text>
+                <LibelleIcone nom={detailOuvert ? 'chevron-haut' : 'chevron-bas'}
+                  taille={13} ecart={5} style={styles.boutonModifierTexte}>
+                  {detailOuvert ? 'Masquer le détail' : 'Voir le détail'}
+                </LibelleIcone>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.boutonModifier}
                 onPress={() => ouvrirTableau(cycle.nom, cycle.seances,
                   { type: 'cycle', id: cycle.id, ...cycle })}
               >
-                <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
+                <LibelleIcone nom="tableau" taille={13} ecart={5} style={styles.boutonModifierTexte}>Tableau</LibelleIcone>
               </TouchableOpacity>
               {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
                   C'est ainsi qu'on alimente le catalogue — pas de formulaire
@@ -3182,7 +3203,7 @@ export default function EntrainementScreen({
                   {publicationEnCours === cycle.id ? (
                     <ActivityIndicator color={colors.rouge} size="small" />
                   ) : (
-                    <Text style={styles.boutonPublierTexte}>🔑 Partager par code</Text>
+                    <LibelleIcone nom="cle" taille={13} ecart={5} style={styles.boutonPublierTexte}>Partager par code</LibelleIcone>
                   )}
                 </TouchableOpacity>
               ) : null}
@@ -3191,7 +3212,7 @@ export default function EntrainementScreen({
                 style={styles.boutonRetirer}
                 hitSlop={ZONE_TACTILE}
               >
-                <Text style={styles.boutonRetirerTexte}>✕</Text>
+                <Icone nom="croix" taille={15} couleur={colors.rouge} />
               </TouchableOpacity>
             </View>
             <ConfirmationSuppression
@@ -3225,15 +3246,21 @@ export default function EntrainementScreen({
                       <Text style={styles.jourSeanceCycle}>
                         {(seance.jours || []).map((j) => abreviationsJours[j]).join(' ')}
                       </Text>
-                      <Text style={styles.contenuCalendrier}>
-                        {deroulee ? '▲' : '▼'} {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
-                      </Text>
+                      <TexteIcone nom={deroulee ? 'chevron-haut' : 'chevron-bas'}
+                        taille={12} ecart={5} couleur={colors.texteGris} style={styles.contenuCalendrier}>
+                        {seance.nom} · {seance.exercices.length} exo{seance.exercices.length > 1 ? 's' : ''}
+                      </TexteIcone>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.boutonModifier}
                       onPress={() => setProgrammeEnEdition(enEdition ? null : seance.id)}
                     >
-                      <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+                      {enEdition ? (
+                        <Text style={styles.boutonModifierTexte}>Fermer</Text>
+                      ) : (
+                        <LibelleIcone nom="crayon" taille={13} ecart={5}
+                          style={styles.boutonModifierTexte}>Modifier</LibelleIcone>
+                      )}
                     </TouchableOpacity>
                   </View>
                   {deroulee && !enEdition && (
@@ -3256,7 +3283,7 @@ export default function EntrainementScreen({
                       programme={seance}
                       placeholderNom="Nom de la séance"
                       nomParDefaut={seance.nom}
-                      libelleBouton="💾 Enregistrer les modifications"
+                      libelleBouton="Enregistrer les modifications"
                       note={noteReutilisation(seance)}
                       onSauvegarder={(nom, exercices) => {
                         sauvegarderProgramme(seance, nom, exercices);
@@ -3270,7 +3297,7 @@ export default function EntrainementScreen({
             {/* AJOUTER UNE SÉANCE à ce programme (24/09/2026). */}
             {cycleQuiRecoit === cycle.id ? (
               <View style={styles.blocNouvelleSeance}>
-                <Text style={styles.titreNouvelleSeance}>➕ Nouvelle séance de « {cycle.nom} »</Text>
+                <TexteIcone nom="plus" taille={13} couleur={colors.or} style={styles.titreNouvelleSeance}>Nouvelle séance de « {cycle.nom} »</TexteIcone>
                 <Text style={styles.aideNouvelleSeance}>
                   Choisis son ou ses jours, puis écris ses exercices.
                 </Text>
@@ -3300,7 +3327,7 @@ export default function EntrainementScreen({
                 style={styles.boutonAjouterSeance}
                 onPress={() => { setCycleQuiRecoit(cycle.id); setJoursNouvelleSeance([]); setMessageAjoutSeance(null); }}
               >
-                <Text style={styles.boutonAjouterSeanceTexte}>➕ Ajouter une séance</Text>
+                <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonAjouterSeanceTexte}>Ajouter une séance</LibelleIcone>
               </TouchableOpacity>
             )}
             {cycleEnService(cycle) && (
@@ -3309,7 +3336,7 @@ export default function EntrainementScreen({
                   style={styles.boutonSortir}
                   onPress={() => demanderSuppression('sortie-cycle-' + cycle.id)}
                 >
-                  <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+                  <LibelleIcone nom="sortie" taille={13} ecart={5} style={styles.boutonSortirTexte}>Sortir de ce programme</LibelleIcone>
                 </TouchableOpacity>
                 <ConfirmationSuppression
                   actif={suppressionAConfirmer === 'sortie-cycle-' + cycle.id}
@@ -3331,10 +3358,14 @@ export default function EntrainementScreen({
           const deroulee = seanceDeroulee === programme.id;
           return (
             <View key={programme.id} style={styles.carteModele}>
-              <TouchableOpacity onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}>
-                <Text style={styles.nomProgrammeTexte}>
-                  {deroulee ? '▲' : '▼'} {programme.nom}
-                </Text>
+              <TouchableOpacity
+                style={{ paddingVertical: 3 }}
+                onPress={() => setSeanceDeroulee(deroulee ? null : programme.id)}
+              >
+                <TexteIcone nom={deroulee ? 'chevron-haut' : 'chevron-bas'}
+                  taille={13} ecart={6} couleur={colors.texteGris} style={styles.nomProgrammeTexte}>
+                  {programme.nom}
+                </TexteIcone>
                 <Text style={styles.indice}>
                   {programme.exercices.length} exercice{programme.exercices.length > 1 ? 's' : ''}
                   {(programme.jours || []).length > 0 &&
@@ -3346,21 +3377,26 @@ export default function EntrainementScreen({
                   style={styles.boutonModifier}
                   onPress={() => setProgrammeEnEdition(enEdition ? null : programme.id)}
                 >
-                  <Text style={styles.boutonModifierTexte}>{enEdition ? 'Fermer' : '✏️ Modifier'}</Text>
+                  {enEdition ? (
+                    <Text style={styles.boutonModifierTexte}>Fermer</Text>
+                  ) : (
+                    <LibelleIcone nom="crayon" taille={13} ecart={5}
+                      style={styles.boutonModifierTexte}>Modifier</LibelleIcone>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.boutonModifier}
                   onPress={() => ouvrirTableau(programme.nom, [programme],
                     { type: 'programme', id: programme.id, ...programme })}
                 >
-                  <Text style={styles.boutonModifierTexte}>📊 Tableau</Text>
+                  <LibelleIcone nom="tableau" taille={13} ecart={5} style={styles.boutonModifierTexte}>Tableau</LibelleIcone>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => demanderSuppression('prog-' + programme.id)}
                   style={styles.boutonRetirer}
                   hitSlop={ZONE_TACTILE}
                 >
-                  <Text style={styles.boutonRetirerTexte}>✕</Text>
+                  <Icone nom="croix" taille={15} couleur={colors.rouge} />
                 </TouchableOpacity>
               </View>
               <ConfirmationSuppression
@@ -3389,7 +3425,7 @@ export default function EntrainementScreen({
                   programme={programme}
                   placeholderNom="Nom de la séance"
                   nomParDefaut={programme.nom}
-                  libelleBouton="💾 Enregistrer les modifications"
+                  libelleBouton="Enregistrer les modifications"
                   note={noteReutilisation(programme)}
                   onSauvegarder={(nom, exercices) => {
                     sauvegarderProgramme(programme, nom, exercices);
@@ -3403,7 +3439,7 @@ export default function EntrainementScreen({
                     style={styles.boutonSortir}
                     onPress={() => demanderSuppression('sortie-prog-' + programme.id)}
                   >
-                    <Text style={styles.boutonSortirTexte}>🚪 Sortir de ce programme</Text>
+                    <LibelleIcone nom="sortie" taille={13} ecart={5} style={styles.boutonSortirTexte}>Sortir de ce programme</LibelleIcone>
                   </TouchableOpacity>
                   <ConfirmationSuppression
                     actif={suppressionAConfirmer === 'sortie-prog-' + programme.id}
@@ -3423,7 +3459,7 @@ export default function EntrainementScreen({
              c'est le programme qui pilote la semaine (voir programmeEnService). ---- */}
         {!programmeEnService && (
         <>
-        <Text style={styles.sectionTitre}>🗓 Semaine type</Text>
+        <TexteIcone nom="calendrier" taille={15} couleur={colors.or} style={styles.sectionTitre}>Semaine type</TexteIcone>
         <Text style={styles.indice}>
           Touche un jour pour écrire sa séance : un nom, puis tes exercices avec
           leurs séries × reps. Elle se répète chaque semaine.
@@ -3447,7 +3483,7 @@ export default function EntrainementScreen({
                     ? `${seanceDuJour.nom} · ${seanceDuJour.exercices.length} exo${seanceDuJour.exercices.length > 1 ? 's' : ''}`
                     : 'Repos — touche pour ajouter'}
                 </Text>
-                <Text style={styles.flecheCalendrier}>{ouvert ? '▲' : '▼'}</Text>
+                <Icone nom={ouvert ? 'chevron-haut' : 'chevron-bas'} taille={13} couleur={colors.texteGris} />
               </TouchableOpacity>
               {ouvert && (
                 <EditeurSeance
@@ -3455,11 +3491,11 @@ export default function EntrainementScreen({
                   programme={seanceDuJour}
                   placeholderNom={`Ex. : Pecs / Biceps du ${jour}`}
                   nomParDefaut={`Séance du ${jour}`}
-                  libelleBouton={`💾 Enregistrer la séance du ${jour}`}
+                  libelleBouton={`Enregistrer la séance du ${jour}`}
                   onSauvegarder={(nom, exercices) =>
                     sauvegarderSeanceJour(jour, seanceDuJour, nom, exercices)}
                   onVider={seanceDuJour ? () => viderJourSemaine(jour, seanceDuJour) : null}
-                  libelleVider="🗑 Vider ce jour (jour de repos)"
+                  libelleVider="Vider ce jour (jour de repos)"
                 />
               )}
             </View>
@@ -3470,13 +3506,18 @@ export default function EntrainementScreen({
         )}
         {/* ---- Modèles standards : Push Pull Legs, Full Body… ---- */}
         <TouchableOpacity style={styles.boutonSecondaire} onPress={() => setModelesOuverts(!modelesOuverts)}>
-          <Text style={styles.boutonSecondaireTexte}>
-            📦 Programmes standards {modelesOuverts ? '▲' : '▼'}
-          </Text>
+          <View style={styles.enTeteRepliable}>
+            <LibelleIcone nom="bibliotheque" taille={14} ecart={6}
+              style={[styles.boutonSecondaireTexte, { flex: 1 }]}>
+              Programmes standards
+            </LibelleIcone>
+            <Icone nom={modelesOuverts ? 'chevron-haut' : 'chevron-bas'} taille={15}
+              couleur={colors.accent} />
+          </View>
         </TouchableOpacity>
         {modelesOuverts && programmesStandards.map((modele) => (
           <View key={modele.id} style={styles.carteModele}>
-            <Text style={styles.nomProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
+            <TexteIcone nom="bibliotheque" taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{modele.nom}</TexteIcone>
             <Text style={[styles.indice, { marginTop: 4 }]}>{modele.description}</Text>
             <Text style={[styles.indice, { marginTop: 4 }]}>
               {modele.seances.map((s) =>
@@ -3500,7 +3541,7 @@ export default function EntrainementScreen({
              Les programmes partagés ne sont PAS publics (02/09/2026, demande de
              Hafiz) : sans le code, on ne peut même pas savoir qu'ils existent.
              Même geste que rejoindre un duel ou valider la perf d'un partenaire. */}
-        <Text style={styles.sectionTitre}>🔑 Programme partagé</Text>
+        <TexteIcone nom="cle" taille={15} couleur={colors.or} style={styles.sectionTitre}>Programme partagé</TexteIcone>
         <View style={styles.carteModele}>
           <Text style={styles.indice}>
             Quelqu'un t'a donné un code ? Entre-le pour voir son programme et en
@@ -3525,13 +3566,13 @@ export default function EntrainementScreen({
               )}
             </TouchableOpacity>
           </View>
-          {erreurCode && <Text style={styles.messageErreur}>⚠️ {erreurCode}</Text>}
+          {erreurCode ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreurCode}</TexteIcone> : null}
 
           {/* On montre le contenu AVANT de copier : personne ne récupère un
               programme sans savoir ce qu'il contient. */}
           {programmeTrouve && (
             <View style={[styles.detailJour, { borderColor: colors.or, borderWidth: 1 }]}>
-              <Text style={styles.nomProgrammeTexte}>⭐ {programmeTrouve.nom}</Text>
+              <TexteIcone nom="etoile" taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{programmeTrouve.nom}</TexteIcone>
               <Text style={[styles.indice, { marginTop: 4 }]}>{programmeTrouve.description}</Text>
               {(programmeTrouve.seances || []).map((seance, i) => (
                 <Text key={i} style={styles.exerciceDetailJour}>
@@ -3549,7 +3590,7 @@ export default function EntrainementScreen({
                 }}
                 disabled={modeleEnCours !== null}
               >
-                <Text style={styles.boutonDemarrerTexte}>📥 Copier ce programme</Text>
+                <LibelleIcone nom="telecharger" taille={14} style={styles.boutonDemarrerTexte}>Copier ce programme</LibelleIcone>
               </TouchableOpacity>
             </View>
           )}
@@ -3561,7 +3602,7 @@ export default function EntrainementScreen({
             section du 01/10/2026. */}
         {moi.admin ? (
           <>
-            <Text style={styles.sectionTitre}>🛠 Mes programmes partagés</Text>
+            <TexteIcone nom="bouclier" taille={15} couleur={colors.rouge} style={styles.sectionTitre}>Mes programmes partagés</TexteIcone>
             {messageOfficiel && (
               <Text style={[styles.indice, messageOfficiel.erreur && { color: colors.rouge }]}>
                 {messageOfficiel.texte}
@@ -3569,15 +3610,15 @@ export default function EntrainementScreen({
             )}
             {programmesOfficiels.length === 0 ? (
               <Text style={styles.indice}>
-                Aucun pour l'instant. Utilise « 🔑 Partager par code » sur un de tes
+                Aucun pour l'instant. Utilise « Partager par code » sur un de tes
                 programmes ci-dessus.
               </Text>
             ) : programmesOfficiels.map((o) => (
               <View key={o.id} style={[styles.carteModele, styles.carteOfficielle]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.nomProgrammeTexte, { flex: 1 }]}>⭐ {o.nom}</Text>
+                  <TexteIcone nom="etoile" taille={14} couleur={colors.or} style={[styles.nomProgrammeTexte, { flex: 1 }]}>{o.nom}</TexteIcone>
                   <TouchableOpacity onPress={() => retirerOfficiel(o)} style={styles.boutonRetirer}>
-                    <Text style={styles.boutonRetirerTexte}>✕</Text>
+                    <Icone nom="croix" taille={15} couleur={colors.rouge} />
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.codePartage}>{o.code}</Text>
@@ -3589,7 +3630,7 @@ export default function EntrainementScreen({
             ))}
           </>
         ) : null}
-        {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+        {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
       </ScrollView>
     );
   }
@@ -3609,10 +3650,13 @@ export default function EntrainementScreen({
           onRetour={() => setVue('accueil')}
         />
         {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
-        <TouchableOpacity onPress={() => setVolumeOuvert(!volumeOuvert)}>
-          <Text style={styles.sectionTitre}>
-            🎯 Séries par groupe musculaire {volumeOuvert ? '▲' : '▼'}
-          </Text>
+        <TouchableOpacity style={styles.enTeteRepliableSection} onPress={() => setVolumeOuvert(!volumeOuvert)}>
+          <TexteIcone nom="cible" taille={15} couleur={colors.or}
+            style={[styles.sectionTitre, styles.titreSansMarge, { flex: 1 }]}>
+            Séries par groupe musculaire
+          </TexteIcone>
+          <Icone nom={volumeOuvert ? 'chevron-haut' : 'chevron-bas'} taille={16}
+            couleur={colors.texteGris} />
         </TouchableOpacity>
         <Text style={styles.totalSeries}>
           {totalSeriesSemaine} série{totalSeriesSemaine > 1 ? 's' : ''} cette semaine
@@ -3622,10 +3666,10 @@ export default function EntrainementScreen({
         </Text>
         {/* Résumé visible SANS déplier : on doit voir où on en est d'un coup d'œil. */}
         {!volumeOuvert && nbNonClasses > 0 && (
-          <Text style={styles.alerteNonClasses}>
-            ❓ {nbNonClasses} exercice{nbNonClasses > 1 ? 's' : ''} n'{nbNonClasses > 1 ? 'ont' : 'a'} pas
+          <TexteIcone nom="question" taille={14} hautAligne style={styles.alerteNonClasses}>
+            {nbNonClasses} exercice{nbNonClasses > 1 ? 's' : ''} n'{nbNonClasses > 1 ? 'ont' : 'a'} pas
             de groupe — leurs séries ne sont comptées nulle part. Déplie pour les classer.
-          </Text>
+          </TexteIcone>
         )}
         {!volumeOuvert && groupesSuivis.length > 0 && (
           <View style={styles.resumeVolume}>
@@ -3643,8 +3687,9 @@ export default function EntrainementScreen({
                 >
                   <Text style={styles.pucheGroupe}>{groupe}</Text>
                   <Text style={[styles.pucheCompte, atteint && { color: colors.vert }]}>
-                    {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
+                    {fait}{cible > 0 ? `/${cible}` : ''}
                   </Text>
+                  {atteint ? <Icone nom="valide" taille={11} couleur={colors.vert} /> : null}
                 </TouchableOpacity>
               );
             })}
@@ -3680,9 +3725,10 @@ export default function EntrainementScreen({
                     style={styles.ligneVolume}
                     onPress={() => setGroupeDeploye(deploye ? null : groupe)}
                   >
-                    <Text style={styles.nomGroupe}>
-                      {deploye ? '▲' : '▼'} {groupe}
-                    </Text>
+                    <TexteIcone nom={deploye ? 'chevron-haut' : 'chevron-bas'}
+                      taille={11} ecart={4} couleur={colors.texteGris} style={styles.nomGroupe}>
+                      {groupe}
+                    </TexteIcone>
                     <View style={styles.barreVolumeFond}>
                       <View
                         style={[
@@ -3692,8 +3738,9 @@ export default function EntrainementScreen({
                       />
                     </View>
                     <Text style={[styles.compteurVolume, atteint && { color: colors.vert }]}>
-                      {fait}{cible > 0 ? `/${cible}` : ''}{atteint ? ' ✅' : ''}
+                      {fait}{cible > 0 ? `/${cible}` : ''}
                     </Text>
+                    {atteint ? <Icone nom="valide" taille={12} couleur={colors.vert} /> : null}
                   </TouchableOpacity>
                   {deploye && (() => {
                     const lignes = dernieresSeriesDuGroupe(
@@ -3756,7 +3803,7 @@ export default function EntrainementScreen({
                   </View>
                 ))}
                 <TouchableOpacity style={styles.boutonUtiliserModele} onPress={enregistrerObjectifs}>
-                  <Text style={styles.boutonDemarrerTexte}>💾 Enregistrer mes objectifs</Text>
+                  <LibelleIcone nom="valide" taille={14} style={styles.boutonDemarrerTexte}>Enregistrer mes objectifs</LibelleIcone>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setEditionObjectifs(false)}>
                   <Text style={styles.lienAnnuler}>Annuler</Text>
@@ -3766,7 +3813,7 @@ export default function EntrainementScreen({
 
             {!editionObjectifs && (
               <TouchableOpacity style={styles.boutonSecondaire} onPress={ouvrirEditionObjectifs}>
-                <Text style={styles.boutonSecondaireTexte}>🎯 Fixer mes objectifs</Text>
+                <LibelleIcone nom="cible" taille={14} style={styles.boutonSecondaireTexte}>Fixer mes objectifs</LibelleIcone>
               </TouchableOpacity>
             )}
 
@@ -3775,7 +3822,7 @@ export default function EntrainementScreen({
                 s'entraîner). Caché sur web comme l'autre. */}
             {!editionObjectifs && Platform.OS !== 'web' && (
               <View style={styles.blocRappelSuivi}>
-                <Text style={styles.libelleRappelSuivi}>🔔 Point hebdo sur mes séries</Text>
+                <TexteIcone nom="cloche" taille={14} couleur={colors.or} style={styles.libelleRappelSuivi}>Point hebdo sur mes séries</TexteIcone>
                 <Text style={styles.indice}>
                   Une notification chaque semaine avec ton avancement — pour ne pas
                   découvrir le dimanche soir qu'il te manque 8 séries de dos.
@@ -3808,7 +3855,7 @@ export default function EntrainementScreen({
                   </TouchableOpacity>
                   {suiviActif && (
                     <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappelSuivi}>
-                      <Text style={styles.boutonRetirerTexte}>✕</Text>
+                      <Icone nom="croix" taille={15} couleur={colors.rouge} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -3829,21 +3876,30 @@ export default function EntrainementScreen({
                 fois, en silence. */}
             {!editionObjectifs && exercicesSemaine.length > 0 && (
               <>
-                <Text style={[styles.indice, { marginTop: espacement.s }]}>
-                  🏷 Où comptent mes exercices ? Touche-en un pour le changer de groupe.
-                </Text>
+                <TexteIcone nom="etiquette" taille={13} hautAligne
+                  style={[styles.indice, { marginTop: espacement.s }]}>
+                  Où comptent mes exercices ? Touche-en un pour le changer de groupe.
+                </TexteIcone>
                 {exercicesSemaine.map(({ exercice, groupe, corrige }) => (
                   <View key={exercice}>
                     <TouchableOpacity
                       style={styles.ligneChoixProgramme}
                       onPress={() => setExerciceAClasser(exerciceAClasser === exercice ? null : exercice)}
                     >
-                      <Text style={styles.choixProgrammeTexte}>
-                        {exerciceAClasser === exercice ? '▲' : '▼'} {exercice}
-                      </Text>
-                      <Text style={[styles.groupeExercice, !groupe && { color: colors.rouge }]}>
-                        {groupe ? `${groupe}${corrige ? ' ✏️' : ''}` : '❓ compté nulle part'}
-                      </Text>
+                      <TexteIcone nom={exerciceAClasser === exercice ? 'chevron-haut' : 'chevron-bas'}
+                        taille={12} ecart={5} couleur={colors.texteGris} style={styles.choixProgrammeTexte}>
+                        {exercice}
+                      </TexteIcone>
+                      {groupe ? (
+                        <Text style={styles.groupeExercice}>
+                          {groupe}{corrige ? ' · modifié' : ''}
+                        </Text>
+                      ) : (
+                        <LibelleIcone nom="question" taille={12} ecart={4}
+                          style={[styles.groupeExercice, { color: colors.rouge }]}>
+                          compté nulle part
+                        </LibelleIcone>
+                      )}
                     </TouchableOpacity>
                     {exerciceAClasser === exercice && (
                       <View style={styles.lignePuces}>
@@ -3869,7 +3925,7 @@ export default function EntrainementScreen({
         {/* ---- Rappel d'entraînement (pas de notifications programmées sur web) ---- */}
         {Platform.OS !== 'web' && (
           <>
-            <Text style={styles.sectionTitre}>🔔 Rappel d'entraînement</Text>
+            <TexteIcone nom="cloche" taille={15} couleur={colors.or} style={styles.sectionTitre}>Rappel d'entraînement</TexteIcone>
             <View style={styles.carteModele}>
               <Text style={styles.indice}>
                 Choisis tes jours et ton heure : ton téléphone te préviendra, même
@@ -3903,7 +3959,7 @@ export default function EntrainementScreen({
                 </TouchableOpacity>
                 {rappelActif && (
                   <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappel}>
-                    <Text style={styles.boutonRetirerTexte}>✕</Text>
+                    <Icone nom="croix" taille={15} couleur={colors.rouge} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -3937,10 +3993,14 @@ export default function EntrainementScreen({
         {/* ---- Records personnels (calculés depuis l'historique) ---- */}
         {mesRecords.length > 0 && (
           <>
-            <TouchableOpacity onPress={() => setRecordsOuverts(!recordsOuverts)}>
-              <Text style={styles.sectionTitre}>
-                🏆 Mes records {recordsOuverts ? '▲' : '▼'}
-              </Text>
+            <TouchableOpacity style={styles.enTeteRepliableSection}
+              onPress={() => setRecordsOuverts(!recordsOuverts)}>
+              <TexteIcone nom="competition" taille={15} couleur={colors.or}
+                style={[styles.sectionTitre, styles.titreSansMarge, { flex: 1 }]}>
+                Mes records
+              </TexteIcone>
+              <Icone nom={recordsOuverts ? 'chevron-haut' : 'chevron-bas'} taille={16}
+                couleur={colors.texteGris} />
             </TouchableOpacity>
             {recordsOuverts && (
               <View style={styles.carteModele}>
@@ -4032,7 +4092,7 @@ export default function EntrainementScreen({
       style={styles.conteneur}
       contentContainerStyle={{ padding: espacement.m }}
     >
-      <Text style={styles.titre}>💪 Entraînement</Text>
+      <TexteIcone nom="entrainement" taille={20} couleur={colors.or} style={styles.titre}>Entraînement</TexteIcone>
       {bandeauEtat}
 
       {/* ---- LES DEUX ENTRÉES, TOUT EN HAUT (26/10/2026) ----
@@ -4046,7 +4106,7 @@ export default function EntrainementScreen({
           onPress={() => demarrerSeance(null)}
         >
           <View style={[stylesHub.pastilleAction, stylesHub.pastilleActionOr]}>
-            <Text style={stylesHub.symboleAction}>▶</Text>
+            <Icone nom="lecture" taille={17} couleur={da.orSombre} />
           </View>
           <Text style={stylesHub.titreActionOr}>SÉANCE LIBRE</Text>
           <Text style={stylesHub.sousTitreActionOr}>Démarre tout de suite, sans plan</Text>
@@ -4056,7 +4116,7 @@ export default function EntrainementScreen({
           onPress={() => setVue('programmes')}
         >
           <View style={[stylesHub.pastilleAction, stylesHub.pastilleActionBordee]}>
-            <Text style={stylesHub.symboleAction}>📋</Text>
+            <Icone nom="programme" taille={18} couleur={colors.or} />
           </View>
           <Text style={stylesHub.titreAction}>PROGRAMMES</Text>
           <Text style={stylesHub.sousTitreAction}>
@@ -4075,9 +4135,9 @@ export default function EntrainementScreen({
 
       {seancesFaitesAujourdhui.length > 0 && (
         <View style={[stylesHub.carteJour, stylesHub.carteJourFaite]}>
-          <Text style={stylesHub.nomSeanceJour}>
-            ✅ {seancesFaitesAujourdhui.map((e) => typeDeSeance(e, programmes)).join(' · ')}
-          </Text>
+          <TexteIcone nom="valide" taille={17} couleur={colors.vert} style={stylesHub.nomSeanceJour}>
+            {seancesFaitesAujourdhui.map((e) => typeDeSeance(e, programmes)).join(' · ')}
+          </TexteIcone>
           <Text style={stylesHub.metaSeanceJour}>
             {seancesFaitesAujourdhui.length > 1
               ? `${seancesFaitesAujourdhui.length} séances enregistrées aujourd'hui`
@@ -4139,7 +4199,7 @@ export default function EntrainementScreen({
             style={stylesHub.boutonDemarrerJour}
             onPress={() => demarrerSeance(p)}
           >
-            <Text style={stylesHub.texteDemarrerJour}>▶  DÉMARRER</Text>
+            <LibelleIcone nom="lecture" taille={14} style={stylesHub.texteDemarrerJour}>DÉMARRER</LibelleIcone>
           </TouchableOpacity>
         </View>
       ))}
@@ -4147,9 +4207,9 @@ export default function EntrainementScreen({
       {/* ---- Les séances manquées de la semaine, et leur rattrapage ---- */}
       {manquees.length > 0 && (
         <View style={styles.carteRattrapage}>
-          <Text style={styles.titreRattrapage}>
-            ⏳ À rattraper cette semaine ({manquees.length})
-          </Text>
+          <TexteIcone nom="horloge" taille={16} style={styles.titreRattrapage}>
+            À rattraper cette semaine ({manquees.length})
+          </TexteIcone>
           <Text style={styles.indice}>
             Ces séances étaient prévues et n'ont pas été faites. La rattraper
             l'enregistre à la date d'AUJOURD'HUI — on ne réécrit pas le
@@ -4163,7 +4223,7 @@ export default function EntrainementScreen({
                 style={styles.boutonUtiliserModele}
                 onPress={() => demarrerSeance(programme, date)}
               >
-                <Text style={styles.boutonDemarrerTexte}>🏋️ Rattraper maintenant</Text>
+                <LibelleIcone nom="lecture" taille={13} style={styles.boutonDemarrerTexte}>Rattraper maintenant</LibelleIcone>
               </TouchableOpacity>
             </View>
           ))}
@@ -4172,7 +4232,7 @@ export default function EntrainementScreen({
       {/* Proposition de propager un renommage d'exercice (04/09/2026). */}
       {renommages.length > 0 && (
         <View style={styles.carteRenommage}>
-          <Text style={styles.titreRenommage}>✏️ Exercice renommé</Text>
+          <TexteIcone nom="crayon" taille={15} style={styles.titreRenommage}>Exercice renommé</TexteIcone>
           {renommages.map((r) => (
             <Text key={r.ancien} style={styles.ligneRenommage}>
               « {r.ancien} » → « {r.nouveau} »
@@ -4204,20 +4264,24 @@ export default function EntrainementScreen({
            programme, en ajouter un, ou démarrer la séance du jour. ---- */}
       <View style={stylesHub.bandeauSection}>
         <Text style={stylesHub.libelleSection}>CALENDRIER</Text>
-        <Text style={stylesHub.libelleSection}>• PRÉVU   ✅ FAIT   ! MANQUÉ</Text>
+        <View style={stylesHub.legendeCalendrier}>
+          <Text style={stylesHub.libelleSection}>• PRÉVU</Text>
+          <Icone nom="valide" taille={11} couleur={colors.vert} />
+          <Text style={stylesHub.libelleSection}>FAIT   ! MANQUÉ</Text>
+        </View>
       </View>
       {/* Largeur limitée : sans ça, les cases (1/7 de l'écran chacune)
           deviennent énormes sur un grand écran (retour de Hafiz). */}
       <View style={styles.blocCalendrier}>
       <View style={styles.enTeteMois}>
         <TouchableOpacity onPress={() => changerMois(-1)} style={styles.boutonMois}>
-          <Text style={styles.flecheMois}>◀</Text>
+          <Icone nom="chevron-gauche" taille={17} couleur={colors.texte} />
         </TouchableOpacity>
         <Text style={styles.titreMois}>
           {nomsMois[moisAffiche.mois]} {moisAffiche.annee}
         </Text>
         <TouchableOpacity onPress={() => changerMois(1)} style={styles.boutonMois}>
-          <Text style={styles.flecheMois}>▶</Text>
+          <Icone nom="chevron-droit" taille={17} couleur={colors.texte} />
         </TouchableOpacity>
       </View>
       <View style={styles.ligneSemaine}>
@@ -4253,9 +4317,19 @@ export default function EntrainementScreen({
                 <Text style={[styles.numeroJour, estAujourdhui && { color: colors.or, fontWeight: '800' }]}>
                   {dateJs.getDate()}
                 </Text>
-                <Text style={[styles.marqueurJour, manquee && { color: colors.rouge }]}>
-                  {fait ? '✅' : manquee ? '!' : prevu ? '•' : ''}
-                </Text>
+                {/* Le ✅ était un EMOJI : trop large pour sa case, il avait
+                    déjà dû être rattrapé par un minHeight (03/09/2026), et il
+                    gardait sa couleur verte quoi qu'on demande. Dessiné, il
+                    tient dans 11 px et prend la couleur « fait » du thème. */}
+                <View style={styles.marqueurJour}>
+                  {fait
+                    ? <Icone nom="valide" taille={12} couleur={colors.vert} />
+                    : (
+                      <Text style={[styles.texteMarqueurJour, manquee && { color: colors.rouge }]}>
+                        {manquee ? '!' : prevu ? '•' : ''}
+                      </Text>
+                    )}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -4288,10 +4362,10 @@ export default function EntrainementScreen({
         const montrerPrevu = !jourBoucle || prevuAfficheLe === jourOuvert;
         return (
           <View style={styles.carteModele}>
-            <Text style={styles.nomProgrammeTexte}>
-              📌 {jourDeLaDate(dateJs).charAt(0).toUpperCase() + jourDeLaDate(dateJs).slice(1)}{' '}
+            <TexteIcone nom="calendrier" taille={15} couleur={colors.or} style={styles.nomProgrammeTexte}>
+              {jourDeLaDate(dateJs).charAt(0).toUpperCase() + jourDeLaDate(dateJs).slice(1)}{' '}
               {dateJs.getDate()} {nomsMois[dateJs.getMonth()]}
-            </Text>
+            </TexteIcone>
             {/* JOUR LIBRE : on doit pouvoir CHOISIR une séance et la FAIRE,
                 pas seulement en planifier une pour plus tard (demande de Hafiz
                 du 08/09/2026 : « en cliquant sur un jour on doit pouvoir
@@ -4327,9 +4401,9 @@ export default function EntrainementScreen({
                     style={styles.boutonUtiliserModele}
                     onPress={() => { setChoixSeanceAFaire(true); setChoixProgrammeOuvert(false); }}
                   >
-                    <Text style={styles.boutonDemarrerTexte}>
-                      🏋️ Faire une séance de mes programmes
-                    </Text>
+                    <LibelleIcone nom="lecture" taille={13} style={styles.boutonDemarrerTexte}>
+                      Faire une séance de mes programmes
+                    </LibelleIcone>
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.detailJour}>
@@ -4351,12 +4425,13 @@ export default function EntrainementScreen({
                             style={styles.ligneChoixProgramme}
                             onPress={() => demarrerSeance(p)}
                           >
-                            <Text style={styles.choixProgrammeTexte}>
-                              ▶ {p.nom}{' '}
+                            <TexteIcone nom="lecture" taille={11} ecart={6}
+                              couleur={colors.or} style={styles.choixProgrammeTexte}>
+                              {p.nom}{' '}
                               <Text style={styles.indice}>
                                 ({p.exercices.length} exo{p.exercices.length > 1 ? 's' : ''})
                               </Text>
-                            </Text>
+                            </TexteIcone>
                           </TouchableOpacity>
                         ))}
                       </>
@@ -4380,7 +4455,7 @@ export default function EntrainementScreen({
                   </Text>
                   {planif && (
                     <TouchableOpacity onPress={() => retirerDuPlanning(planif)} style={styles.boutonRetirer}>
-                      <Text style={styles.boutonRetirerTexte}>✕</Text>
+                      <Icone nom="croix" taille={15} couleur={colors.rouge} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -4398,9 +4473,9 @@ export default function EntrainementScreen({
                   style={styles.boutonUtiliserModele}
                   onPress={() => demarrerSeance(programme)}
                 >
-                  <Text style={styles.boutonDemarrerTexte}>
-                    🏋️ Démarrer cette séance{cestAujourdhui ? '' : ' maintenant'}
-                  </Text>
+                  <LibelleIcone nom="lecture" taille={13} style={styles.boutonDemarrerTexte}>
+                    Démarrer cette séance{cestAujourdhui ? '' : ' maintenant'}
+                  </LibelleIcone>
                 </TouchableOpacity>
               </View>
             ))}
@@ -4413,12 +4488,12 @@ export default function EntrainementScreen({
                   setChoixSeanceAFaire(false);
                 }}
               >
-                <Text style={styles.boutonSecondaireTexte}>➕ Placer un programme ce jour</Text>
+                <LibelleIcone nom="plus" taille={13} style={styles.boutonSecondaireTexte}>Placer un programme ce jour</LibelleIcone>
               </TouchableOpacity>
             ) : modeleAPlacer ? (
               // Un cycle a été choisi : demander sur combien de semaines l'étaler.
               <View style={styles.detailJour}>
-                <Text style={styles.nomProgrammeTexte}>{modeleAPlacer.emoji} {modeleAPlacer.nom}</Text>
+                <TexteIcone nom={modeleAPlacer.icone} taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{modeleAPlacer.nom}</TexteIcone>
                 <Text style={[styles.indice, { marginTop: 4 }]}>
                   Le cycle démarre le jour choisi : toutes ses séances se placent
                   automatiquement sur les jours concernés, semaine après semaine.
@@ -4439,7 +4514,7 @@ export default function EntrainementScreen({
                     placerModeleAuPlanning(jourOuvert, modeleAPlacer, n);
                   }}
                 >
-                  <Text style={styles.boutonDemarrerTexte}>✅ Placer le cycle</Text>
+                  <LibelleIcone nom="valide" taille={14} style={styles.boutonDemarrerTexte}>Placer le cycle</LibelleIcone>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setModeleAPlacer(null)}>
                   <Text style={styles.lienAnnuler}>← Retour</Text>
@@ -4461,7 +4536,7 @@ export default function EntrainementScreen({
                   </TouchableOpacity>
                 ))}
                 <Text style={[styles.indice, { marginTop: espacement.s, marginBottom: 4 }]}>
-                  📋 Programme complet (remplit tous ses jours automatiquement) :
+                  Programme complet (remplit tous ses jours automatiquement) :
                 </Text>
                 {cyclesPlacables.map((modele) => (
                   <TouchableOpacity
@@ -4469,7 +4544,7 @@ export default function EntrainementScreen({
                     style={styles.ligneChoixProgramme}
                     onPress={() => setModeleAPlacer(modele)}
                   >
-                    <Text style={styles.choixProgrammeTexte}>{modele.emoji} {modele.nom}</Text>
+                    <TexteIcone nom={modele.icone} taille={13} couleur={colors.or} style={styles.choixProgrammeTexte}>{modele.nom}</TexteIcone>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity onPress={() => setChoixProgrammeOuvert(false)}>
@@ -4489,7 +4564,7 @@ export default function EntrainementScreen({
         <Text style={stylesHub.libelleSection}>LE RESTE</Text>
       </View>
       <LigneRaccourci
-        icone="🎯"
+        icone="cible"
         titre="Suivi & objectifs"
         alerte={nbNonClasses > 0}
         resume={`${totalSeriesSemaine} série${totalSeriesSemaine > 1 ? 's' : ''} cette semaine · ${seancesDeLaSemaine} séance${seancesDeLaSemaine > 1 ? 's' : ''}${nbNonClasses > 0 ? ` · ${nbNonClasses} exo compté${nbNonClasses > 1 ? 's' : ''} nulle part` : ''}`}
@@ -4498,13 +4573,13 @@ export default function EntrainementScreen({
         onPress={() => { setVolumeOuvert(true); setVue('suivi'); }}
       />
       <LigneRaccourci
-        icone="🍽"
+        icone="couverts"
         titre="Nutrition"
         resume="Journal du jour · estimer un repas en photo"
         onPress={() => setVue('nutrition')}
       />
       <LigneRaccourci
-        icone="🏆"
+        icone="historique"
         titre="Historique & records"
         resume={entrainements.length > 0
           ? `${entrainements.length} séance${entrainements.length > 1 ? 's' : ''} enregistrée${entrainements.length > 1 ? 's' : ''}${mesRecords.length > 0 ? ` · ${mesRecords.length} record${mesRecords.length > 1 ? 's' : ''}` : ''}`
@@ -4512,7 +4587,7 @@ export default function EntrainementScreen({
         onPress={() => { setRecordsOuverts(true); setVue('historique'); }}
       />
 
-      {erreur && <Text style={styles.messageErreur}>⚠️ {erreur}</Text>}
+      {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
     </ScrollView>
 
   );
@@ -4570,6 +4645,13 @@ const styles = StyleSheet.create({
     color: colors.or, fontSize: 13, fontWeight: '800',
     marginTop: -4, marginBottom: espacement.s,
   },
+  // Un en-tête qui se déplie : le titre à gauche, le chevron tout à droite.
+  enTeteRepliable: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  enTeteRepliableSection: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: espacement.l - 10, paddingVertical: 10, minHeight: 44,
+  },
+  titreSansMarge: { marginTop: 0, marginBottom: 0 },
   sectionTitre: {
     color: colors.texte, fontSize: 18, fontWeight: '700',
     marginTop: espacement.l, marginBottom: espacement.s,
@@ -4620,7 +4702,10 @@ const styles = StyleSheet.create({
   },
   nomExercice: { color: colors.texte, fontWeight: '700', fontSize: 15 },
   indiceDerniere: { color: colors.texteGris, fontSize: 12, marginTop: 4, marginBottom: espacement.s },
-  serieFaite: { color: colors.vert, fontSize: 13, marginTop: 2 },
+  serieFaite: { color: colors.vert, fontSize: 13 },
+  // Le crayon « touche pour modifier » est une icone : il lui faut une
+  // rangee, un SVG ne vit pas dans un <Text>.
+  ligneSerieFaite: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   // `flex-end` : les champs portent un libellé au-dessus, le bouton doit
   // s'aligner sur le BAS des champs, pas sur le milieu de la colonne.
   ligneAjoutSerie: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: espacement.s },
@@ -4688,7 +4773,7 @@ const styles = StyleSheet.create({
     flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.carteClaire, overflow: 'hidden',
   },
   barreVolumeRemplie: { height: 8, borderRadius: 4 },
-  compteurVolume: { color: colors.texteGris, fontSize: 12, fontWeight: '700', width: 62, textAlign: 'right' },
+  compteurVolume: { color: colors.texteGris, fontSize: 12, fontWeight: '700', width: 50, textAlign: 'right' },
   resumeVolume: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: espacement.s },
   pucheVolume: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -4771,12 +4856,13 @@ const styles = StyleSheet.create({
   caseAujourdhui: { borderColor: colors.or },
   caseSelectionnee: { backgroundColor: colors.carteClaire, borderColor: colors.accent },
   numeroJour: { color: colors.texte, fontSize: 12, fontWeight: '600' },
-  // Un emoji a besoin de plus de place que sa taille de police : avec une
-  // hauteur figée à 12 px, le ✅ était coupé (retour de Hafiz du 03/09/2026).
-  // On réserve la place avec minHeight + lineHeight, sans jamais rogner.
+  // La place du marqueur est réservée (minHeight) même quand il n'y a rien :
+  // sans ça, les cases d'une même semaine ne feraient pas la même hauteur.
   marqueurJour: {
-    color: colors.accent, fontSize: 11, lineHeight: 15, minHeight: 15,
-    textAlign: 'center',
+    minHeight: 15, alignItems: 'center', justifyContent: 'center',
+  },
+  texteMarqueurJour: {
+    color: colors.accent, fontSize: 11, lineHeight: 15, textAlign: 'center',
   },
   detailJour: {
     backgroundColor: colors.carteClaire, borderRadius: 10, padding: espacement.s,
