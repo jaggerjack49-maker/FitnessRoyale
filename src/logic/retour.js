@@ -21,3 +21,18 @@ export function decisionRetour({ ongletActif, dernierRetourMs, maintenantMs }) {
     && maintenantMs - dernierRetourMs <= DELAI_DOUBLE_RETOUR_MS;
   return recent ? 'quitter' : 'avertir';
 }
+
+// QUITTER L'ONGLET ENTRAÎNEMENT SE CONFIRME (08/11/2026, demande de Hafiz :
+// « on doit demander une confirmation pour sortir de l'onglet entraînement »,
+// précisée en « toujours » — pas seulement pendant une séance).
+// Vrai dès qu'on part de l'Entraînement vers un AUTRE onglet, quel que soit le
+// chemin : la barre, le glissement, le retour Android ou un lien interne.
+// L'onglet de départ est le seul concerné : arriver sur l'Entraînement, ou
+// changer entre deux autres onglets, ne demande rien.
+export const ONGLET_A_CONFIRMER = 'entrainement';
+
+export function sortieAConfirmer(ongletActuel, ongletVise) {
+  return ongletActuel === ONGLET_A_CONFIRMER
+    && typeof ongletVise === 'string' && ongletVise !== ''
+    && ongletVise !== ongletActuel;
+}

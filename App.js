@@ -28,7 +28,7 @@ import { da, largeurMaxContenu } from './src/designSystem';
 import * as api from './src/api';
 import * as stockageSeance from './src/stockageSeance';
 import useRetour from './src/useRetour';
-import { decisionRetour, DELAI_DOUBLE_RETOUR_MS } from './src/logic/retour';
+import { decisionRetour, DELAI_DOUBLE_RETOUR_MS, sortieAConfirmer } from './src/logic/retour';
 import { enISO } from './src/logic/rattrapage';
 import ConnexionScreen from './src/screens/ConnexionScreen';
 import ProfilScreen from './src/screens/ProfilScreen';
@@ -92,7 +92,7 @@ function AppInterne() {
       ongletActif, dernierRetourMs: dernierRetour.current, maintenantMs: Date.now(),
     });
     if (decision === 'profil') {
-      setOngletActif('profil');
+      changerOnglet('profil');
       return true;
     }
     if (decision === 'quitter') return false; // Android ferme l'app
@@ -134,7 +134,7 @@ function AppInterne() {
     minuterieDefilement.current = setTimeout(() => {
       const index = Math.round(x / largeurPage);
       const cle = ONGLETS[index]?.cle;
-      if (cle) setOngletActif(cle);
+      if (cle && cle !== ongletActif) changerOnglet(cle);
     }, 120);
   }
   // Quand on arrive sur Compétition depuis la touche VS du Profil, on ne veut
@@ -143,10 +143,53 @@ function AppInterne() {
   // CompetitionScreen le surveille et ouvre les duels quand il change.
   const [demandeDuel, setDemandeDuel] = useState(0);
 
-  // Aller sur un onglet ; `options.duel` demande en plus d'ouvrir les duels.
-  function allerA(cle, options) {
+  // ---- QUITTER L'ENTRAÎNEMENT SE CONFIRME (08/11/2026) ----
+  // Demande de Hafiz : « on doit demander une confirmation pour sortir de
+  // l'onglet entraînement », TOUJOURS (pas seulement pendant une séance).
+  // Tous les chemins passent par `changerOnglet` : la barre, le glissement,
+  // le retour Android et les liens internes (`allerA`). La règle elle-même
+  // (`sortieAConfirmer`) est dans src/logic/retour.js, testée.
+  // `sortieDemandee` = { cle, options, seanceEnCours } pendant la question.
+  const [sortieDemandee, setSortieDemandee] = useState(null);
+
+  function appliquerOnglet(cle, options) {
     setOngletActif(cle);
     if (options && options.duel) setDemandeDuel((n) => n + 1);
+  }
+
+  function changerOnglet(cle, options) {
+    if (!sortieAConfirmer(ongletActif, cle)) {
+      appliquerOnglet(cle, options);
+      return;
+    }
+    setSortieDemandee({ cle, options, seanceEnCours: false });
+    // Le message change si une séance est en cours : on dit qu'elle n'est
+    // PAS perdue (elle reste dans l'onglet et dans la mémoire du téléphone).
+    if (moiServeur) {
+      stockageSeance.lireSeanceEnCours(moiServeur.id).then((seance) => {
+        if (seance) setSortieDemandee((d) => (d && d.cle === cle ? { ...d, seanceEnCours: true } : d));
+      }).catch(() => {});
+    }
+  }
+
+  function confirmerSortie() {
+    const demande = sortieDemandee;
+    setSortieDemandee(null);
+    if (demande) appliquerOnglet(demande.cle, demande.options);
+  }
+
+  // « Rester » : si la question venait d'un GLISSEMENT, la page est déjà
+  // partie vers l'onglet voisin — on la ramène sur l'Entraînement.
+  function annulerSortie() {
+    setSortieDemandee(null);
+    pagerRef.current?.scrollTo({ x: indexActif * largeurPage, animated: true });
+  }
+  // Le retour Android pendant la question = « Rester ».
+  useRetour(!!sortieDemandee, () => { annulerSortie(); return true; });
+
+  // Aller sur un onglet ; `options.duel` demande en plus d'ouvrir les duels.
+  function allerA(cle, options) {
+    changerOnglet(cle, options);
   }
   // TOUT VIENT DU SERVEUR : ces états ne sont qu'un reflet de mon compte,
   // rempli à la connexion. Aucune valeur de démonstration — un écran vide
@@ -624,6 +667,28 @@ function AppInterne() {
             contenu. Posée dessus, elle cacherait le bas des six écrans, qu'il
             faudrait tous rembourrer pour qu'on puisse encore toucher leur
             dernier bouton. Le rendu est le même : une capsule sur le fond. */}
+      {sortieDemandee && (
+        <View style={styles.voileSortie}>
+          <View style={styles.carteSortie}>
+            <Text style={styles.titreSortie}>
+              QUITTER <Text style={{ color: colors.or }}>L'ENTRAÎNEMENT</Text> ?
+            </Text>
+            <Text style={styles.texteSortie}>
+              {sortieDemandee.seanceEnCours
+                ? "Ta séance en cours n'est PAS perdue : elle reste en mémoire, et tu la retrouveras en revenant sur cet onglet."
+                : "Tu vas quitter l'onglet Entraînement."}
+            </Text>
+            <View style={styles.boutonsSortie}>
+              <TouchableOpacity style={[styles.boutonSortie, styles.boutonRester]} onPress={annulerSortie}>
+                <Text style={styles.texteRester}>RESTER</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.boutonSortie, styles.boutonQuitter]} onPress={confirmerSortie}>
+                <Text style={styles.texteQuitter}>QUITTER</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
       {avertissementQuitter && (
         <View style={styles.avertissementQuitter} pointerEvents="none">
           <Text style={styles.avertissementQuitterTexte}>Appuie encore une fois pour quitter</Text>
@@ -639,7 +704,7 @@ function AppInterne() {
               <TouchableOpacity
                 key={o.cle}
                 style={[styles.onglet, actif && styles.ongletActif]}
-                onPress={() => setOngletActif(o.cle)}
+                onPress={() => changerOnglet(o.cle)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: actif }}
                 accessibilityLabel={o.libelle}
@@ -671,6 +736,24 @@ const styles = StyleSheet.create({
     maxWidth: largeurMaxContenu,
     alignSelf: 'center',
   },
+  // La confirmation de sortie de l'Entraînement (08/11/2026). « Rester » en or
+  // plein : c'est le choix le plus sûr, il doit être le plus visible.
+  voileSortie: {
+    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 10, elevation: 10,
+  },
+  carteSortie: {
+    width: '100%', maxWidth: 380, backgroundColor: da.carte, borderRadius: 18,
+    borderWidth: 1, borderColor: da.bordureOrDouce, padding: 20,
+  },
+  titreSortie: { color: colors.texte, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  texteSortie: { color: da.texteDoux, fontSize: 14, lineHeight: 20, marginTop: 10 },
+  boutonsSortie: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  boutonSortie: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  boutonRester: { backgroundColor: colors.or },
+  boutonQuitter: { borderWidth: 1, borderColor: colors.bordure },
+  texteRester: { color: da.orSombre, fontWeight: '900', letterSpacing: 1 },
+  texteQuitter: { color: da.texteDoux, fontWeight: '800', letterSpacing: 1 },
   avertissementQuitter: {
     position: 'absolute', left: 0, right: 0, bottom: 96, alignItems: 'center',
   },

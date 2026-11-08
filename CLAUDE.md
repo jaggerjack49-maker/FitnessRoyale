@@ -5206,6 +5206,34 @@ de rappel et renvoie vers les Paramètres. Aucun débordement, cibles ≥ 44 px
 (la ligne « Changer mon mot de passe » mesurait 28 px, corrigée).
 ⚠️ NON VÉRIFIÉ : les notifications elles-mêmes et le retour Android (web).
 
+## Quitter l'onglet Entraînement se confirme — 08/11/2026
+
+Demande de Hafiz : « on doit demander une confirmation pour sortir de l'onglet
+entraînement ». Question posée : seulement pendant une séance, ou toujours ?
+Réponse : **TOUJOURS**.
+
+- La règle (`sortieAConfirmer`, src/logic/retour.js, testée) : vrai dès qu'on
+  part de l'Entraînement vers un AUTRE onglet. Arriver sur l'Entraînement, ou
+  passer entre deux autres onglets, ne demande rien.
+- App.js fait passer TOUS les changements d'onglet par `changerOnglet` : la
+  barre, le GLISSEMENT entre pages, le retour Android (qui ramenait au Profil)
+  et les liens internes (`allerA`). Une seule porte d'entrée, sinon un chemin
+  oublié contournerait la question.
+- La fenêtre « QUITTER L'ENTRAÎNEMENT ? » : « RESTER » en or plein (le choix
+  sûr), « QUITTER » discret. Si une séance est en cours, elle le dit : la séance
+  n'est PAS perdue (elle reste dans l'onglet et en mémoire).
+- ⚠️ LE GLISSEMENT : quand la question arrive, la page a DÉJÀ glissé vers
+  l'onglet voisin. « Rester » (ou le retour Android) la ramène sur
+  l'Entraînement (`annulerSortie`). Vérifié par un espion sur `scroll` : la
+  page revient bien à sa position.
+
+Vérifié dans le navigateur (390 px, serveur local) : Profil → Perfs → Entraîn.
+sans question ; Entraîn. → Clan par la barre : question, « Rester » garde
+l'Entraînement, « Quitter » ouvre le Clan ; glissement vers le Clan pendant
+une séance libre : question avec le message « séance pas perdue », « Rester »
+ramène la page. Mutation vue échouer. Suite : 370 tests, OK.
+⚠️ NON VÉRIFIÉ : le retour Android (pas de geste retour dans le navigateur).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

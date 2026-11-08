@@ -3,7 +3,7 @@
 //
 // Pourquoi ce détour : le geste retour n'existe pas dans le navigateur où l'app
 // est vérifiée — la règle se teste donc à part, sur des instants choisis.
-import { decisionRetour, DELAI_DOUBLE_RETOUR_MS } from '../../../src/logic/retour.js';
+import { decisionRetour, DELAI_DOUBLE_RETOUR_MS, sortieAConfirmer } from '../../../src/logic/retour.js';
 
 const cas = [];
 function verifier(nom, entree, attendu) {
@@ -30,5 +30,20 @@ verifier('horloge incohérente (retour « dans le futur ») : avertir, pas quitt
   { ongletActif: 'profil', dernierRetourMs: 12000, maintenantMs: 10000 }, 'avertir');
 verifier('données manquantes : avertir sans planter',
   { ongletActif: 'profil' }, 'avertir');
+
+// ---- Quitter l'onglet Entraînement se confirme (08/11/2026) ----
+function verifierSortie(nom, actuel, vise, attendu) {
+  try {
+    cas.push({ nom, obtenu: sortieAConfirmer(actuel, vise), attendu });
+  } catch (e) {
+    cas.push({ nom, erreur: e.message, attendu });
+  }
+}
+verifierSortie('Entraînement → Profil : confirmer', 'entrainement', 'profil', true);
+verifierSortie('Entraînement → Clan : confirmer', 'entrainement', 'clan', true);
+verifierSortie('rester sur l\'Entraînement : rien à confirmer', 'entrainement', 'entrainement', false);
+verifierSortie('arriver sur l\'Entraînement : rien à confirmer', 'profil', 'entrainement', false);
+verifierSortie('entre deux autres onglets : rien à confirmer', 'perfs', 'clan', false);
+verifierSortie('destination illisible : rien à confirmer', 'entrainement', undefined, false);
 
 process.stdout.write(JSON.stringify(cas));
