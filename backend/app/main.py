@@ -184,6 +184,14 @@ class ExerciceProgramme(BaseModel):
     # LE HAUT D'UNE FOURCHETTE (« 5 - 10 »), facultatif (04/10/2026) :
     # `reps_cibles` reste le bas. None = objectif simple, comme avant.
     reps_cibles_max: int | None = Field(default=None, gt=0, le=100)
+    # LE TEMPS DE REPOS après chaque série, en secondes (08/11/2026, demande
+    # de Hafiz : « on doit pouvoir fixer des temps de repos lorsqu'on crée le
+    # programme »). None = pas fixé : l'app propose alors 1 min 30. Plafonné à
+    # 15 min — au-delà ce n'est plus un repos entre deux séries.
+    repos_secondes: int | None = Field(default=None, ge=0, le=900)
+    # L'EFFORT VISÉ, en RIR (« reps in reserve » : combien de répétitions on
+    # aurait encore pu faire). 0 = jusqu'à l'échec. None = pas fixé.
+    rir_cible: int | None = Field(default=None, ge=0, le=10)
 
 
 # Les jours acceptés pour un programme (toujours en minuscules).
@@ -1196,7 +1204,7 @@ def creer_programme(joueur_id: int, programme: NouveauProgramme,
     for ordre, exo in enumerate(programme.exercices, start=1):
         db.ajouter_exercice_programme(
             programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
-            exo.reps_cibles_max
+            exo.reps_cibles_max, exo.repos_secondes, exo.rir_cible
         )
     return db.lire_programme(programme_id)
 
@@ -1538,7 +1546,7 @@ def creer_cycle(joueur_id: int, cycle: NouveauCycle,
         for ordre, exo in enumerate(seance.exercices, start=1):
             db.ajouter_exercice_programme(
                 programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
-            exo.reps_cibles_max
+            exo.reps_cibles_max, exo.repos_secondes, exo.rir_cible
             )
         db.rattacher_programme_au_cycle(cycle_id, programme_id)
     return db.lire_cycle(cycle_id)
@@ -1587,7 +1595,7 @@ def ajouter_seance_au_cycle(cycle_id: int, seance: SeanceCycle,
     for ordre, exo in enumerate(seance.exercices, start=1):
         db.ajouter_exercice_programme(
             programme_id, exo.exercice, ordre, exo.series_cibles, exo.reps_cibles,
-            exo.reps_cibles_max
+            exo.reps_cibles_max, exo.repos_secondes, exo.rir_cible
         )
     db.rattacher_programme_au_cycle(cycle_id, programme_id)
     return db.lire_cycle(cycle_id)

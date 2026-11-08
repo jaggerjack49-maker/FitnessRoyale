@@ -358,19 +358,9 @@ export async function seancesDuJoueur(joueurId) {
   return get(`/joueurs/${joueurId}/seances`);
 }
 
-// ----- Axes de surcharge progressive, par exercice (24/09/2026) -----
-// { "développé couché": ["reps", "poids"], … } — un exercice absent suit le
-// réglage par défaut (double progression). La SUGGESTION est calculée dans
-// l'app (src/logic/surchargeProgressive.js) : le serveur ne garde que le choix.
-export async function progressionsExercices(joueurId) {
-  return get(`/joueurs/${joueurId}/progressions-exercices`);
-}
-
-export async function definirProgressionExercice(joueurId, exercice, modes) {
-  return appel(`/joueurs/${joueurId}/progressions-exercices/${encodeURIComponent(exercice)}`, {
-    method: 'PUT', body: JSON.stringify({ modes }),
-  });
-}
+// ----- Axes de surcharge progressive (24/09/2026 → retirés le 08/11/2026) -----
+// L'app ne lit ni n'écrit plus ce réglage (Hafiz a demandé de retirer les
+// puces « Faire progresser »). Les endpoints existent toujours côté serveur.
 
 // ----- LE TABLEAU DE PROGRESSION (04/10/2026) -----
 // Le CALCUL du tableau vit côté app (src/logic/projectionProgramme.js) : le

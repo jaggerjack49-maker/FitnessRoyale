@@ -6,10 +6,11 @@
 // toutes les fonctions ici deviennent des no-op silencieux (les écrans cachent
 // les cartes de rappel sur web).
 //
-// DEUX FAMILLES DE RAPPELS, indépendantes :
+// TROIS FAMILLES DE NOTIFICATIONS, indépendantes :
 //   'entrainement' — « c'est l'heure de t'entraîner », plusieurs jours/semaine ;
-//   'suivi'        — « fais le point sur tes séries », une fois par semaine.
-// ATTENTION : `cancelAllScheduledNotificationsAsync()` annulerait les DEUX.
+//   'suivi'        — « fais le point sur tes séries », une fois par semaine ;
+//   'repos'        — la fin d'un temps de repos, app en arrière-plan (08/11/2026).
+// ATTENTION : `cancelAllScheduledNotificationsAsync()` les annulerait TOUTES.
 // On mémorise donc les identifiants de chaque famille (AsyncStorage) pour
 // pouvoir en annuler une sans toucher à l'autre.
 import { Platform } from 'react-native';
@@ -132,4 +133,34 @@ export async function programmerRappelSuivi(jour, heure, minute, resume) {
 
 export async function annulerRappelSuivi() {
   await annulerFamille('suivi');
+}
+
+// ----- Famille « repos » : la fin d'un temps de repos (08/11/2026) -----
+// Pendant le repos, on pose souvent le téléphone écran éteint : le minuteur de
+// l'app ne peut alors ni vibrer ni s'afficher. Le minuteur programme donc UNE
+// notification à l'instant où le repos finit QUAND L'APP PASSE EN
+// ARRIÈRE-PLAN, et l'annule dès qu'on revient (app ouverte, il vibre lui-même —
+// une bannière en plus ferait doublon).
+export async function programmerFinRepos(secondes, corps) {
+  if (estWeb || !(secondes > 0)) return;
+  await annulerFamille('repos');
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Repos terminé', body: corps || 'À toi de jouer : série suivante.', sound: true },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: Math.max(1, Math.round(secondes)),
+        channelId: Platform.OS === 'android' ? 'rappels' : undefined,
+      },
+    });
+    await ecrireIds('repos', [id]);
+  } catch {
+    // Pas de notification possible : le minuteur de l'app reste là au retour.
+  }
+}
+
+export async function annulerFinRepos() {
+  await annulerFamille('repos');
 }

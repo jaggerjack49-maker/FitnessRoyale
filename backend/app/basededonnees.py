@@ -512,6 +512,13 @@ def initialiser():
         #    strictement inchangé pour tous les programmes existants.
         if not _colonne_existe(conn, "programme_exercices", "reps_cibles_max"):
             conn.execute("ALTER TABLE programme_exercices ADD COLUMN reps_cibles_max INTEGER")
+        # REPOS ET EFFORT VISÉ par exercice (08/11/2026) : deux colonnes
+        # facultatives. NULL = pas fixé, comportement inchangé pour tous les
+        # programmes existants.
+        if not _colonne_existe(conn, "programme_exercices", "repos_secondes"):
+            conn.execute("ALTER TABLE programme_exercices ADD COLUMN repos_secondes INTEGER")
+        if not _colonne_existe(conn, "programme_exercices", "rir_cible"):
+            conn.execute("ALTER TABLE programme_exercices ADD COLUMN rir_cible INTEGER")
         # 2) La séance isolée peut finir par une semaine de DÉCHARGE.
         if not _colonne_existe(conn, "programmes", "avec_deload"):
             conn.execute("ALTER TABLE programmes ADD COLUMN avec_deload INTEGER DEFAULT 0")
@@ -1596,15 +1603,21 @@ def creer_programme(joueur_id: int, nom: str, cree_le: str,
 
 def ajouter_exercice_programme(programme_id: int, exercice: str, ordre: int,
                                series_cibles: int, reps_cibles: int,
-                               reps_cibles_max: int | None = None) -> None:
+                               reps_cibles_max: int | None = None,
+                               repos_secondes: int | None = None,
+                               rir_cible: int | None = None) -> None:
     """`reps_cibles_max` = le HAUT d'une fourchette (« 5 - 10 »). None = objectif
-    simple, comme avant — aucun programme existant ne change de comportement."""
+    simple, comme avant — aucun programme existant ne change de comportement.
+    `repos_secondes` / `rir_cible` (08/11/2026) : le repos après chaque série
+    et l'effort visé. None = pas fixé."""
     with connexion() as conn:
         conn.execute(
             "INSERT INTO programme_exercices "
-            "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max),
+            "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max, "
+            "repos_secondes, rir_cible) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max,
+             repos_secondes, rir_cible),
         )
 
 
@@ -1631,7 +1644,8 @@ def _programmes_par_ids(conn, ids: list) -> dict:
         p["exercices"] = []
         programmes[p["id"]] = p
     for ligne in conn.execute(
-        "SELECT programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max "
+        "SELECT programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max, "
+        "repos_secondes, rir_cible "
         f"FROM programme_exercices WHERE programme_id IN ({_marques(len(ids))}) ORDER BY ordre",
         tuple(ids),
     ):
@@ -1694,10 +1708,12 @@ def remplacer_exercices_programme(programme_id: int, exercices: list) -> None:
         for ordre, exo in enumerate(exercices, start=1):
             conn.execute(
                 "INSERT INTO programme_exercices "
-                "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "(programme_id, exercice, ordre, series_cibles, reps_cibles, reps_cibles_max, "
+                "repos_secondes, rir_cible) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (programme_id, exo["exercice"], ordre, exo["series_cibles"],
-                 exo["reps_cibles"], exo.get("reps_cibles_max")),
+                 exo["reps_cibles"], exo.get("reps_cibles_max"),
+                 exo.get("repos_secondes"), exo.get("rir_cible")),
             )
 
 

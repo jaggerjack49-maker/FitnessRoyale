@@ -25,8 +25,7 @@ import {
   compterSeriesParGroupe, exercicesDeLaPeriode, dernieresSeriesDuGroupe,
 } from '../data/groupesMusculaires';
 import {
-  suggererProchaineSerie, recordPersonnel, bat_le_record,
-  tousLesRecords, AXES_PROGRESSION, AXES_PAR_DEFAUT,
+  suggererProchaineSerie, recordPersonnel, bat_le_record, tousLesRecords,
 } from '../logic/surchargeProgressive';
 import {
   jourDeLaSeance, seriesSansJour, joursTravailles,
@@ -53,6 +52,13 @@ import {
 import {
   secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
 } from '../logic/seanceLibre';
+import { reposDe, prochaineEtape, libelleEtape } from '../logic/repos';
+import {
+  ligneVide, ligneDepuisExercice, exercicesDepuisLignes, deplacerLigne, resumeReglages,
+  detecterRenommages,
+} from '../logic/lignesProgramme';
+import LigneExerciceEditable from '../components/LigneExerciceEditable';
+import MinuteurRepos from '../components/MinuteurRepos';
 
 // BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
 // (`toISOString`), alors que les cases du calendrier utilisent la date LOCALE
@@ -146,45 +152,26 @@ function joursDuCycle(cycle) {
 // déduit de l'historique déjà chargé (marche hors-ligne).
 // Pas de suggestion = exercice jamais loggé : on n'affiche rien plutôt
 // qu'un chiffre inventé.
-// COMMENT CET EXERCICE DOIT PROGRESSER (24/09/2026).
-// Trois puces à cocher, affichées LÀ OÙ LA SUGGESTION EST LUE : pendant la
-// séance, sous l'exercice. On règle ce qu'on voit, au moment où on s'en sert.
-const LIBELLES_AXES = { series: 'Séries', reps: 'Reps', poids: 'Poids' };
-
-function ChoixAxesProgression({ exercice, modes, onBasculer }) {
-  const actifs = Array.isArray(modes) && modes.length > 0 ? modes : AXES_PAR_DEFAUT;
-  return (
-    <View style={styles.ligneAxes}>
-      <Text style={styles.libelleAxes}>Faire progresser :</Text>
-      {AXES_PROGRESSION.map((axe) => {
-        const choisi = actifs.includes(axe);
-        return (
-          <TouchableOpacity
-            key={axe}
-            style={[styles.puceAxe, choisi && styles.puceAxeActive]}
-            onPress={() => onBasculer(exercice, axe)}
-          >
-            <Text style={[styles.puceAxeTexte, choisi && styles.puceAxeTexteActif]}>
-              {LIBELLES_AXES[axe]}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
-function LigneExercicePrevu({ exo, entrainements, progressions = {} }) {
-  // LES PERFS ATTENDUES SUIVENT LES AXES CHOISIS (24/09/2026) : c'est le
-  // même calcul que pendant la séance, donc les deux ne peuvent pas se
-  // contredire.
+// Les puces « Faire progresser : Séries / Reps / Poids » (24/09/2026) ont
+// été RETIRÉES le 08/11/2026 à la demande de Hafiz. Toutes les suggestions
+// suivent désormais la double progression par défaut (reps, puis charge — voir
+// src/logic/surchargeProgressive.js). Les réglages déjà enregistrés côté
+// serveur (`progressions_exercices`) ne sont plus lus ; l'endpoint reste, rien
+// ne l'appelle.
+function LigneExercicePrevu({ exo, entrainements, numero }) {
+  // Même calcul que pendant la séance : les deux ne peuvent pas se contredire.
   const suggestion = suggererProchaineSerie(entrainements, exo.exercice, exo.reps_cibles, {
-    modes: progressions[exo.exercice], seriesCibles: exo.series_cibles,
+    seriesCibles: exo.series_cibles,
   });
+  // L'ORDRE se voit (« 1. », « 2. »…) et le repos / RIR fixés aussi
+  // (08/11/2026) : c'est ce qu'on relit avant d'aller à la salle.
+  const reglages = resumeReglages(exo);
   return (
     <View style={{ marginTop: 3 }}>
       <Text style={styles.exerciceDetailJour}>
-        • {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+        {numero ? `${numero}.` : '•'} {exo.exercice} — {exo.series_cibles} × {exo.reps_cibles}
+        {exo.reps_cibles_max ? `-${exo.reps_cibles_max}` : ''}
+        {reglages ? <Text style={styles.reglagesExo}>{`  ·  ${reglages}`}</Text> : null}
       </Text>
       {suggestion && (
         <TexteIcone nom="cible" taille={12} ecart={5} style={styles.attenduDetailJour}>
@@ -292,17 +279,12 @@ function EditeurSeance({
   onVider, libelleVider, note, nomParDefaut,
 }) {
   const [nom, setNom] = useState(programme ? programme.nom : '');
+  // Forme et conversion des lignes : src/logic/lignesProgramme.js (partagée
+  // avec « Nouveau programme », 08/11/2026).
   const [lignes, setLignes] = useState(
     programme && programme.exercices.length > 0
-      ? programme.exercices.map((exo) => ({
-          exercice: exo.exercice,
-          series: String(exo.series_cibles),
-          reps: String(exo.reps_cibles),
-          // Le HAUT d'une fourchette (« 5 - 10 »), facultatif : vide = objectif
-          // simple, comme avant (04/10/2026, pour le tableau de progression).
-          repsMax: exo.reps_cibles_max ? String(exo.reps_cibles_max) : '',
-        }))
-      : [{ exercice: '', series: '3', reps: '10', repsMax: '' }]
+      ? programme.exercices.map(ligneDepuisExercice)
+      : [ligneVide()]
   );
   const [message, setMessage] = useState(null);
   const [biblioOuverte, setBiblioOuverte] = useState(false);
@@ -314,21 +296,7 @@ function EditeurSeance({
 
   function valider() {
     const nomFinal = nom.trim() || nomParDefaut || 'Séance';
-    const exercices = lignes
-      .filter((ligne) => ligne.exercice.trim())
-      .map((ligne) => {
-        const bas = Math.max(1, parseInt(ligne.reps, 10) || 1);
-        const haut = parseInt(ligne.repsMax, 10);
-        return {
-          exercice: ligne.exercice.trim(),
-          series_cibles: Math.max(1, parseInt(ligne.series, 10) || 1),
-          reps_cibles: bas,
-          // Une fourchette à l'envers (10 - 5) ou égale au bas n'en est pas
-          // une : on la range en objectif simple plutôt que de refuser la
-          // saisie pour si peu.
-          reps_cibles_max: Number.isFinite(haut) && haut > bas ? haut : null,
-        };
-      });
+    const exercices = exercicesDepuisLignes(lignes);
     if (exercices.length === 0) {
       setMessage("Ajoute au moins un exercice (avec son nom).");
       return;
@@ -349,58 +317,32 @@ function EditeurSeance({
         placeholderTextColor={colors.texteGris}
       />
 
-      <Text style={stylesEditeur.libelle}>Exercices (nom · séries × reps)</Text>
+      <Text style={stylesEditeur.libelle}>Exercices, dans l'ordre de la séance</Text>
       <Text style={stylesEditeur.aide}>
-        Le second champ de reps est une FOURCHETTE, facultative : « 5 → 10 »
-        veut dire qu'on monte les reps jusqu'à 10 avant d'ajouter de la charge.
-        Laissé vide, l'objectif reste un seul nombre.
+        Les flèches changent l'ordre. « → MAX » est une fourchette facultative
+        (« 5 → 10 » : on monte les reps jusqu'à 10 avant d'ajouter de la charge).
+        REPOS : le temps entre deux séries (« 90 » ou « 1:30 ») — le minuteur se
+        lancera tout seul après chaque série ; vide = 1:30. RIR : les reps que
+        tu gardes en réserve (0 = jusqu'à l'échec), facultatif.
       </Text>
       {lignes.map((ligne, i) => (
-        <View key={i} style={stylesEditeur.ligne}>
-          <TextInput
-            style={stylesEditeur.champExo}
-            value={ligne.exercice}
-            onChangeText={(v) => modifier(i, 'exercice', v)}
-            placeholder="Nom de l'exercice"
-            placeholderTextColor={colors.texteGris}
-          />
-          <TextInput
-            style={stylesEditeur.champ}
-            value={ligne.series}
-            onChangeText={(v) => modifier(i, 'series', v)}
-            keyboardType="numeric"
-          />
-          <Text style={stylesEditeur.croix}>×</Text>
-          <TextInput
-            style={stylesEditeur.champ}
-            value={ligne.reps}
-            onChangeText={(v) => modifier(i, 'reps', v)}
-            keyboardType="numeric"
-          />
-          <Text style={stylesEditeur.croix}>→</Text>
-          <TextInput
-            style={stylesEditeur.champ}
-            value={ligne.repsMax}
-            onChangeText={(v) => modifier(i, 'repsMax', v)}
-            keyboardType="numeric"
-            placeholder="—"
-            placeholderTextColor={colors.texteGris}
-          />
-          {lignes.length > 1 && (
-            <TouchableOpacity
-              style={stylesEditeur.retirer}
-              onPress={() => setLignes((l) => l.filter((_, k) => k !== i))}
-            >
-              <Icone nom="croix" taille={13} couleur={colors.rouge} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <LigneExerciceEditable
+          key={i}
+          ligne={ligne}
+          index={i}
+          total={lignes.length}
+          onModifier={(champ, valeur) => modifier(i, champ, valeur)}
+          onDeplacer={(sens) => { setMessage(null); setLignes((l) => deplacerLigne(l, i, sens)); }}
+          onRetirer={lignes.length > 1
+            ? () => setLignes((l) => l.filter((_, k) => k !== i))
+            : null}
+        />
       ))}
 
       <View style={stylesEditeur.deuxBoutons}>
         <TouchableOpacity
           style={[stylesEditeur.boutonAjout, stylesEditeur.boutonMoitie]}
-          onPress={() => setLignes((l) => [...l, { exercice: '', series: '3', reps: '10', repsMax: '' }])}
+          onPress={() => setLignes((l) => [...l, ligneVide()])}
         >
           <LibelleIcone nom="plus" taille={13} ecart={5} style={stylesEditeur.boutonAjoutTexte}>Ligne vide</LibelleIcone>
         </TouchableOpacity>
@@ -418,9 +360,7 @@ function EditeurSeance({
         <ChoixExercice
           dejaPris={lignes.map((l) => l.exercice)}
           onFermer={() => setBiblioOuverte(false)}
-          onChoisir={(nomExo) => setLignes((l) => placerExerciceChoisi(
-            l, nomExo, { exercice: '', series: '3', reps: '10', repsMax: '' },
-          ))}
+          onChoisir={(nomExo) => setLignes((l) => placerExerciceChoisi(l, nomExo, ligneVide()))}
         />
       )}
 
@@ -444,28 +384,11 @@ const stylesEditeur = StyleSheet.create({
     marginTop: espacement.s, borderWidth: 1, borderColor: colors.bordure,
   },
   libelle: { color: colors.texte, fontWeight: '600', fontSize: 12, marginTop: 4, marginBottom: 4 },
-  ligne: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   champNom: {
     backgroundColor: colors.carteClaire, borderRadius: 8, padding: 10,
     color: colors.texte, borderWidth: 1, borderColor: colors.bordure, fontSize: 13,
   },
-  champExo: {
-    backgroundColor: colors.carteClaire, borderRadius: 8, paddingVertical: 6,
-    paddingHorizontal: 8, color: colors.texte, flex: 1,
-    borderWidth: 1, borderColor: colors.bordure, fontSize: 12,
-  },
-  champ: {
-    backgroundColor: colors.carteClaire, borderRadius: 8, paddingVertical: 6,
-    paddingHorizontal: 4, color: colors.texte, width: 40, textAlign: 'center',
-    borderWidth: 1, borderColor: colors.bordure, fontSize: 12,
-  },
-  croix: { color: colors.texteGris, fontSize: 12 },
   aide: { color: colors.texteGris, fontSize: 11, lineHeight: 16, marginBottom: 6 },
-  retirer: {
-    width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: colors.rouge,
-  },
-  retirerTexte: { color: colors.rouge, fontWeight: '800', fontSize: 11 },
   // « Ligne vide » reste NEUTRE (08/11/2026) : à côté de « Bibliothèque » en
   // or, c'est le chemin de repli — deux boutons de même couleur n'auraient
   // plus dit lequel préférer.
@@ -903,7 +826,8 @@ export default function EntrainementScreen({
   // ensuite tous ces jours automatiquement.
   const [nomProgramme, setNomProgramme] = useState('');
   const [joursChoisis, setJoursChoisis] = useState([]); // ['lundi', ...]
-  // { lundi: { nom: 'Push', lignes: [{exercice, seriesCibles, repsCibles}] }, ... }
+  // { lundi: { nom: 'Push', lignes: [ligneVide(), …] }, ... } — les lignes ont
+  // la forme de src/logic/lignesProgramme.js, comme dans l'éditeur de séance.
   const [seancesParJour, setSeancesParJour] = useState({});
   const [jourEnEdition, setJourEnEdition] = useState(null); // jour déplié dans le formulaire
   // Le jour dont la bibliothèque d'exercices est ouverte (un seul à la fois).
@@ -1308,26 +1232,6 @@ export default function EntrainementScreen({
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
 
-  // COMMENT CHAQUE EXERCICE DOIT PROGRESSER (24/09/2026, demande de Hafiz).
-  // { "développé couché": ["reps", "poids"], … } — un exercice absent suit le
-  // réglage par défaut (double progression, voir surchargeProgressive.js).
-  const [progressions, setProgressions] = useState({});
-
-  // Coche / décoche un axe pour un exercice, et l'enregistre tout de suite :
-  // le réglage se fait là où la suggestion s'affiche, pendant la séance.
-  async function basculerAxe(exercice, axe) {
-    const actuels = progressions[exercice] || AXES_PAR_DEFAUT;
-    const suivants = actuels.includes(axe)
-      ? actuels.filter((a) => a !== axe)
-      : AXES_PROGRESSION.filter((a) => actuels.includes(a) || a === axe);
-    setProgressions((p) => ({ ...p, [exercice]: suivants }));
-    try {
-      await api.definirProgressionExercice(moi.id, exercice, suivants);
-    } catch {
-      // Réglage gardé à l'écran ; il repartira au prochain changement.
-    }
-  }
-
   // ---- La séance survit à tout (07/09/2026) ----
   // `seanceRestauree` : a-t-on FINI de relire la séance interrompue ?
   // Ce drapeau existe pour ne pas écraser la mémoire avec un état vide
@@ -1345,6 +1249,9 @@ export default function EntrainementScreen({
   // L'INSTANT où la séance a commencé (ms) — c'est lui que lit le chrono
   // (08/11/2026). Mémorisé avec la séance : le chrono survit à une relance.
   const [debutChrono, setDebutChrono] = useState(null);
+  // LE REPOS EN COURS (08/11/2026) : { fin (ms), duree (s), exercice } ou
+  // null. Lancé par « + Série », mémorisé avec la séance.
+  const [repos, setRepos] = useState(null);
   // Le programme NÉ de la séance libre en cours (« Créer un programme avec ces
   // exercices ») : la séance lui est rattachée, mais on garde la carte de
   // confirmation à l'écran au lieu de la faire disparaître.
@@ -1476,6 +1383,8 @@ export default function EntrainementScreen({
         // Une séance commencée AVANT le chrono n'a pas d'instant de départ :
         // on n'en invente pas un, le chrono reste simplement caché.
         setDebutChrono(seance.debutChrono || null);
+        // Un repos déjà fini pendant que l'app était fermée ne revient pas.
+        setRepos(seance.repos && seance.repos.fin > Date.now() ? seance.repos : null);
         setDaterAujourdhui(!!seance.daterAujourdhui);
         setVue('seance');
       }
@@ -1491,10 +1400,10 @@ export default function EntrainementScreen({
     if (!seanceRestauree || vue !== 'seance') return;
     stockageSeance.ecrireSeanceEnCours(idLocal, {
       programmeActif, exercicesSession, seriesLoggees, champsSaisie, rattrapageDe,
-      dateDebut: dateDebutSeance, daterAujourdhui, debutChrono,
+      dateDebut: dateDebutSeance, daterAujourdhui, debutChrono, repos,
     });
   }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
-      champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, debutChrono, idLocal]);
+      champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, debutChrono, repos, idLocal]);
 
   async function chargerTout() {
     if (chargementEnCours.current) return; // un chargement tourne déjà
@@ -1514,11 +1423,10 @@ export default function EntrainementScreen({
         api.cyclesDuJoueur(moi.id),
         api.objectifsSeries(moi.id),
         api.groupesExercices(moi.id),
-        api.progressionsExercices(moi.id),
         api.ciblesSemaine(moi.id),
       ]);
       toutReussi = resultats.every((r) => r.status === 'fulfilled');
-      const [p, e, pl, c, obj, grp, prog, cib] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
+      const [p, e, pl, c, obj, grp, cib] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
       if (p) setProgrammes(p);
       if (e) {
         // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
@@ -1533,7 +1441,6 @@ export default function EntrainementScreen({
       if (c) setCycles(c);
       if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
       if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
-      if (prog) setProgressions(prog);
       // Les cases corrigées à la main, rangées par la clé que lit le tableau :
       // « programme | exercice | semaine ».
       if (cib) {
@@ -1844,22 +1751,10 @@ export default function EntrainementScreen({
   // Modifie une séance EXISTANTE (nom + exercices) — utilisé par le calendrier.
   // La séance est le même objet partout : la modifier mets à jour toutes les
   // dates et tous les jours où elle est prévue (l'éditeur prévient si c'est le cas).
-  // Un exercice a-t-il été RENOMMÉ (par opposition à remplacé par un autre) ?
-  // On ne compare que si la liste garde la même longueur et le même ordre :
-  // dans ce cas, un nom qui change à la même position est un renommage.
-  // Si des lignes ont été ajoutées ou retirées, on ne devine rien — mieux vaut
-  // ne rien proposer qu'aller réécrire l'historique sur une fausse piste.
-  function detecterRenommages(ancienne, nouvelle) {
-    if (!ancienne || ancienne.length !== nouvelle.length) return [];
-    const trouves = [];
-    ancienne.forEach((exo, i) => {
-      const apres = nouvelle[i].exercice.trim();
-      if (exo.exercice !== apres && apres) {
-        trouves.push({ ancien: exo.exercice, nouveau: apres });
-      }
-    });
-    return trouves;
-  }
+  // « Un exercice a-t-il été RENOMMÉ ? » : la règle vit dans
+  // src/logic/lignesProgramme.js (`detecterRenommages`), testée — depuis qu'on
+  // peut RÉORDONNER les exercices (08/11/2026), la comparaison position par
+  // position prenait un simple déplacement pour trois renommages.
 
   // Coche ou décoche UN jour pour une séance. La liste est remise dans
   // l'ordre de la semaine (lundi → dimanche) pour que l'affichage reste lisible
@@ -2094,7 +1989,7 @@ export default function EntrainementScreen({
       }
       // Premier clic sur un jour : on prépare sa séance et on l'ouvre.
       setSeancesParJour((s) =>
-        s[jour] ? s : { ...s, [jour]: { nom: '', lignes: [{ exercice: '', seriesCibles: '3', repsCibles: '10' }] } }
+        s[jour] ? s : { ...s, [jour]: { nom: '', lignes: [ligneVide()] } }
       );
       setJourEnEdition(jour);
       return [...l, jour];
@@ -2118,7 +2013,14 @@ export default function EntrainementScreen({
   function ajouterLigneJour(jour) {
     setSeancesParJour((s) => ({
       ...s,
-      [jour]: { ...s[jour], lignes: [...s[jour].lignes, { exercice: '', seriesCibles: '3', repsCibles: '10' }] },
+      [jour]: { ...s[jour], lignes: [...s[jour].lignes, ligneVide()] },
+    }));
+  }
+
+  function deplacerLigneJour(jour, index, sens) {
+    setSeancesParJour((s) => ({
+      ...s,
+      [jour]: { ...s[jour], lignes: deplacerLigne(s[jour].lignes, index, sens) },
     }));
   }
 
@@ -2149,13 +2051,7 @@ export default function EntrainementScreen({
     const seances = [];
     for (const jour of joursOrdonnes) {
       const brouillon = seancesParJour[jour] || { nom: '', lignes: [] };
-      const exercices = brouillon.lignes
-        .filter((l) => l.exercice.trim())
-        .map((l) => ({
-          exercice: l.exercice.trim(),
-          series_cibles: parseInt(l.seriesCibles, 10) || 1,
-          reps_cibles: parseInt(l.repsCibles, 10) || 1,
-        }));
+      const exercices = exercicesDepuisLignes(brouillon.lignes);
       if (exercices.length === 0) {
         setErreur(`Ajoute au moins un exercice pour le ${jour}.`);
         setJourEnEdition(jour);
@@ -2488,6 +2384,7 @@ export default function EntrainementScreen({
     // LE CHRONO DÉMARRE TOUT SEUL, au moment où la séance s'ouvre : aucun
     // bouton à penser à toucher (demande de Hafiz du 08/11/2026).
     setDebutChrono(Date.now());
+    setRepos(null);
     setProgrammeNeDeLaSeance(null);
     setErreur(null);
     setVue('seance');
@@ -2502,6 +2399,7 @@ export default function EntrainementScreen({
     setDateDebutSeance(null);
     setDaterAujourdhui(false);
     setDebutChrono(null);
+    setRepos(null);
     setSeriesLoggees({});
     setChampsSaisie({});
     setVue('accueil');
@@ -2622,6 +2520,21 @@ export default function EntrainementScreen({
     setChampsSaisie((c) => ({
       ...c, [exercice]: { reps: String(reps), poids: String(poids) },
     }));
+    // LE REPOS SE LANCE TOUT SEUL (08/11/2026, demande de Hafiz) : la durée
+    // fixée dans le programme pour CET exercice, sinon 1 min 30. Un repos à 0
+    // (« enchaîner ») ne lance rien.
+    const cible = programmeActif?.exercices?.find((e) => e.exercice === exercice);
+    const duree = reposDe(cible);
+    setRepos(duree > 0 ? { fin: Date.now() + duree * 1000, duree, exercice } : null);
+  }
+
+  // −15 s / +15 s sur le repos en cours.
+  function ajusterRepos(delta) {
+    setRepos((r) => (r ? {
+      ...r,
+      fin: Math.max(Date.now(), r.fin + delta * 1000),
+      duree: Math.max(1, r.duree + delta),
+    } : r));
   }
 
   // MODIFIER / SUPPRIMER UNE SÉRIE DÉJÀ SAISIE pendant la séance (demande de
@@ -2756,6 +2669,7 @@ export default function EntrainementScreen({
     setDateDebutSeance(null);
     setDaterAujourdhui(false);
     setDebutChrono(null);
+    setRepos(null);
     setVue('accueil');
   }
 
@@ -2790,7 +2704,6 @@ export default function EntrainementScreen({
         nom={tableauDe.nom}
         seances={tableauDe.seances}
         entrainements={entrainements}
-        progressions={progressions}
         cibles={ciblesSemaine}
         nbSemaines={semainesTableau}
         avecDeload={dechargeTableau}
@@ -2938,40 +2851,20 @@ export default function EntrainementScreen({
                         placeholder={`Nom de la séance du ${jour} (ex. : Push)`}
                         placeholderTextColor={colors.texteGris}
                       />
+                      <Text style={styles.aideLignesJour}>
+                        Dans l'ordre de la séance (flèches pour le changer). REPOS
+                        (« 90 » ou « 1:30 », vide = 1:30) et RIR sont facultatifs.
+                      </Text>
                       {brouillon.lignes.map((ligne, i) => (
-                        <View key={i} style={[styles.ligneExoForm, { marginTop: espacement.s }]}>
-                          <TextInput
-                            style={[styles.champ, { flex: 2 }]}
-                            value={ligne.exercice}
-                            onChangeText={(v) => modifierLigneJour(jour, i, 'exercice', v)}
-                            placeholder="Nom de l'exercice"
-                            placeholderTextColor={colors.texteGris}
-                          />
-                          <TextInput
-                            style={[styles.champ, styles.champCourt]}
-                            value={ligne.seriesCibles}
-                            onChangeText={(v) => modifierLigneJour(jour, i, 'seriesCibles', v)}
-                            keyboardType="numeric"
-                            placeholder="Séries"
-                            placeholderTextColor={colors.texteGris}
-                          />
-                          <TextInput
-                            style={[styles.champ, styles.champCourt]}
-                            value={ligne.repsCibles}
-                            onChangeText={(v) => modifierLigneJour(jour, i, 'repsCibles', v)}
-                            keyboardType="numeric"
-                            placeholder="Reps"
-                            placeholderTextColor={colors.texteGris}
-                          />
-                          {brouillon.lignes.length > 1 && (
-                            <TouchableOpacity
-                              onPress={() => retirerLigneJour(jour, i)}
-                              style={styles.boutonRetirer}
-                            >
-                              <Icone nom="croix" taille={15} couleur={colors.rouge} />
-                            </TouchableOpacity>
-                          )}
-                        </View>
+                        <LigneExerciceEditable
+                          key={i}
+                          ligne={ligne}
+                          index={i}
+                          total={brouillon.lignes.length}
+                          onModifier={(champ, valeur) => modifierLigneJour(jour, i, champ, valeur)}
+                          onDeplacer={(sens) => deplacerLigneJour(jour, i, sens)}
+                          onRetirer={brouillon.lignes.length > 1 ? () => retirerLigneJour(jour, i) : null}
+                        />
                       ))}
                       <View style={styles.deuxBoutons}>
                         <TouchableOpacity
@@ -2995,10 +2888,7 @@ export default function EntrainementScreen({
                           dejaPris={brouillon.lignes.map((l) => l.exercice)}
                           onFermer={() => setBiblioJour(null)}
                           onChoisir={(nomExo) => majSeanceJour(jour, {
-                            lignes: placerExerciceChoisi(
-                              brouillon.lignes, nomExo,
-                              { exercice: '', seriesCibles: '3', repsCibles: '10' },
-                            ),
+                            lignes: placerExerciceChoisi(brouillon.lignes, nomExo, ligneVide()),
                           })}
                         />
                       )}
@@ -3109,7 +2999,7 @@ export default function EntrainementScreen({
             08/11/2026) : c'est là qu'on peut agir dessus, et pendant l'effort
             il ne faisait qu'encombrer. */}
 
-        {exercicesSession.map((exercice) => {
+        {exercicesSession.map((exercice, indexExo) => {
           const dernieres = trouverDernieresSeries(entrainements, exercice, jour);
           const seriesFaites = seriesLoggees[exercice] || [];
           const indicateur = indicateurProgression(seriesFaites, dernieres?.series);
@@ -3122,8 +3012,9 @@ export default function EntrainementScreen({
           const cibleExo = programmeActif?.exercices?.find((e) => e.exercice === exercice);
           const dansLeProgramme = !!cibleExo;
           const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles, {
-            modes: progressions[exercice], seriesCibles: cibleExo?.series_cibles,
+            seriesCibles: cibleExo?.series_cibles,
           });
+          const reglages = resumeReglages(cibleExo);
           // ---- LE PLAN DU BLOC (05/10/2026) ----
           // Si un bloc est en cours, c'est SON plan qui dit quoi faire — pas
           // un recalcul. C'est tout l'intérêt d'avoir figé le tableau : le
@@ -3138,7 +3029,17 @@ export default function EntrainementScreen({
           const nouveauRecord = bat_le_record(seriesFaites, record);
           return (
             <View key={exercice} style={styles.carteExercice}>
-              <Text style={styles.nomExercice}>{exercice}</Text>
+              {/* L'ORDRE DU PROGRAMME se lit (« 1. », « 2. »…), et le repos /
+                  RIR fixés sont rappelés sous le nom (08/11/2026). */}
+              <Text style={styles.nomExercice}>
+                <Text style={styles.numeroExercice}>{indexExo + 1}. </Text>{exercice}
+              </Text>
+              {reglages ? (
+                <TexteIcone nom="horloge" taille={12} ecart={5} style={styles.reglagesSeance}>
+                  {reglages.replace('repos', 'Repos')}{cibleExo?.rir_cible !== null
+                    && cibleExo?.rir_cible !== undefined ? ' visé' : ''}
+                </TexteIcone>
+              ) : null}
               <Text style={styles.indiceDerniere}>
                 {dernieres
                   ? `Dernière fois (${dernieres.date}) : ${dernieres.series
@@ -3171,11 +3072,6 @@ export default function EntrainementScreen({
                   <Text style={styles.raisonSuggestion}> — {suggestion.raison}</Text>
                 </TexteIcone>
               ) : null}
-              <ChoixAxesProgression
-                exercice={exercice}
-                modes={progressions[exercice]}
-                onBasculer={basculerAxe}
-              />
 
               {/* Record personnel + badge quand il tombe en direct */}
               {record && (
@@ -3367,6 +3263,21 @@ export default function EntrainementScreen({
           </LibelleIcone>
         </TouchableOpacity>
       </ScrollView>
+      {/* LE MINUTEUR DE REPOS, posé PAR-DESSUS la page (08/11/2026) : on le
+          voit où qu'on ait fait défiler. Il annonce la prochaine étape dans
+          l'ORDRE du programme. */}
+      <MinuteurRepos
+        repos={repos}
+        actif={actif}
+        etape={repos ? libelleEtape(prochaineEtape(
+          exercicesSession, seriesLoggees,
+          Object.fromEntries((programmeActif?.exercices || [])
+            .map((e) => [e.exercice, e.series_cibles])),
+          repos.exercice,
+        )) : null}
+        onAjuster={ajusterRepos}
+        onPasser={() => setRepos(null)}
+      />
       </KeyboardAvoidingView>
     );
   }
@@ -3754,7 +3665,7 @@ export default function EntrainementScreen({
                         <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                       ) : seance.exercices.map((exo, i) => (
                         <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
-                      progressions={progressions} />
+                          numero={i + 1} />
                       ))}
                     </View>
                   )}
@@ -3896,7 +3807,7 @@ export default function EntrainementScreen({
                     <Text style={styles.indice}>Aucun exercice dans cette séance.</Text>
                   ) : programme.exercices.map((exo, i) => (
                     <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
-                      progressions={progressions} />
+                      numero={i + 1} />
                   ))}
                 </View>
               )}
@@ -5023,7 +4934,7 @@ export default function EntrainementScreen({
                 </View>
                 {programme.exercices.map((exo, i) => (
                   <LigneExercicePrevu key={i} exo={exo} entrainements={entrainements}
-                    progressions={progressions} />
+                    numero={i + 1} />
                 ))}
                 {/* Le bouton n'apparaissait QUE sur la date du jour, donc
                     toucher n'importe quel autre jour ne proposait rien
@@ -5233,7 +5144,6 @@ const styles = StyleSheet.create({
     color: colors.texte, borderWidth: 1, borderColor: colors.bordure,
   },
   champCourt: { width: 70 },
-  ligneExoForm: { flexDirection: 'row', gap: 6, alignItems: 'center', marginBottom: espacement.s },
   // 40 px (au lieu de 32) + `hitSlop` sur les deux croix les plus
   // dangereuses : c'est un geste DESTRUCTEUR posé juste à côté d'un bouton
   // inoffensif, il ne doit pas s'attraper par erreur.
@@ -5391,18 +5301,11 @@ const styles = StyleSheet.create({
   messageAjoutSeance: { color: colors.rouge, fontSize: 12, marginBottom: 6 },
   aideNouvelleSeance: { color: colors.texteGris, fontSize: 12, marginBottom: 6 },
 
-  // Les puces « Faire progresser : Séries / Reps / Poids » (24/09/2026).
-  ligneAxes: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 6 },
-  libelleAxes: { color: colors.texteGris, fontSize: 11, marginRight: 6 },
-  puceAxe: {
-    borderWidth: 1, borderColor: colors.bordure, borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 7, marginRight: 6, marginTop: 2,
-  },
-  // Un réglage ACTIF se marque d'un voile + d'un contour, pas d'un aplat :
-  // l'or plein reste le signal des ACTIONS (voir « + Série » juste dessous).
-  puceAxeActive: { backgroundColor: 'rgba(232, 178, 58, 0.14)', borderColor: colors.or },
-  puceAxeTexte: { color: colors.texteGris, fontSize: 11, fontWeight: '700' },
-  puceAxeTexteActif: { color: colors.or },
+  // Repos / RIR rappelés sous un exercice (08/11/2026).
+  reglagesExo: { color: colors.texteGris, fontWeight: '400' },
+  reglagesSeance: { color: colors.texteDoux, fontSize: 12, marginBottom: 4 },
+  numeroExercice: { color: colors.or },
+  aideLignesJour: { color: colors.texteGris, fontSize: 11, lineHeight: 16, marginTop: espacement.s, marginBottom: 6 },
   raisonSuggestion: { color: colors.texteGris, fontSize: 11, fontWeight: '400' },
   record: { color: colors.texteGris, fontSize: 11, marginBottom: 3 },
   recordBattu: { color: colors.or, fontSize: 12, fontWeight: '800', marginBottom: 3 },

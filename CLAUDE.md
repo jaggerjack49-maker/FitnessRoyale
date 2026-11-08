@@ -3488,6 +3488,11 @@ jour »), et refuse avant même d'appeler le serveur.
 
 ### Le type de surcharge progressive, exercice par exercice
 
+⚠️ PUCES RETIRÉES LE 08/11/2026 à la demande de Hafiz — voir « Repos, RIR et
+ordre des exercices ». La règle de calcul reste dans surchargeProgressive.js,
+mais l'app ne lit ni n'écrit plus le choix des axes : tout le monde suit la
+double progression par défaut.
+
 `src/logic/surchargeProgressive.js` — **un seul axe avance à la fois, dans
 l'ordre séries → reps → poids**, et seuls les axes cochés bougent :
 - ajouter une série se fait à charge et reps égales (le volume avant
@@ -4958,6 +4963,90 @@ Tests : `backend/tests/test_seance_libre.py` + `harnais/harnais_seance_libre.mjs
 abîmées, objectif déduit, ordre, doublons de nom, entrées nulles). 3 mutations
 vues échouer. Suite complète : **360 tests, tous OK.**
 
+## Repos, RIR et ordre des exercices — 08/11/2026
+
+Demande de Hafiz : « on doit pouvoir fixer des temps de repos lorsqu'on crée le
+programme et lorsqu'on termine une série le temps de repos s'active, et l'ordre
+des exercices doit être pris en compte, et aussi on peut fixer l'effort, le RIR
+par exemple. De plus, enlève la partie qui mentionnait faire progresser les
+reps, séries ou le poids. »
+
+### Côté serveur : deux colonnes facultatives
+
+`repos_secondes` (0 à 900) et `rir_cible` (0 à 10) sur `programme_exercices`
+(migration additive, NULL = pas fixé), dans `ExerciceProgramme` et donc partout
+où un programme est écrit : programme isolé, cycle, ajout de séance, édition,
+programmes partagés. **0 est une vraie valeur** des deux côtés (repos 0 =
+enchaîner, RIR 0 = jusqu'à l'échec) : ne jamais écrire `|| null` dessus.
+Tests : `backend/tests/test_api_repos_rir.py` (7 cas).
+
+### Côté app : UNE forme de ligne pour les deux éditeurs
+
+L'éditeur de séance et « Nouveau programme » avaient chacun leur ligne
+d'exercice — l'un connaissait la fourchette de reps, l'autre non. Avec repos et
+RIR en plus, deux copies auraient divergé : `src/logic/lignesProgramme.js`
+(forme + conversion, testée) et `src/components/LigneExerciceEditable.js`
+(l'affichage : flèches ▲▼, numéro, nom, croix ; puis SÉRIES / REPS / → MAX /
+REPOS / RIR, chacun avec son libellé). Le repos se tape « 90 » ou « 1:30 » ;
+vide = 1:30 par défaut (le champ affiche « — », pas « 1:30 », sinon on croit
+qu'une valeur est réglée — vu à l'écran).
+
+### Le minuteur de repos (`src/components/MinuteurRepos.js`)
+
+- « + Série » le lance tout seul, avec le repos de CET exercice (1:30 si non
+  fixé, rien si 0). −15 / +15 / Passer.
+- Posé PAR-DESSUS la page, en bas, au-dessus de la barre d'onglets : on le voit
+  où qu'on ait fait défiler.
+- Il mémorise l'INSTANT DE FIN (comme le chrono) : juste après une mise en
+  veille, et gardé avec la séance en cours (`repos` dans `stockageSeance`).
+  Un repos fini pendant que l'app était fermée ne revient pas.
+- Fin du repos : « REPOS TERMINÉ / Go ! » + UNE vibration (`Vibration`).
+- Téléphone posé écran éteint : l'app ne peut ni vibrer ni s'afficher. Quand
+  elle passe en ARRIÈRE-PLAN, une notification locale est programmée à la fin
+  du repos (famille `'repos'` dans notifications.js), annulée au retour (sinon
+  bannière + vibration en double). Permission demandée au premier repos.
+  ⚠️ NON VÉRIFIÉ sur téléphone (le web n'a ni notifications ni arrière-plan).
+
+### L'ordre des exercices compte
+
+- Les exercices sont numérotés partout (« 1. », « 2. »…) : éditeur, séance,
+  séances déroulées de « Mes programmes ».
+- Le minuteur annonce la PROCHAINE ÉTAPE dans l'ordre (`prochaineEtape`,
+  `src/logic/repos.js`) : on reste sur l'exercice tant que ses séries prévues
+  ne sont pas faites, puis le PREMIER exercice de la liste qui en a encore — un
+  exercice sauté plus haut repasse donc avant ceux d'en dessous.
+
+### ⚠️ LE PIÈGE TROUVÉ À L'ÉCRAN : un déplacement pris pour trois renommages
+
+`detecterRenommages` comparait les noms POSITION PAR POSITION. Dès qu'on a pu
+réordonner, monter « Dips » de deux crans a fait proposer « élévations → Dips,
+face pull → élévations, Dips → face pull » — et « Renommer partout » aurait
+réécrit l'historique de trois exercices à tort. La règle compare maintenant des
+ENSEMBLES (un nom disparu ↔ un nom apparu) et vit dans lignesProgramme.js,
+testée ; l'ancienne règle fait rougir le harnais.
+
+### Les puces « Faire progresser » sont retirées
+
+Plus de puces sous l'exercice, plus de lecture des réglages enregistrés : les
+suggestions suivent toutes la double progression (reps puis charge). Les
+endpoints `/progressions-exercices` restent côté serveur, plus rien ne les
+appelle (même choix que la validation sans preuve du 01/09/2026).
+
+### Vérifié
+
+Tests : `test_repos.py` + `harnais/harnais_repos.mjs` (~65 cas : durées, minuteur,
+prochaine étape, lignes, déplacement, renommage vs déplacement, données
+abîmées) et `test_api_repos_rir.py`. **7 mutations vues échouer**, chacune sur
+son cas. Suite complète : **368 tests, tous OK.**
+Navigateur (backend local, `SondeTest`, 420 puis 360 px) : repos 2:30 + RIR 2
+et Dips monté en 2e enregistrés en base ; en séance, « 1. developpe couche /
+Repos 2:30 · RIR 2 visé » ; 4 séries → « Prochain : Dips — série 1 », repos de
+Dips à 1:00 ; −15 jusqu'à la fin → « REPOS TERMINÉ », une seule vibration ;
+rechargement → repos repris au bon endroit ; un déplacement seul ne propose
+plus de renommage ; « Nouveau programme » enregistre ordre, repos 3:00 et RIR 1.
+Aucun débordement à 360 px, boutons du minuteur à 44 px, zéro erreur console.
+⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour les colonnes).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4970,7 +5059,7 @@ vues échouer. Suite complète : **360 tests, tous OK.**
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (360 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (368 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
