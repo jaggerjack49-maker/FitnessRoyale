@@ -4906,6 +4906,58 @@ pour un bilan si on la veut ailleurs.
 
 Suite complète : **359 tests, tous OK.**
 
+## Chrono de séance + une séance libre devient un programme — 08/11/2026
+
+Deux demandes de Hafiz : « un chrono qui se lance automatiquement au début de
+la séance » et « la possibilité d'ajouter les exercices d'une séance libre à un
+nouveau programme qu'on veut créer ». Les règles vivent dans
+`src/logic/seanceLibre.js` (testable sous Node), l'écran ne fait qu'afficher.
+
+### Le chrono
+
+- Il part TOUT SEUL dans `demarrerSeance` (`debutChrono = Date.now()`) : aucun
+  bouton à penser à toucher.
+- Il ne COMPTE PAS les secondes : il affiche l'écart entre maintenant et
+  l'instant de départ (`secondesEcoulees`). Cet instant est mémorisé avec la
+  séance en cours (`debutChrono` dans `stockageSeance`), donc le chrono reste
+  juste après un changement d'onglet, une mise en veille ou une RELANCE de
+  l'app — vérifié : départ reculé de 12 min, page rechargée → « 12:11 ».
+- `ChronoSeance` est un COMPOSANT À PART, avec sa propre horloge (1 s) : dans
+  l'écran, c'est tout `EntrainementScreen` (5 000 lignes) qui se serait
+  redessiné chaque seconde pendant la saisie des séries. Il s'arrête quand
+  l'onglet n'est pas à l'écran (`actif`).
+- Une séance commencée AVANT ce correctif n'a pas d'instant de départ : on
+  n'en invente pas, le chrono reste caché.
+- AFFICHAGE SEULEMENT : la durée enregistrée côté serveur reste l'estimation
+  (≈3 min par série). Utiliser la vraie durée serait possible, mais une séance
+  oubliée ouverte une nuit donnerait 10 h d'entraînement — à décider avec
+  Hafiz (voir « À faire »).
+
+### Une séance libre devient un programme
+
+- Bouton « Créer un programme avec ces exercices », à DEUX endroits avec le
+  même composant (`CreerProgrammeDepuisSeance`) : pendant une séance LIBRE, et
+  dans le détail d'une séance libre passée (historique) — on n'y pense pas
+  toujours pendant l'effort. Absent sur une séance qui a déjà son programme.
+- On VOIT ce qui sera créé avant de le créer : les exercices avec leur
+  objectif, DÉDUIT de ce qui a été fait (`objectifDepuisSeries` : séries faites
+  × reps de la dernière ; 3 × 10 pour un exercice ajouté mais pas fait). C'est
+  la MÊME règle que « Ajouter au programme » pendant une séance programmée —
+  elle a été sortie de l'écran pour n'exister qu'une fois.
+- Le programme est une séance ISOLÉE, sans jour : on choisit ses jours ensuite
+  dans « Mes programmes » (puces habituelles). Nom libre, « Séance du … » par
+  défaut.
+- PENDANT la séance, celle-ci est RATTACHÉE au programme créé : elle est
+  enregistrée sous son nom, et la prochaine fois l'« Attendu » en découlera.
+  Vérifié : séance libre Tractions + Rowing → « Pull du dimanche » créé
+  (2 × 6, 1 × 12, sans jour), le titre de la séance change, et « Terminer »
+  l'enregistre avec `programme_id` = le nouveau programme.
+
+Tests : `backend/tests/test_seance_libre.py` + `harnais/harnais_seance_libre.mjs`
+(19 cas : chrono, affichage au-delà d'une heure, horloge reculée, valeurs
+abîmées, objectif déduit, ordre, doublons de nom, entrées nulles). 3 mutations
+vues échouer. Suite complète : **360 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -4918,7 +4970,7 @@ Suite complète : **359 tests, tous OK.**
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (359 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (360 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -4954,7 +5006,9 @@ Suite complète : **359 tests, tous OK.**
   traiter par un chemin explicite si le besoin se présente, jamais par le retour d'un mode
   hors-ligne complet (voir « Le mode hors-ligne est supprimé »)
 - Champ durée explicite pour une séance loggée (Entraînement) — actuellement estimée automatiquement
-  (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement"
+  (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement". Depuis le
+  08/11/2026 le CHRONO de séance mesure la vraie durée, mais seulement à l'écran : l'envoyer au
+  serveur demande de décider quoi faire d'une séance oubliée ouverte toute une nuit
 - Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait
   depuis le 04/09/2026 — voir « Le NOM d'un exercice est son identifiant »)
 - Un programme « vidé » d'un jour (🗑 dans la semaine type) reste dans « Mes programmes » sans

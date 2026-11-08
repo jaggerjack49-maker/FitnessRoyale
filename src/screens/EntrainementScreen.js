@@ -50,6 +50,9 @@ import {
   enISO, planificationProgramme, programmesPrevusLe, seancesARattraper,
   cleRattrapage, rattrapagesVisibles, masquesAGarder,
 } from '../logic/rattrapage';
+import {
+  secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
+} from '../logic/seanceLibre';
 
 // BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
 // (`toISOString`), alors que les cases du calendrier utilisent la date LOCALE
@@ -486,6 +489,154 @@ const stylesEditeur = StyleSheet.create({
   message: { color: colors.vert, fontSize: 12, marginTop: 6 },
   lienVider: { color: colors.texteGris, fontSize: 11, textAlign: 'center', marginTop: 8 },
   note: { color: colors.or, fontSize: 11, marginBottom: 4, lineHeight: 15 },
+});
+
+// LE CHRONO DE SÉANCE (08/11/2026, demande de Hafiz : « un chrono qui se lance
+// automatiquement au début de la séance »).
+// Un composant À PART, qui tient sa propre horloge : s'il vivait dans
+// l'écran, l'écran entier (plus de 5 000 lignes) se redessinerait chaque
+// seconde pendant toute la séance — au risque de faire ramer la saisie des
+// séries. Ici, seul ce petit bloc bouge.
+// Il n'additionne PAS des secondes : il affiche l'écart entre MAINTENANT et
+// l'instant de départ (`debut`, mémorisé avec la séance). Il reste donc juste
+// après un changement d'onglet, une mise en veille ou une relance de l'app.
+// `actif` coupe l'horloge quand l'onglet n'est pas à l'écran (batterie).
+function ChronoSeance({ debut, actif }) {
+  const [maintenant, setMaintenant] = useState(Date.now());
+  useEffect(() => {
+    if (!actif || !debut) return undefined;
+    setMaintenant(Date.now());
+    const minuteur = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(minuteur);
+  }, [actif, debut]);
+  if (!debut) return null;
+  return (
+    <View style={stylesChrono.pastille}>
+      <Icone nom="horloge" taille={16} couleur={colors.or} />
+      <Text style={stylesChrono.temps}>{chronoLisible(secondesEcoulees(debut, maintenant))}</Text>
+      <Text style={stylesChrono.legende}>depuis le début</Text>
+    </View>
+  );
+}
+
+const stylesChrono = StyleSheet.create({
+  pastille: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
+    backgroundColor: da.orVoile, borderWidth: 1, borderColor: da.bordureOrDouce,
+    borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14,
+    marginBottom: espacement.m,
+  },
+  temps: { color: colors.or, fontFamily: monospace, fontWeight: '800', fontSize: 20 },
+  legende: { color: colors.texteGris, fontSize: 11 },
+});
+
+// UNE SÉANCE DEVIENT UN PROGRAMME (08/11/2026, demande de Hafiz : « la
+// possibilité d'ajouter les exercices d'une séance libre à un nouveau
+// programme qu'on veut créer »).
+// Utilisé à DEUX endroits avec le même composant : pendant une séance libre,
+// et dans le détail d'une séance libre passée (historique) — pour le cas où
+// l'on n'y pense qu'après coup.
+// `exercices` arrive déjà calculé (`exercicesPourProgramme`) : on affiche ce
+// qui sera créé AVANT de le créer, objectifs compris.
+// `onCreer(nom)` renvoie { ok, message } : le message reste affiché ici.
+function CreerProgrammeDepuisSeance({ exercices, nomParDefaut, explication, onCreer }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [nom, setNom] = useState('');
+  const [enCours, setEnCours] = useState(false);
+  const [resultat, setResultat] = useState(null);
+
+  if (resultat?.ok) {
+    return (
+      <View style={stylesCreation.carte}>
+        <TexteIcone nom="valide" taille={14} hautAligne couleur={colors.vert} style={stylesCreation.reussi}>
+          {resultat.message}
+        </TexteIcone>
+      </View>
+    );
+  }
+  if (!ouvert) {
+    return (
+      <TouchableOpacity style={stylesCreation.bouton} onPress={() => setOuvert(true)}>
+        <LibelleIcone nom="plus" taille={14} ecart={6} style={stylesCreation.boutonTexte}>
+          Créer un programme avec ces exercices
+        </LibelleIcone>
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <View style={stylesCreation.carte}>
+      <Text style={stylesCreation.titre}>NOUVEAU PROGRAMME</Text>
+      <Text style={stylesCreation.aide}>{explication}</Text>
+      {exercices.map((e) => (
+        <Text key={e.exercice} style={stylesCreation.ligne}>
+          • {e.exercice} — {e.series_cibles} × {e.reps_cibles}
+        </Text>
+      ))}
+      <Text style={stylesCreation.libelle}>NOM DU PROGRAMME</Text>
+      <TextInput
+        style={stylesCreation.champ}
+        value={nom}
+        onChangeText={setNom}
+        placeholder={nomParDefaut}
+        placeholderTextColor={colors.texteGris}
+        maxLength={60}
+      />
+      {resultat && !resultat.ok ? (
+        <TexteIcone nom="alerte" taille={13} hautAligne style={stylesCreation.erreur}>
+          {resultat.message}
+        </TexteIcone>
+      ) : null}
+      <TouchableOpacity
+        style={[stylesCreation.boutonOr, enCours && { opacity: 0.5 }]}
+        disabled={enCours}
+        onPress={async () => {
+          setEnCours(true);
+          setResultat(await onCreer(nom.trim() || nomParDefaut));
+          setEnCours(false);
+        }}
+      >
+        {enCours ? <ActivityIndicator color={da.orSombre} /> : (
+          <Text style={stylesCreation.boutonOrTexte}>Créer le programme</Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => { setOuvert(false); setResultat(null); }}>
+        <Text style={stylesCreation.annuler}>Annuler</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const stylesCreation = StyleSheet.create({
+  bouton: {
+    minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12,
+    borderWidth: 1, borderColor: da.bordureOrDouce, backgroundColor: da.orVoile,
+    paddingHorizontal: 12, marginTop: espacement.s, marginBottom: espacement.s,
+  },
+  boutonTexte: { color: colors.or, fontWeight: '800', fontSize: 13 },
+  carte: {
+    backgroundColor: colors.carte, borderRadius: 12, borderWidth: 1,
+    borderColor: da.bordureOrDouce, padding: espacement.m,
+    marginTop: espacement.s, marginBottom: espacement.s,
+  },
+  titre: { color: colors.or, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
+  aide: { color: colors.texteGris, fontSize: 12, lineHeight: 17, marginBottom: espacement.s },
+  ligne: { color: colors.texte, fontSize: 13, marginBottom: 3 },
+  libelle: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
+    marginTop: espacement.m, marginBottom: 6,
+  },
+  champ: {
+    backgroundColor: colors.carteClaire, borderRadius: 10, padding: 12,
+    color: colors.texte, borderWidth: 1, borderColor: colors.bordure,
+  },
+  erreur: { color: colors.rouge, fontSize: 12, marginTop: espacement.s, lineHeight: 17 },
+  boutonOr: {
+    minHeight: 46, backgroundColor: colors.or, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', marginTop: espacement.m,
+  },
+  boutonOrTexte: { color: da.orSombre, fontWeight: '900', fontSize: 13 },
+  annuler: { color: colors.texteGris, fontSize: 12, textAlign: 'center', paddingVertical: 12 },
+  reussi: { color: colors.texte, fontSize: 13, lineHeight: 18 },
 });
 
 // Demande de confirmation avant une suppression, affichée DANS la carte.
@@ -1191,6 +1342,13 @@ export default function EntrainementScreen({
   // demandé explicitement à la dater d'aujourd'hui.
   const [dateDebutSeance, setDateDebutSeance] = useState(null);
   const [daterAujourdhui, setDaterAujourdhui] = useState(false);
+  // L'INSTANT où la séance a commencé (ms) — c'est lui que lit le chrono
+  // (08/11/2026). Mémorisé avec la séance : le chrono survit à une relance.
+  const [debutChrono, setDebutChrono] = useState(null);
+  // Le programme NÉ de la séance libre en cours (« Créer un programme avec ces
+  // exercices ») : la séance lui est rattachée, mais on garde la carte de
+  // confirmation à l'écran au lieu de la faire disparaître.
+  const [programmeNeDeLaSeance, setProgrammeNeDeLaSeance] = useState(null);
   // Combien de séances terminées attendent encore d'être envoyées au serveur.
   const [nbEnAttente, setNbEnAttente] = useState(0);
   // La file d'attente des séances terminées (08/11/2026) : est-elle en train
@@ -1315,6 +1473,9 @@ export default function EntrainementScreen({
         setChampsSaisie(seance.champsSaisie || {});
         setRattrapageDe(seance.rattrapageDe || null);
         setDateDebutSeance(seance.dateDebut || null);
+        // Une séance commencée AVANT le chrono n'a pas d'instant de départ :
+        // on n'en invente pas un, le chrono reste simplement caché.
+        setDebutChrono(seance.debutChrono || null);
         setDaterAujourdhui(!!seance.daterAujourdhui);
         setVue('seance');
       }
@@ -1330,10 +1491,10 @@ export default function EntrainementScreen({
     if (!seanceRestauree || vue !== 'seance') return;
     stockageSeance.ecrireSeanceEnCours(idLocal, {
       programmeActif, exercicesSession, seriesLoggees, champsSaisie, rattrapageDe,
-      dateDebut: dateDebutSeance, daterAujourdhui,
+      dateDebut: dateDebutSeance, daterAujourdhui, debutChrono,
     });
   }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
-      champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, idLocal]);
+      champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, debutChrono, idLocal]);
 
   async function chargerTout() {
     if (chargementEnCours.current) return; // un chargement tourne déjà
@@ -2324,6 +2485,10 @@ export default function EntrainementScreen({
     // enregistrée sans qu'aucune série ne porte de jour.
     setDateDebutSeance(aujourdhui());
     setDaterAujourdhui(false);
+    // LE CHRONO DÉMARRE TOUT SEUL, au moment où la séance s'ouvre : aucun
+    // bouton à penser à toucher (demande de Hafiz du 08/11/2026).
+    setDebutChrono(Date.now());
+    setProgrammeNeDeLaSeance(null);
     setErreur(null);
     setVue('seance');
   }
@@ -2336,6 +2501,7 @@ export default function EntrainementScreen({
     setRattrapageDe(null);
     setDateDebutSeance(null);
     setDaterAujourdhui(false);
+    setDebutChrono(null);
     setSeriesLoggees({});
     setChampsSaisie({});
     setVue('accueil');
@@ -2363,15 +2529,11 @@ export default function EntrainementScreen({
     if (!programme) return;
     const deja = (programme.exercices || []).some((e) => e.exercice === exercice);
     if (deja) return;
-    const faites = seriesLoggees[exercice] || [];
-    const derniere = faites[faites.length - 1];
+    // La règle de l'objectif déduit vit dans src/logic/seanceLibre.js : c'est
+    // la MÊME que pour « Créer un programme avec ces exercices ».
     const exercices = [
       ...(programme.exercices || []),
-      {
-        exercice,
-        series_cibles: Math.max(1, faites.length || 3),
-        reps_cibles: Math.max(1, parseInt(derniere?.reps, 10) || 10),
-      },
+      { exercice, ...objectifDepuisSeries(seriesLoggees[exercice]) },
     ];
     // L'écran de séance lit `programmeActif.exercices` (cible de reps de la
     // suggestion de charge) : il faut donc le mettre à jour lui aussi, pas
@@ -2393,6 +2555,37 @@ export default function EntrainementScreen({
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
+    }
+  }
+
+  // UNE SÉANCE DEVIENT UN PROGRAMME (08/11/2026). Crée une séance isolée (sans
+  // jour : on les choisit ensuite dans « Mes programmes », avec les puces
+  // habituelles). `rattacher` = pendant la séance en cours, qui devient alors
+  // une séance de ce programme — elle sera enregistrée sous son nom, et
+  // l'« Attendu » de la prochaine fois en découlera.
+  async function creerProgrammeDepuisSeance(nom, exercices, rattacher) {
+    if (!exercices.length) {
+      return { ok: false, message: 'Ajoute au moins un exercice pour en faire un programme.' };
+    }
+    try {
+      const cree = await api.creerProgramme(moi.id, nom, exercices, []);
+      setProgrammes((liste) => [cree, ...liste]);
+      if (rattacher) {
+        setProgrammeActif(cree);
+        setProgrammeNeDeLaSeance(cree.id);
+      }
+      return {
+        ok: true,
+        message: `Programme « ${cree.nom} » créé avec ${exercices.length} exercice`
+          + `${exercices.length > 1 ? 's' : ''}.`
+          + (rattacher ? ' Cette séance lui est maintenant rattachée.' : '')
+          + ' Choisis ses jours dans « Mes programmes ».',
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: `Programme NON créé (${err.message || 'le serveur n\'a pas répondu'}). Réessaie.`,
+      };
     }
   }
 
@@ -2562,6 +2755,7 @@ export default function EntrainementScreen({
     setRattrapageDe(null);
     setDateDebutSeance(null);
     setDaterAujourdhui(false);
+    setDebutChrono(null);
     setVue('accueil');
   }
 
@@ -2647,6 +2841,19 @@ export default function EntrainementScreen({
             ))}
           </View>
         ))}
+        {/* Une séance LIBRE passée peut encore devenir un programme : on n'y
+            pense pas toujours pendant l'effort (08/11/2026). */}
+        {!programmes.some((p) => p.id === entrainementSelectionne.programme_id) ? (
+          <CreerProgrammeDepuisSeance
+            key={entrainementSelectionne.id}
+            exercices={exercicesPourProgramme(null, entrainementSelectionne.series)}
+            nomParDefaut={`Séance du ${libelleDate(entrainementSelectionne.date)}`}
+            explication="Les exercices de cette séance, avec comme objectif ce que tu avais fait (séries faites × reps de la dernière). Tu pourras tout corriger ensuite."
+            onCreer={(nom) => creerProgrammeDepuisSeance(
+              nom, exercicesPourProgramme(null, entrainementSelectionne.series), false,
+            )}
+          />
+        ) : null}
         <TouchableOpacity onPress={() => { setVue('historique'); setEntrainementSelectionne(null); }}>
           <Text style={styles.lienAnnuler}>← Retour à l'historique</Text>
         </TouchableOpacity>
@@ -2846,6 +3053,7 @@ export default function EntrainementScreen({
             ? libelleDate(jour)
             : `Sera enregistrée au ${libelleDate(jourEnregistrement)}`}
         </Text>
+        <ChronoSeance debut={debutChrono} actif={actif} />
         {/* LE BLOC EN COURS (05/10/2026) : où j'en suis dans mon plan. On
             l'affiche AVANT tout le reste — c'est le cadre dans lequel la
             séance se fait, pas un détail. */}
@@ -3126,6 +3334,21 @@ export default function EntrainementScreen({
             }}
           />
         )}
+
+        {/* Une séance libre peut devenir un programme (08/11/2026). Le
+            composant reste affiché après la création pour montrer sa
+            confirmation, même si la séance est désormais rattachée. */}
+        {exercicesSession.length > 0
+          && (!programmeActif || programmeActif.id === programmeNeDeLaSeance) ? (
+          <CreerProgrammeDepuisSeance
+            exercices={exercicesPourProgramme(exercicesSession, seriesDeLaSeance)}
+            nomParDefaut={`Séance du ${libelleDate(jour)}`}
+            explication="Les exercices de cette séance, avec comme objectif ce que tu viens de faire (séries faites × reps de la dernière). Tu pourras tout corriger ensuite."
+            onCreer={(nom) => creerProgrammeDepuisSeance(
+              nom, exercicesPourProgramme(exercicesSession, seriesDeLaSeance), true,
+            )}
+          />
+        ) : null}
 
         {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
 
