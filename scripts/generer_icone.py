@@ -2,7 +2,8 @@
 """Fabrique l'icône de l'app à partir du logo fourni par Hafiz.
 
 À LANCER DEPUIS LA RACINE : `python scripts/generer_icone.py`
-Écrit `assets/icon.png`, `assets/adaptive-icon.png` et `assets/favicon.png`.
+Écrit `assets/icon.png`, `assets/adaptive-icon.png`, `assets/favicon.png` et
+`assets/logo-connexion.png` (le logo de l'écran de connexion, 08/11/2026).
 
 SOURCE : le logo le plus récent de `icones/` (dossier versionné exprès) — une
 tuile sombre à coins arrondis portant la couronne, « FITNESS ROYALE » et le
@@ -83,7 +84,14 @@ adaptative.save("assets/adaptive-icon.png")
 # 5. Favicon web.
 tuile.resize((64, 64), Image.LANCZOS).save("assets/favicon.png")
 
+# 6. Le logo de l'écran de connexion (08/11/2026) : la même tuile en 240 px.
+#    `icon.png` pèse 1,4 Mo — beaucoup trop pour un logo affiché à 96 px dans
+#    l'app (il serait embarqué dans le site web et l'APK). Palette réduite :
+#    une trentaine de ko.
+tuile.resize((240, 240), Image.LANCZOS).convert("RGB").quantize(
+    colors=128, method=Image.MEDIANCUT).save("assets/logo-connexion.png", optimize=True)
+
 print("couleur de fond à mettre dans app.json : #%02x%02x%02x" % couleur_fond)
-for f in ("icon.png", "adaptive-icon.png", "favicon.png"):
+for f in ("icon.png", "adaptive-icon.png", "favicon.png", "logo-connexion.png"):
     print("=>", f, Image.open("assets/" + f).size,
           os.path.getsize("assets/" + f) // 1024, "ko")

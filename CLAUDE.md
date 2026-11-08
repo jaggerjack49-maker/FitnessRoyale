@@ -5107,6 +5107,39 @@ barres et courbe affichés ; changer d'exercice, de mesure, passer à un
 exercice au poids du corps (puces « Reps max / Reps totales ») et toucher un
 record mettent bien la courbe à jour ; aucun débordement, zéro erreur console.
 
+## L'écran de connexion passe à la DA — 08/11/2026
+
+Demande de Hafiz : « la page de création du compte doit correspondre à la DA ».
+`src/screens/ConnexionScreen.js` était resté dans l'ancienne palette (bouton et
+onglet actif en CYAN, libellés en casse normale). Seule l'APPARENCE change : la
+validation, les appels serveur et le code de secours sont identiques.
+
+- Fond quasi noir avec une LUEUR DORÉE en dégradé radial derrière le logo,
+  logo de l'app (`assets/logo-connexion.png`), slogan « FIGHT FOR IT » entre
+  deux losanges.
+- Sélecteur Se connecter / Créer un compte en CAPSULE, comme la barre d'onglets.
+- Carte avec un titre à mot en or (« CONTENT DE TE REVOIR », « REJOINS
+  L'ARÈNE », « MOT DE PASSE OUBLIÉ »), libellés en petites capitales espacées,
+  grand bouton OR plein. Le code de secours s'affiche dans un cadre or.
+- Colonne bornée à 420 px et centrée sur grand écran.
+- ⚠️ LE LOGO : `icon.png` pèse 1,4 Mo — trop lourd pour un logo affiché à
+  104 px (il serait embarqué dans le site et l'APK). `scripts/generer_icone.py`
+  fabrique désormais aussi `logo-connexion.png` (240 px, 32 ko).
+- ⚠️ ÉCARTÉ : un premier jet reprenait l'illustration de l'écran de chargement
+  en fond. Elle contient déjà un grand logo PEINT, et le logo de l'écran se
+  posait dessus (deux logos superposés, décalés différemment selon le format
+  d'écran). Le fond uni ne dépend d'aucun format.
+- RESTER CONNECTÉ : Hafiz a remarqué qu'il n'avait pas à retaper ses
+  identifiants. C'est le comportement voulu depuis le 20/07/2026 (jeton gardé
+  dans AsyncStorage, effacé par « Se déconnecter »). Options proposées
+  (expiration après 30 jours, mot de passe à chaque ouverture, case « Rester
+  connecté ») : il a choisi de GARDER le comportement actuel.
+
+Vérifié dans le navigateur (390 px, serveur local) : connexion, création de
+compte avec message d'erreur, écran « Compte créé » après une vraie inscription
+d'un compte de test local ; cibles tactiles de 42 à 52 px, aucun débordement,
+zéro erreur console. Suite : 369 tests, OK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
