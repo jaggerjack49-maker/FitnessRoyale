@@ -5264,6 +5264,45 @@ Vérifié dans le navigateur (390 px, serveur local, preview arrêtée AVANT de
 remettre `apiUrl`) : titre des Perfs, légende sur une ligne sans débordement,
 cases faites/manquées/prévues lisibles, plus de « LE RESTE ». 370 tests, OK.
 
+## Barre d'onglets : le libellé reste dans sa pastille — 08/11/2026
+
+Retour de Hafiz (capture du 08/11) : « le cercle flottant ne couvre pas
+entièrement certains onglets comme Entraînement ».
+
+- CAUSE : sur son téléphone, la TAILLE DE TEXTE DU SYSTÈME grossit les
+  libellés ; « Entraîn. » et « Compét. » devenaient plus larges que leur case,
+  et rien ne bornait leur largeur — ils débordaient de la pastille ronde.
+  Invisible dans le navigateur de test, qui n'applique pas ce réglage.
+- CORRECTIF (App.js) : le libellé est borné à sa case (`width: 100%`), rétrécit
+  un peu s'il ne tient pas (`adjustsFontSizeToFit`, jamais sous 80 %), et ne
+  suit le réglage de taille du téléphone que jusqu'à ×1,15
+  (`maxFontSizeMultiplier`). La pastille devient un RECTANGLE ARRONDI qui
+  couvre toute la case (un cercle laisse dépasser un libellé un peu long).
+  Mesuré à 320 px : chaque libellé tient dans sa case (« Compét. » est
+  légèrement tronqué sur le web à cette largeur extrême — le web ne sait pas
+  réduire la police ; Android, si).
+
+### ⚠️ BUG TROUVÉ EN CHEMIN : « Quitter l'entraînement ? » en y ARRIVANT
+
+En vérifiant la barre, la question de sortie est apparue alors qu'on venait de
+toucher « Entraîn. ». Mesuré : quand l'app fait glisser la page vers un onglet
+éloigné, elle TRAVERSE les onglets du milieu ; une pause de plus de 120 ms
+pendant ce glissement (371 ms enregistrés dans le volet de test) faisait croire
+à `surDefilementPages` que le DOIGT s'était arrêté sur « Paliers » — donc
+« on quitte l'Entraînement ». Ce défaut existait avant la confirmation (il
+aurait pu activer un onglet intermédiaire), la confirmation l'a rendu visible.
+CORRECTIF : `defilerVersPage` retient la destination de chaque défilement lancé
+par l'app ; tant qu'elle n'est pas atteinte, les positions intermédiaires sont
+ignorées. Un vrai glissement (`onScrollBeginDrag`) annule l'attente, sinon elle
+expire après 1,5 s. Vérifié : 3 allers-retours Profil ↔ Entraînement sans
+question à l'arrivée et avec la question au départ ; un glissement vers le Clan
+demande toujours, et « Rester » demande bien le retour à la page 4 (espion sur
+`scroll`).
+⚠️ PIÈGE DE VÉRIFICATION, encore : volet masqué = défilements animés figés
+(page restée à 0 alors que l'onglet actif avait changé). Et un script coupé à
+45 s CONTINUE de tourner en arrière-plan : il a mélangé l'état d'un test
+suivant. Recharger la page avant de refaire un test.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

@@ -114,13 +114,31 @@ function AppInterne() {
   const [hauteurPage, setHauteurPage] = useState(0);
   const pagerRef = useRef(null);
   const minuterieDefilement = useRef(null);
+  // LE DÉFILEMENT LANCÉ PAR L'APP (08/11/2026). Quand on TOUCHE un onglet
+  // éloigné, la page glisse toute seule jusqu'à lui en traversant les onglets
+  // du milieu. Si ce glissement marque une pause de plus de 120 ms (mesuré :
+  // 371 ms dans le volet de test, et un téléphone qui rame peut en faire
+  // autant), `surDefilementPages` croyait le doigt arrêté sur l'onglet du
+  // milieu — et, depuis la confirmation de sortie de l'Entraînement, posait
+  // « Quitter l'entraînement ? » à quelqu'un qui venait d'y ARRIVER.
+  // On retient donc la destination ({ x, depuis }) : tant qu'elle n'est pas
+  // atteinte, les positions intermédiaires sont ignorées. Un vrai glissement
+  // du doigt (`onScrollBeginDrag`) annule l'attente ; sans lui (web à la
+  // souris), elle expire seule après 1,5 s.
+  const defilementAuto = useRef(null);
+
+  function defilerVersPage(index) {
+    const x = index * largeurPage;
+    defilementAuto.current = { x, depuis: Date.now() };
+    pagerRef.current?.scrollTo({ x, animated: true });
+  }
   const indexActif = Math.max(0, ONGLETS.findIndex((o) => o.cle === ongletActif));
 
   // L'onglet actif change — par la barre, par `allerA`, ou par la reprise
   // d'une séance au démarrage : on amène la page correspondante à l'écran.
   useEffect(() => {
     setOngletsVisites((v) => (v.includes(ongletActif) ? v : [...v, ongletActif]));
-    pagerRef.current?.scrollTo({ x: indexActif * largeurPage, animated: true });
+    defilerVersPage(indexActif);
   }, [indexActif, largeurPage]);
 
   // Le doigt a fait glisser les pages : on attend que le défilement se POSE
@@ -132,6 +150,15 @@ function AppInterne() {
     const x = e.nativeEvent.contentOffset.x;
     clearTimeout(minuterieDefilement.current);
     minuterieDefilement.current = setTimeout(() => {
+      const auto = defilementAuto.current;
+      if (auto) {
+        if (Math.abs(x - auto.x) <= 2) {
+          defilementAuto.current = null; // arrivé : rien à décider
+          return;
+        }
+        if (Date.now() - auto.depuis < 1500) return; // encore en route
+        defilementAuto.current = null;
+      }
       const index = Math.round(x / largeurPage);
       const cle = ONGLETS[index]?.cle;
       if (cle && cle !== ongletActif) changerOnglet(cle);
@@ -182,7 +209,7 @@ function AppInterne() {
   // partie vers l'onglet voisin — on la ramène sur l'Entraînement.
   function annulerSortie() {
     setSortieDemandee(null);
-    pagerRef.current?.scrollTo({ x: indexActif * largeurPage, animated: true });
+    defilerVersPage(indexActif);
   }
   // Le retour Android pendant la question = « Rester ».
   useRetour(!!sortieDemandee, () => { annulerSortie(); return true; });
@@ -632,6 +659,7 @@ function AppInterne() {
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={surDefilementPages}
+        onScrollBeginDrag={() => { defilementAuto.current = null; }}
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1 }}
       >
@@ -710,7 +738,25 @@ function AppInterne() {
                 accessibilityLabel={o.libelle}
               >
                 <Icone taille={20} couleur={couleur} />
-                <Text style={[styles.ongletLibelle, { color: couleur }]} numberOfLines={1}>
+                {/* LE LIBELLÉ RESTE DANS SA CASE (08/11/2026, capture de Hafiz :
+                    « le cercle flottant ne couvre pas entièrement certains
+                    onglets comme Entraînement »). Sur son téléphone, la taille
+                    de texte du système grossissait « Entraîn. » et « Compét. »
+                    au-delà de leur case : rien ne bornait leur largeur, ils
+                    débordaient de la pastille. Trois garde-fous :
+                    - `width: 100%` borne le texte à sa case ;
+                    - `adjustsFontSizeToFit` le rétrécit un peu s'il ne tient
+                      pas (jamais sous 80 %) ;
+                    - `maxFontSizeMultiplier` limite l'agrandissement par le
+                      réglage du téléphone : une barre d'onglets n'a pas la
+                      place de grossir indéfiniment. */}
+                <Text
+                  style={[styles.ongletLibelle, { color: couleur }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  maxFontSizeMultiplier={1.15}
+                >
                   {o.libelle}
                 </Text>
               </TouchableOpacity>
@@ -778,21 +824,29 @@ const styles = StyleSheet.create({
     maxWidth: largeurMaxContenu,
     alignSelf: 'center',
     backgroundColor: da.carteHaute,
-    borderRadius: 32,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: colors.bordure,
-    padding: 5,
+    padding: 4,
+    gap: 2,
   },
   // ⚠️ TOUS les onglets portent une bordure — transparente quand ils sont
   // inactifs. Sans ça, l'onglet actif (bordé) serait 2 px plus haut que ses
   // voisins et toute la rangée sautillerait à chaque changement.
+  // La pastille de l'onglet actif est un RECTANGLE ARRONDI qui prend toute la
+  // case (08/11/2026). Elle était ronde (`borderRadius` = moitié de la
+  // hauteur) : sur une case étroite, un cercle laisse dépasser un libellé un
+  // peu long. `minWidth: 0` laisse la case rétrécir au lieu de pousser ses
+  // voisines.
   onglet: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
     minHeight: 52,
-    borderRadius: 26,
+    paddingHorizontal: 2,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -802,5 +856,5 @@ const styles = StyleSheet.create({
     backgroundColor: da.orVoileFort,
     borderColor: 'rgba(232, 178, 58, 0.22)',
   },
-  ongletLibelle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  ongletLibelle: { width: '100%', textAlign: 'center', fontSize: 10, fontWeight: '800', letterSpacing: 0.2 },
 });
