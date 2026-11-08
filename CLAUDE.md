@@ -5234,6 +5234,36 @@ une séance libre : question avec le message « séance pas perdue », « Rester
 ramène la page. Mutation vue échouer. Suite : 370 tests, OK.
 ⚠️ NON VÉRIFIÉ : le retour Android (pas de geste retour dans le navigateur).
 
+## Trois retours d'APK : titre des Perfs, calendrier lisible, « LE RESTE » — 08/11/2026
+
+Trois captures de Hafiz (`icones/Screenshot_2026-11-08-*`).
+
+1. **L'en-tête « Mes performances »** portait encore le badge PEINT du
+   26/08/2026 (`assets/icones/perfs.png`, couronne et étoiles en couleurs),
+   seul de son espèce au milieu des icônes dessinées au trait or. Il devient
+   « MES PERFORMANCES » (mot en or) avec l'icône de l'onglet Perfs dans une
+   pastille ronde, comme le rouage du Profil. Le fichier image reste dans le
+   dépôt mais n'est plus chargé.
+2. **Le calendrier**, « on ne voit pas bien prévu, fait et autres » :
+   - la légende était collée au titre sur la même ligne et DÉBORDAIT de
+     l'écran sur téléphone (« ! MANQU… » coupé). Elle a sa propre ligne, qui
+     passe à la ligne si besoin, et chaque entrée montre un ÉCHANTILLON de case
+     (Prévu, Fait, Manqué, Aujourd'hui) ;
+   - l'état se voit sur TOUTE la case, plus seulement par un signe de 11 px :
+     fond vert pour un jour fait, contour rouge pour un jour manqué ; le
+     « prévu » est un vrai disque de 7 px (le « • » d'avant était un caractère,
+     minuscule selon la police du téléphone). Aujourd'hui (or) et la sélection
+     (bleu) passent par-dessus. Cases et légende partagent les MÊMES styles
+     (`caseFaite`, `caseManquee`, `pointPrevu`) : la légende ne peut pas
+     montrer autre chose que la grille.
+3. **« LE RESTE »** au-dessus des trois raccourcis (Suivi, Nutrition, Progrès)
+   est retiré (« ça ne fait pas pro ») ; un simple espace les détache du
+   calendrier.
+
+Vérifié dans le navigateur (390 px, serveur local, preview arrêtée AVANT de
+remettre `apiUrl`) : titre des Perfs, légende sur une ligne sans débordement,
+cases faites/manquées/prévues lisibles, plus de « LE RESTE ». 370 tests, OK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

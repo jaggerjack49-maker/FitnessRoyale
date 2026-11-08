@@ -15,7 +15,7 @@
 // autre joueur, sans preuve jointe (statut "communauté").
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image,
+  View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
@@ -334,13 +334,18 @@ export default function PerformancesScreen({
 
   return (
     <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
-      {/* L'emoji 📊 a été remplacé le 26/08/2026 par le badge dessiné fourni
-          par Hafiz (icones/ → assets/icones/perfs.png). Titre et image sont
-          alignés sur la même ligne pour garder la mise en page des autres
-          écrans. */}
+      {/* L'EN-TÊTE PASSE À LA DA (08/11/2026, demande de Hafiz : « l'icône de
+          mes performances doit être changée et correspondre à la nouvelle
+          DA »). Le badge peint du 26/08/2026 (assets/icones/perfs.png, une
+          image en couleurs avec couronne et étoiles) détonnait à côté des
+          icônes DESSINÉES au trait or des autres écrans. C'est maintenant la
+          même icône que l'onglet Perfs, dans la même pastille que le rouage du
+          Profil, et un titre avec un mot en or. */}
       <View style={styles.ligneTitre}>
-        <Image source={require('../../assets/icones/perfs.png')} style={styles.iconeTitre} />
-        <Text style={styles.titre}>Mes performances</Text>
+        <View style={styles.pastilleTitre}>
+          <Icone nom="perfs" taille={20} couleur={colors.or} />
+        </View>
+        <Text style={styles.titre}>MES <Text style={{ color: colors.or }}>PERFORMANCES</Text></Text>
       </View>
       {/* ---- « NOUVELLE PERF » : la maquette du 09/09/2026 ----
            Elle remplace le formulaire d'origine ET la carte « les 3 paliers »
@@ -649,11 +654,12 @@ export default function PerformancesScreen({
 
 const styles = StyleSheet.create({
   conteneur: { flex: 1, backgroundColor: colors.fond },
-  titre: { color: colors.texte, fontSize: 24, fontWeight: '800' },
-  ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // Le badge est un peu plus haut que le texte pour rester lisible malgré ses
-  // détails (couronne, étoiles) ; `contain` garde ses proportions.
-  iconeTitre: { width: 40, height: 34, resizeMode: 'contain' },
+  titre: { color: colors.texte, fontSize: 22, fontWeight: '900', letterSpacing: 0.5, flexShrink: 1 },
+  ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: espacement.s },
+  pastilleTitre: {
+    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: da.carte, borderWidth: 1, borderColor: da.bordureOrDouce,
+  },
   sousTitre: { color: colors.texteGris, fontSize: 13, marginTop: 4, marginBottom: espacement.m },
   formulaire: {
     backgroundColor: colors.carte,

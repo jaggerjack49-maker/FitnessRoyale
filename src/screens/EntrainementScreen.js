@@ -735,9 +735,20 @@ const stylesHub = StyleSheet.create({
   libelleSection: {
     color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5,
   },
-  // La légende du calendrier mêle du texte et une icône : il lui faut une
-  // rangée, un SVG ne peut pas vivre à l'intérieur d'un <Text>.
-  legendeCalendrier: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // La légende du calendrier : sa propre ligne, qui passe à la ligne si
+  // l'écran est étroit (elle débordait collée au titre).
+  legendeCalendrier: {
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 6,
+    marginBottom: espacement.s,
+  },
+  entreeLegende: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  echantillonCase: {
+    width: 20, height: 20, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.carte, borderWidth: 1, borderColor: colors.bordure,
+  },
+  echantillonPrevu: {},
+  texteLegende: { color: colors.texteDoux, fontSize: 12, fontWeight: '600' },
+  espaceRaccourcis: { height: espacement.l },
   lienSection: { color: colors.or, fontSize: 12, fontWeight: '800' },
 
   // La carte « la séance du jour » (modèle : la carte de séance des maquettes).
@@ -4660,12 +4671,37 @@ export default function EntrainementScreen({
       )}
       {/* ---- Calendrier mensuel interactif : touche une DATE pour voir son
            programme, en ajouter un, ou démarrer la séance du jour. ---- */}
+      {/* LA LÉGENDE PASSE SOUS LE TITRE (08/11/2026, retour de Hafiz : « dans
+          le calendrier on ne voit pas bien les parties prévu, fait et
+          autres »). Collée au titre sur la même ligne, elle débordait de
+          l'écran sur téléphone (« ! MANQU… » coupé), en petites capitales
+          grises, avec des signes minuscules. Elle a maintenant sa propre
+          ligne, et chaque entrée montre EXACTEMENT la marque de la case. */}
       <View style={stylesHub.bandeauSection}>
         <Text style={stylesHub.libelleSection}>CALENDRIER</Text>
-        <View style={stylesHub.legendeCalendrier}>
-          <Text style={stylesHub.libelleSection}>• PRÉVU</Text>
-          <Icone nom="valide" taille={11} couleur={colors.vert} />
-          <Text style={stylesHub.libelleSection}>FAIT   ! MANQUÉ</Text>
+      </View>
+      <View style={stylesHub.legendeCalendrier}>
+        <View style={stylesHub.entreeLegende}>
+          <View style={[stylesHub.echantillonCase, stylesHub.echantillonPrevu]}>
+            <View style={styles.pointPrevu} />
+          </View>
+          <Text style={stylesHub.texteLegende}>Prévu</Text>
+        </View>
+        <View style={stylesHub.entreeLegende}>
+          <View style={[stylesHub.echantillonCase, styles.caseFaite]}>
+            <Icone nom="valide" taille={11} couleur={colors.vert} />
+          </View>
+          <Text style={stylesHub.texteLegende}>Fait</Text>
+        </View>
+        <View style={stylesHub.entreeLegende}>
+          <View style={[stylesHub.echantillonCase, styles.caseManquee]}>
+            <Text style={styles.texteManque}>!</Text>
+          </View>
+          <Text style={stylesHub.texteLegende}>Manqué</Text>
+        </View>
+        <View style={stylesHub.entreeLegende}>
+          <View style={[stylesHub.echantillonCase, styles.caseAujourdhui]} />
+          <Text style={stylesHub.texteLegende}>Aujourd'hui</Text>
         </View>
       </View>
       {/* Largeur limitée : sans ça, les cases (1/7 de l'écran chacune)
@@ -4703,6 +4739,12 @@ export default function EntrainementScreen({
                 key={k}
                 style={[
                   styles.caseJour,
+                  // L'ÉTAT SE VOIT SUR TOUTE LA CASE (08/11/2026), plus
+                  // seulement par un signe de 11 px : fond vert pour un jour
+                  // fait, contour rouge pour un jour manqué. Aujourd'hui (or)
+                  // et la sélection (bleu) passent par-dessus.
+                  fait && styles.caseFaite,
+                  !fait && manquee && styles.caseManquee,
                   estAujourdhui && styles.caseAujourdhui,
                   selectionne && styles.caseSelectionnee,
                 ]}
@@ -4720,13 +4762,9 @@ export default function EntrainementScreen({
                     gardait sa couleur verte quoi qu'on demande. Dessiné, il
                     tient dans 11 px et prend la couleur « fait » du thème. */}
                 <View style={styles.marqueurJour}>
-                  {fait
-                    ? <Icone nom="valide" taille={12} couleur={colors.vert} />
-                    : (
-                      <Text style={[styles.texteMarqueurJour, manquee && { color: colors.rouge }]}>
-                        {manquee ? '!' : prevu ? '•' : ''}
-                      </Text>
-                    )}
+                  {fait ? <Icone nom="valide" taille={13} couleur={colors.vert} />
+                    : manquee ? <Text style={styles.texteManque}>!</Text>
+                      : prevu ? <View style={styles.pointPrevu} /> : null}
                 </View>
               </TouchableOpacity>
             );
@@ -4954,13 +4992,12 @@ export default function EntrainementScreen({
         );
       })()}
 
-      {/* ---- LE RESTE, derrière une ligne chacun ----
-          Ces trois sections vivaient dans cette même page, dépliées ou non :
-          elles font maintenant chacune leur propre écran. Le résumé chiffré
-          reste visible ici, pour ne pas avoir à ouvrir pour savoir. */}
-      <View style={stylesHub.bandeauSection}>
-        <Text style={stylesHub.libelleSection}>LE RESTE</Text>
-      </View>
+      {/* ---- Les trois sous-écrans, derrière une ligne chacun ----
+          Le résumé chiffré reste visible ici, pour ne pas avoir à ouvrir pour
+          savoir. Le titre « LE RESTE » qui les coiffait a été retiré le
+          08/11/2026 (Hafiz : « ça ne fait pas pro ») ; un simple espace les
+          détache du calendrier. */}
+      <View style={stylesHub.espaceRaccourcis} />
       <LigneRaccourci
         icone="cible"
         titre="Suivi & objectifs"
@@ -5268,9 +5305,14 @@ const styles = StyleSheet.create({
   marqueurJour: {
     minHeight: 15, alignItems: 'center', justifyContent: 'center',
   },
-  texteMarqueurJour: {
-    color: colors.accent, fontSize: 11, lineHeight: 15, textAlign: 'center',
-  },
+  // Les trois états du calendrier (08/11/2026) — partagés par les cases ET la
+  // légende, pour que la légende montre exactement ce qu'on voit dans la grille.
+  // Le « prévu » est un vrai disque de 7 px (le « • » d'avant était un
+  // caractère, minuscule selon la police du téléphone).
+  pointPrevu: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+  caseFaite: { backgroundColor: 'rgba(61, 220, 132, 0.14)', borderColor: 'rgba(61, 220, 132, 0.45)' },
+  caseManquee: { borderColor: 'rgba(255, 84, 112, 0.6)' },
+  texteManque: { color: colors.rouge, fontSize: 12, lineHeight: 15, fontWeight: '900' },
   detailJour: {
     backgroundColor: colors.carteClaire, borderRadius: 10, padding: espacement.s,
     marginBottom: 4, marginLeft: espacement.m, borderWidth: 1, borderColor: colors.bordure,
