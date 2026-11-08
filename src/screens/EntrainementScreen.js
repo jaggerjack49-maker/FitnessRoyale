@@ -30,7 +30,8 @@ import {
 import {
   jourDeLaSeance, seriesSansJour, joursTravailles,
 } from '../logic/dateSeance';
-import * as notifications from '../notifications';
+import * as reglages from '../reglages';
+import { PREFERENCES_DEFAUT } from '../logic/reglages';
 import * as stockageSeance from '../stockageSeance';
 import usePlaceDefilement from '../usePlaceDefilement';
 import useRetour from '../useRetour';
@@ -912,25 +913,16 @@ export default function EntrainementScreen({
     return () => { annule = true; };
   }, [cleMasques]);
 
-  // ---- Rappel de SUIVI : le point hebdo sur le volume (≠ rappel de séance) ----
-  const [suiviJour, setSuiviJour] = useState('dimanche');
-  const [suiviHeure, setSuiviHeure] = useState('19:00');
-  const [suiviActif, setSuiviActif] = useState(false);
-  const [suiviMessage, setSuiviMessage] = useState(null);
+  // ---- Les rappels (d'entraînement, point hebdo) ont DÉMÉNAGÉ le 08/11/2026
+  // dans Profil → Paramètres → Notifications (src/components/Parametres.js et
+  // src/reglages.js). Cet écran ne fait plus que tenir à jour le MESSAGE du
+  // point hebdo (voir `resumeSuivi` plus bas), lui seul connaissant le volume.
 
-  useEffect(() => {
-    AsyncStorage.getItem('fitnessRoyale.rappelSuivi').then((brut) => {
-      if (!brut) return;
-      try {
-        const config = JSON.parse(brut);
-        setSuiviJour(config.jour || 'dimanche');
-        setSuiviHeure(config.heure || '19:00');
-        setSuiviActif(!!config.actif);
-      } catch {
-        // Config illisible : valeurs par défaut.
-      }
-    });
-  }, []);
+  // ---- Les PRÉFÉRENCES (repos par défaut, vibration, notification de fin de
+  // repos), réglées dans les Paramètres : on s'y abonne pour qu'un changement
+  // s'applique tout de suite au minuteur.
+  const [preferences, setPreferences] = useState(PREFERENCES_DEFAUT);
+  useEffect(() => reglages.ecouterPreferences(setPreferences), []);
 
   // ---- Modèles standards (dépliés/repliés) ----
   const [modelesOuverts, setModelesOuverts] = useState(false);
@@ -973,27 +965,6 @@ export default function EntrainementScreen({
   // Modèle (cycle complet) en cours de placement depuis le calendrier + durée choisie.
   const [modeleAPlacer, setModeleAPlacer] = useState(null);
   const [semainesModele, setSemainesModele] = useState('4');
-
-  // ---- Rappel d'entraînement (notification locale, voir src/notifications.js) ----
-  // Config persistée dans AsyncStorage pour survivre au redémarrage de l'app.
-  const [rappelJours, setRappelJours] = useState([]);
-  const [rappelHeure, setRappelHeure] = useState('18:00');
-  const [rappelActif, setRappelActif] = useState(false);
-  const [rappelMessage, setRappelMessage] = useState(null);
-
-  useEffect(() => {
-    AsyncStorage.getItem('fitnessRoyale.rappel').then((brut) => {
-      if (!brut) return;
-      try {
-        const config = JSON.parse(brut);
-        setRappelJours(config.jours || []);
-        setRappelHeure(config.heure || '18:00');
-        setRappelActif(!!config.actif);
-      } catch {
-        // Config illisible : on repart des valeurs par défaut.
-      }
-    });
-  }, []);
 
   // ---- Séance en cours de log ----
   const [programmeActif, setProgrammeActif] = useState(null); // null = séance libre
@@ -1687,67 +1658,6 @@ export default function EntrainementScreen({
     return lignes.slice(0, 4).join(' · ') + (lignes.length > 4 ? '…' : '');
   }
 
-  async function activerRappelSuivi() {
-    setSuiviMessage(null);
-    const correspondance = suiviHeure.trim().match(/^(\d{1,2})[:hH](\d{2})$/);
-    if (!correspondance) {
-      setSuiviMessage({ texte: 'Heure invalide — utilise le format 19:00.', erreur: true });
-      return;
-    }
-    const heure = parseInt(correspondance[1], 10);
-    const minute = parseInt(correspondance[2], 10);
-    if (heure > 23 || minute > 59) {
-      setSuiviMessage({ texte: 'Heure invalide (0-23 h, 0-59 min).', erreur: true });
-      return;
-    }
-    const accorde = await notifications.demanderPermission();
-    if (!accorde) {
-      setSuiviMessage({
-        texte: 'Notifications refusées — autorise-les dans les réglages du téléphone.',
-        erreur: true,
-      });
-      return;
-    }
-    await notifications.programmerRappelSuivi(
-      suiviJour, heure, minute, resumeVolume(seriesFaites, objectifsSeries)
-    );
-    setSuiviActif(true);
-    await AsyncStorage.setItem('fitnessRoyale.rappelSuivi', JSON.stringify({
-      jour: suiviJour, heure: suiviHeure.trim(), actif: true,
-    }));
-    setSuiviMessage({
-      texte: `Point hebdo activé : chaque ${suiviJour} à ${suiviHeure.trim()}.`,
-      erreur: false,
-    });
-  }
-
-  async function desactiverRappelSuivi() {
-    await notifications.annulerRappelSuivi();
-    setSuiviActif(false);
-    await AsyncStorage.setItem('fitnessRoyale.rappelSuivi', JSON.stringify({
-      jour: suiviJour, heure: suiviHeure.trim(), actif: false,
-    }));
-    setSuiviMessage({ texte: 'Point hebdo désactivé.', erreur: false });
-  }
-
-  // Après une séance, le compte a changé : on reprogramme le rappel pour que
-  // son message porte les nouveaux chiffres (le contenu d'une notification
-  // locale est figé au moment où on la programme).
-  async function rafraichirRappelSuivi(entrainementsAJour) {
-    if (!suiviActif) return;
-    const correspondance = suiviHeure.trim().match(/^(\d{1,2})[:hH](\d{2})$/);
-    if (!correspondance) return;
-    const compte = compterSeriesParGroupe(
-      entrainementsAJour, correctionsGroupes, debutSemaineISO, finSemaineISO
-    );
-    await notifications.programmerRappelSuivi(
-      suiviJour,
-      parseInt(correspondance[1], 10),
-      parseInt(correspondance[2], 10),
-      resumeVolume(compte, objectifsSeries)
-    );
-  }
-
   // Classe manuellement un exercice que la détection automatique n'a pas su
   // rattacher à un groupe musculaire.
   async function classerExercice(exercice, groupe) {
@@ -2232,53 +2142,6 @@ export default function EntrainementScreen({
     setModelesOuverts(false);
   }
 
-  // ----- Rappel d'entraînement (notifications locales) -----
-  function basculerJourRappel(jour) {
-    setRappelJours((l) => (l.includes(jour) ? l.filter((j) => j !== jour) : [...l, jour]));
-  }
-
-  async function activerRappel() {
-    setRappelMessage(null);
-    const correspondance = rappelHeure.trim().match(/^(\d{1,2})[:hH](\d{2})$/);
-    if (!correspondance) {
-      setRappelMessage({ texte: "Heure invalide — utilise le format 18:00 (ou 18h00).", erreur: true });
-      return;
-    }
-    const heure = parseInt(correspondance[1], 10);
-    const minute = parseInt(correspondance[2], 10);
-    if (heure > 23 || minute > 59) {
-      setRappelMessage({ texte: 'Heure invalide (0-23 h, 0-59 min).', erreur: true });
-      return;
-    }
-    if (rappelJours.length === 0) {
-      setRappelMessage({ texte: 'Choisis au moins un jour de rappel.', erreur: true });
-      return;
-    }
-    const accorde = await notifications.demanderPermission();
-    if (!accorde) {
-      setRappelMessage({
-        texte: "Notifications refusées — autorise-les dans les réglages du téléphone.",
-        erreur: true,
-      });
-      return;
-    }
-    await notifications.programmerRappels(rappelJours, heure, minute);
-    setRappelActif(true);
-    await AsyncStorage.setItem('fitnessRoyale.rappel', JSON.stringify({
-      jours: rappelJours, heure: rappelHeure.trim(), actif: true,
-    }));
-    setRappelMessage({ texte: `Rappel activé : ${rappelJours.join(', ')} à ${rappelHeure.trim()}.`, erreur: false });
-  }
-
-  async function desactiverRappel() {
-    await notifications.annulerRappels();
-    setRappelActif(false);
-    await AsyncStorage.setItem('fitnessRoyale.rappel', JSON.stringify({
-      jours: rappelJours, heure: rappelHeure.trim(), actif: false,
-    }));
-    setRappelMessage({ texte: 'Rappel désactivé.', erreur: false });
-  }
-
   async function supprimerProgramme(programme) {
     setProgrammes((p) => p.filter((prog) => prog.id !== programme.id));
     if (String(programme.id).startsWith('local-')) return; // création pas encore confirmée
@@ -2540,7 +2403,7 @@ export default function EntrainementScreen({
     // fixée dans le programme pour CET exercice, sinon 1 min 30. Un repos à 0
     // (« enchaîner ») ne lance rien.
     const cible = programmeActif?.exercices?.find((e) => e.exercice === exercice);
-    const duree = reposDe(cible);
+    const duree = reposDe(cible, preferences.reposDefaut);
     setRepos(duree > 0 ? { fin: Date.now() + duree * 1000, duree, exercice } : null);
   }
 
@@ -2679,7 +2542,6 @@ export default function EntrainementScreen({
 
     // Le volume de la semaine vient de changer : on remet à jour le message du
     // rappel de suivi (sinon il annoncerait des chiffres périmés).
-    rafraichirRappelSuivi([local, ...entrainements]);
     setEnregistrementEnCours(false);
     setRattrapageDe(null);
     setDateDebutSeance(null);
@@ -2700,6 +2562,15 @@ export default function EntrainementScreen({
   const seriesFaites = compterSeriesParGroupe(
     entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO
   );
+  // Le MESSAGE du point hebdo porte les vrais chiffres de la semaine. Il est
+  // reprogrammé dès que ce résumé CHANGE (chargement, séance enregistrée,
+  // objectif modifié) — le contenu d'une notification locale est figé au
+  // moment où on la programme. Ne fait rien si le point hebdo est coupé.
+  const resumeSuivi = resumeVolume(seriesFaites, objectifsSeries);
+  useEffect(() => {
+    if (etatChargement !== 'ok') return;
+    reglages.reprogrammerRappelSuivi(resumeSuivi).catch(() => {});
+  }, [resumeSuivi, etatChargement]);
 
   // ----- Rendu -----
 
@@ -3293,6 +3164,8 @@ export default function EntrainementScreen({
         )) : null}
         onAjuster={ajusterRepos}
         onPasser={() => setRepos(null)}
+        vibrer={preferences.vibrationRepos}
+        notifier={preferences.notificationRepos}
       />
       </KeyboardAvoidingView>
     );
@@ -4121,7 +3994,7 @@ export default function EntrainementScreen({
       >
         <EnteteSousEcran
           titre="Suivi & objectifs"
-          sousTitre="Ton volume de la semaine, et tes rappels."
+          sousTitre="Ton volume de la semaine et tes objectifs."
           onRetour={() => setVue('accueil')}
         />
         {/* ---- Volume : séries par groupe musculaire, semaine en cours ---- */}
@@ -4292,54 +4165,14 @@ export default function EntrainementScreen({
               </TouchableOpacity>
             )}
 
-            {/* Rappel de SUIVI : le point hebdo sur le volume.
-                Différent du rappel d'entraînement (qui, lui, dit d'aller
-                s'entraîner). Caché sur web comme l'autre. */}
-            {!editionObjectifs && Platform.OS !== 'web' && (
-              <View style={styles.blocRappelSuivi}>
-                <TexteIcone nom="cloche" taille={14} couleur={colors.or} style={styles.libelleRappelSuivi}>Point hebdo sur mes séries</TexteIcone>
-                <Text style={styles.indice}>
-                  Une notification chaque semaine avec ton avancement — pour ne pas
-                  découvrir le dimanche soir qu'il te manque 8 séries de dos.
-                </Text>
-                <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
-                  {joursSemaine.map((jour) => (
-                    <TouchableOpacity
-                      key={jour}
-                      style={[styles.puceJour, suiviJour === jour && styles.puceJourActive]}
-                      onPress={() => setSuiviJour(jour)}
-                    >
-                      <Text style={[styles.puceJourTexte, suiviJour === jour && styles.puceJourTexteActif]}>
-                        {abreviationsJours[jour]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
-                  <TextInput
-                    style={[styles.champ, { width: 90 }]}
-                    value={suiviHeure}
-                    onChangeText={setSuiviHeure}
-                    placeholder="19:00"
-                    placeholderTextColor={colors.texteGris}
-                  />
-                  <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappelSuivi}>
-                    <Text style={styles.boutonAjouterSerieTexte}>
-                      {suiviActif ? 'Mettre à jour' : 'Activer'}
-                    </Text>
-                  </TouchableOpacity>
-                  {suiviActif && (
-                    <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappelSuivi}>
-                      <Icone nom="croix" taille={15} couleur={colors.rouge} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-                {suiviMessage && (
-                  <Text style={[styles.messageRappel, suiviMessage.erreur && { color: colors.rouge }]}>
-                    {suiviMessage.texte}
-                  </Text>
-                )}
-              </View>
+            {/* Le point hebdo sur le volume (une notification qui porte ces
+                chiffres) se règle désormais dans Profil → Paramètres →
+                Notifications (08/11/2026). */}
+            {!editionObjectifs && (
+              <TexteIcone nom="cloche" taille={13} hautAligne style={[styles.indice, { marginTop: espacement.s }]}>
+                Pour recevoir ce point chaque semaine en notification : Profil
+                → Paramètres → Notifications.
+              </TexteIcone>
             )}
 
             {/* TOUS les exercices de la semaine, avec le groupe où ils sont
@@ -4397,55 +4230,8 @@ export default function EntrainementScreen({
             )}
           </View>
         )}
-        {/* ---- Rappel d'entraînement (pas de notifications programmées sur web) ---- */}
-        {Platform.OS !== 'web' && (
-          <>
-            <TexteIcone nom="cloche" taille={15} couleur={colors.or} style={styles.sectionTitre}>Rappel d'entraînement</TexteIcone>
-            <View style={styles.carteModele}>
-              <Text style={styles.indice}>
-                Choisis tes jours et ton heure : ton téléphone te préviendra, même
-                app fermée (comme un réveil).
-              </Text>
-              <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
-                {joursSemaine.map((jour) => (
-                  <TouchableOpacity
-                    key={jour}
-                    style={[styles.puceJour, rappelJours.includes(jour) && styles.puceJourActive]}
-                    onPress={() => basculerJourRappel(jour)}
-                  >
-                    <Text style={[styles.puceJourTexte, rappelJours.includes(jour) && styles.puceJourTexteActif]}>
-                      {abreviationsJours[jour]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={[styles.ligneAjoutSerie, { marginTop: espacement.s }]}>
-                <TextInput
-                  style={[styles.champ, { width: 90 }]}
-                  value={rappelHeure}
-                  onChangeText={setRappelHeure}
-                  placeholder="18:00"
-                  placeholderTextColor={colors.texteGris}
-                />
-                <TouchableOpacity style={styles.boutonAjouterSerie} onPress={activerRappel}>
-                  <Text style={styles.boutonAjouterSerieTexte}>
-                    {rappelActif ? 'Mettre à jour' : 'Activer'}
-                  </Text>
-                </TouchableOpacity>
-                {rappelActif && (
-                  <TouchableOpacity style={styles.boutonRetirer} onPress={desactiverRappel}>
-                    <Icone nom="croix" taille={15} couleur={colors.rouge} />
-                  </TouchableOpacity>
-                )}
-              </View>
-              {rappelMessage && (
-                <Text style={[styles.messageRappel, rappelMessage.erreur && { color: colors.rouge }]}>
-                  {rappelMessage.texte}
-                </Text>
-              )}
-            </View>
-          </>
-        )}
+        {/* Le rappel d'entraînement a déménagé dans Profil → Paramètres →
+            Notifications (08/11/2026). */}
       </ScrollView>
     );
   }
@@ -5418,13 +5204,6 @@ const styles = StyleSheet.create({
   },
   pucheGroupe: { color: colors.texteGris, fontSize: 11, fontWeight: '600' },
   pucheCompte: { color: colors.texte, fontSize: 11, fontWeight: '800' },
-  blocRappelSuivi: {
-    marginTop: espacement.m, paddingTop: espacement.m,
-    borderTopWidth: 1, borderTopColor: colors.bordure,
-  },
-  libelleRappelSuivi: {
-    color: colors.texte, fontWeight: '700', fontSize: 13, marginBottom: 4,
-  },
   suggestion: { color: colors.accent, fontSize: 12, fontWeight: '700', marginBottom: 3 },
   // « ➕ Ajouter une séance » sur la carte d'un programme (24/09/2026).
   boutonAjouterSeance: {
@@ -5591,5 +5370,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.or, borderRadius: 10, paddingVertical: 12,
     alignItems: 'center', marginTop: espacement.s,
   },
-  messageRappel: { color: colors.vert, fontSize: 12, marginTop: espacement.s },
 });

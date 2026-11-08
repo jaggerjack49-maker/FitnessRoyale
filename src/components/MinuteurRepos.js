@@ -26,7 +26,9 @@ import * as notifications from '../notifications';
 // au premier repos — pas au milieu de chaque série.
 let permissionDemandee = false;
 
-export default function MinuteurRepos({ repos, etape, actif, onAjuster, onPasser }) {
+export default function MinuteurRepos({
+  repos, etape, actif, onAjuster, onPasser, vibrer = true, notifier = true,
+}) {
   const [maintenant, setMaintenant] = useState(Date.now());
   const finVibree = useRef(null);
   const fin = repos?.fin || null;
@@ -44,19 +46,19 @@ export default function MinuteurRepos({ repos, etape, actif, onAjuster, onPasser
   useEffect(() => {
     if (fin && restant === 0 && finVibree.current !== fin) {
       finVibree.current = fin;
-      Vibration.vibrate([0, 400, 200, 400]);
+      if (vibrer) Vibration.vibrate([0, 400, 200, 400]);
     }
-  }, [fin, restant]);
+  }, [fin, restant, vibrer]);
 
   useEffect(() => {
-    if (!fin || permissionDemandee) return;
+    if (!fin || !notifier || permissionDemandee) return;
     permissionDemandee = true;
     notifications.demanderPermission().catch(() => {});
-  }, [fin]);
+  }, [fin, notifier]);
 
   // App en arrière-plan → notification de fin de repos ; retour → annulée.
   useEffect(() => {
-    if (!fin) return undefined;
+    if (!fin || !notifier) return undefined;
     const abonnement = AppState.addEventListener('change', (etat) => {
       const reste = secondesRestantes(fin, Date.now());
       if (etat !== 'active' && reste > 0) {
@@ -70,7 +72,7 @@ export default function MinuteurRepos({ repos, etape, actif, onAjuster, onPasser
       abonnement.remove();
       notifications.annulerFinRepos();
     };
-  }, [fin, etape]);
+  }, [fin, etape, notifier]);
 
   if (!fin) return null;
   const termine = restant === 0;

@@ -5140,6 +5140,72 @@ compte avec message d'erreur, écran « Compte créé » après une vraie inscri
 d'un compte de test local ; cibles tactiles de 42 à 52 px, aucun débordement,
 zéro erreur console. Suite : 369 tests, OK.
 
+## Les Paramètres : un rouage flottant sur le Profil — 08/11/2026
+
+Demande de Hafiz : « au niveau du profil on va ajouter un petit onglet flottant
+en haut à droite qui fera office de paramètres ; on va y intégrer la partie
+sécurité du compte ainsi que la déconnexion. On aura la partie compte, une
+partie préférences, une partie notifications. »
+
+- Un ROUAGE flottant (`IconeReglages`, nouvelle icône) en haut à droite du
+  Profil, posé PAR-DESSUS la page : il reste visible quand on fait défiler.
+  L'en-tête de marque porte une `marginRight` pour que le badge « SÉRIE » se
+  range à sa gauche. ⚠️ Premier dessin rejeté à l'écran : des traits détachés
+  autour d'un anneau se lisaient comme un SOLEIL — c'est maintenant un contour
+  d'engrenage d'un seul trait.
+- `src/components/Parametres.js` recouvre l'écran (retour Android = fermer ;
+  `actif` est désormais passé au Profil par App.js) :
+  - **COMPTE** : pseudo, sexe, poids et catégorie ; « Ma salle de gym » (mène à
+    l'onglet Clan, où elle se change) ; la SÉCURITÉ (changer le mot de passe,
+    regénérer le code de secours) et la DÉCONNEXION, toutes deux DÉMÉNAGÉES du
+    bas du Profil. La déconnexion se confirme désormais en deux temps.
+  - **PRÉFÉRENCES** : le repos par défaut du minuteur (0:45 → 3:00, utilisé
+    quand le programme n'en fixe pas) et la vibration de fin de repos.
+  - **NOTIFICATIONS** : le rappel d'entraînement et le point hebdo, DÉMÉNAGÉS de
+    l'écran « Suivi & objectifs » de l'Entraînement, et la notification de fin
+    de repos. Sur le web, une phrase dit qu'elles se règlent sur téléphone.
+- `src/reglages.js` lit et écrit ces réglages (AsyncStorage, réglages DE CE
+  TÉLÉPHONE, rien au serveur). Les deux rappels gardent leurs anciennes clés
+  (`fitnessRoyale.rappel`, `fitnessRoyale.rappelSuivi`) : un rappel déjà réglé
+  n'est pas perdu. La forme valide de chaque réglage est dans
+  `src/logic/reglages.js`, testée (`test_reglages.py`) : une mémoire abîmée
+  redevient un réglage valide, champ par champ.
+- Les préférences s'appliquent TOUT DE SUITE : l'Entraînement s'y abonne
+  (`ecouterPreferences`), sans relancer l'app.
+- ⚠️ LE POINT HEBDO ET SES CHIFFRES : son message (« Pectoraux 8/12 ») ne peut
+  être calculé que par l'Entraînement. Activé depuis les Paramètres, il part
+  avec un message générique ; l'Entraînement le reprogramme dès que son résumé
+  CHANGE (`resumeSuivi` + `reprogrammerRappelSuivi`), au chargement comme après
+  une séance. L'ancien `rafraichirRappelSuivi` a disparu.
+- Le panneau Mode test (admin) reste dans le Profil.
+
+### ⚠️ INCIDENT : un compte de test créé sur le serveur EN LIGNE
+
+En vérifiant l'écran de connexion, un compte « DA-Test-96271 » (n°15) a été
+créé sur la base Neon de PRODUCTION. CAUSE : `app.json` avait été remis sur
+l'adresse Render PENDANT que l'app de test tournait — Metro relit `app.json`
+en direct et a basculé l'app sur la production sans rien dire. L'écran de
+connexion n'ayant pas besoin du serveur pour s'afficher, rien ne l'a signalé.
+RÈGLE : **arrêter l'app de test (preview `web`) AVANT de remettre `apiUrl`** ;
+et pour vérifier où part l'app, lire `performance.getEntriesByType('resource')`
+(le panneau réseau du volet ne montrait que les appels locaux).
+À SUPPRIMER par Hafiz dans l'éditeur SQL de Neon (toutes les tables liées
+suivent en `ON DELETE CASCADE`) :
+`DELETE FROM joueurs WHERE id = 15 AND pseudo = 'DA-Test-96271';`
+
+### Vérifié
+
+`test_reglages.py` + `harnais/harnais_reglages.mjs` (26 cas) ; **4 mutations
+vues échouer**. Suite complète : **370 tests, OK.**
+Navigateur (390 px, serveur local, appels vérifiés vers localhost) : rouage
+visible sans chevaucher le badge ; Paramètres ouverts ; repos par défaut passé
+à 2:00 et vibration coupée puis remise, enregistrés ; sécurité dépliée ;
+déconnexion confirmée puis annulée (jeton intact) ; une séance libre lance
+bien un repos de 2:00 sans relancer l'app ; l'écran Suivi n'a plus les cartes
+de rappel et renvoie vers les Paramètres. Aucun débordement, cibles ≥ 44 px
+(la ligne « Changer mon mot de passe » mesurait 28 px, corrigée).
+⚠️ NON VÉRIFIÉ : les notifications elles-mêmes et le retour Android (web).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5152,7 +5218,7 @@ zéro erreur console. Suite : 369 tests, OK.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (369 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (370 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

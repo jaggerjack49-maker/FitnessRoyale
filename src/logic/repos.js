@@ -17,12 +17,15 @@ export const REPOS_MAX = 900;
 
 // Le repos d'un exercice de programme, en secondes. 0 est une vraie valeur
 // (« pas de repos », enchaîner) — seul un repos ABSENT retombe sur le défaut.
-export function reposDe(exo) {
+// `defaut` : le repos par défaut choisi dans les Paramètres (08/11/2026) ;
+// absent ou illisible, c'est 1 min 30.
+export function reposDe(exo, defaut = REPOS_PAR_DEFAUT) {
   const valeur = exo?.repos_secondes;
   if (typeof valeur === 'number' && Number.isFinite(valeur) && valeur >= 0) {
     return Math.min(REPOS_MAX, Math.round(valeur));
   }
-  return REPOS_PAR_DEFAUT;
+  const d = Number(defaut);
+  return Number.isFinite(d) && d >= 0 ? Math.min(REPOS_MAX, Math.round(d)) : REPOS_PAR_DEFAUT;
 }
 
 // ---------------------------------------------------------------------------

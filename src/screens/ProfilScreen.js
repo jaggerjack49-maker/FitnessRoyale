@@ -10,7 +10,7 @@
 // design ne change que la présentation, jamais les règles.
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { colors, espacement } from '../theme';
 import { lundiDeLaSemaine } from '../data/groupesMusculaires';
@@ -29,58 +29,26 @@ import { areneDeLaLigue } from '../data/arenes';
 import { mesTitresDExercice, titresAPortee, couleurMedaille } from '../logic/titres';
 import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import PanneauModeTest from '../components/PanneauModeTest';
-import * as api from '../api';
+import Parametres from '../components/Parametres';
+import useRetour from '../useRetour';
 
 export default function ProfilScreen({
   // `setSeances` n'est plus reçu : cet écran ne fait que LIRE les séances
   // depuis le retrait de la saisie manuelle (elles s'ajoutent désormais
   // uniquement depuis l'onglet Entraînement).
   moi, joueurs, seances, salle, seDeconnecter,
-  allerA, rafraichir,
+  allerA, rafraichir, actif = true,
 }) {
   const u = moi;
+  // LES PARAMÈTRES (08/11/2026) : ouverts par le rouage flottant en haut à
+  // droite. Ils ont repris la sécurité du compte et la déconnexion, qui
+  // vivaient en bas de cet écran (voir src/components/Parametres.js).
+  const [parametresOuverts, setParametresOuverts] = useState(false);
+  // Le retour Android referme les Paramètres au lieu de quitter l'onglet.
+  useRetour(actif && parametresOuverts, () => { setParametresOuverts(false); return true; });
 
-  // ----- Sécurité du compte (changer le mot de passe, code de secours) -----
   const [perfsOuvertes, setPerfsOuvertes] = useState(false);
   const [titresOuverts, setTitresOuverts] = useState(false);
-  const [securiteOuverte, setSecuriteOuverte] = useState(false);
-  const [ancienMdp, setAncienMdp] = useState('');
-  const [nouveauMdp, setNouveauMdp] = useState('');
-  const [messageSecurite, setMessageSecurite] = useState(null); // { texte, erreur }
-  const [codeSecoursAffiche, setCodeSecoursAffiche] = useState(null);
-  const [securiteEnCours, setSecuriteEnCours] = useState(false);
-
-  async function validerChangementMdp() {
-    setMessageSecurite(null);
-    if (nouveauMdp.length < 4) {
-      setMessageSecurite({ texte: 'Le nouveau mot de passe doit faire au moins 4 caractères.', erreur: true });
-      return;
-    }
-    setSecuriteEnCours(true);
-    try {
-      await api.changerMotDePasse(ancienMdp, nouveauMdp);
-      setAncienMdp('');
-      setNouveauMdp('');
-      setMessageSecurite({ texte: 'Mot de passe changé !', erreur: false });
-    } catch (e) {
-      setMessageSecurite({ texte: e.message || 'Changement impossible.', erreur: true });
-    } finally {
-      setSecuriteEnCours(false);
-    }
-  }
-
-  async function regenererCodeSecours() {
-    setMessageSecurite(null);
-    setSecuriteEnCours(true);
-    try {
-      const { code_recuperation } = await api.regenererCodeRecuperation();
-      setCodeSecoursAffiche(code_recuperation);
-    } catch (e) {
-      setMessageSecurite({ texte: e.message || 'Génération impossible.', erreur: true });
-    } finally {
-      setSecuriteEnCours(false);
-    }
-  }
 
   // Stats de la semaine, calculées depuis les séances enregistrées dans
   // l'onglet Entraînement (il n'y a plus de saisie manuelle ici).
@@ -132,6 +100,7 @@ export default function ProfilScreen({
       : ligueSuivante ? 0 : 100;
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView style={styles.conteneur} contentContainerStyle={styles.contenu}>
       {/* ---- En-tête de marque ---- */}
       <View style={styles.enteteMarque}>
@@ -402,89 +371,52 @@ export default function ProfilScreen({
         />
       </View>
 
-      {/* Sécurité du compte : repliée par défaut pour ne pas encombrer le profil. */}
-      <View style={styles.carteSecurite}>
-        <TouchableOpacity onPress={() => setSecuriteOuverte(!securiteOuverte)}>
-          <View style={styles.enteteSecurite}>
-            <TexteIcone nom="cadenas" taille={16} couleur={colors.or} style={styles.titreSecurite}>
-              Sécurité du compte
-            </TexteIcone>
-            <Icone nom={securiteOuverte ? 'chevron-haut' : 'chevron-bas'} taille={16} couleur={colors.texteGris} />
-          </View>
-        </TouchableOpacity>
-
-        {securiteOuverte && (
-          <>
-            <Text style={styles.libelleSecurite}>Changer mon mot de passe</Text>
-            <TextInput
-              style={styles.champSecurite}
-              value={ancienMdp}
-              onChangeText={setAncienMdp}
-              placeholder="Mot de passe actuel"
-              placeholderTextColor={colors.texteGris}
-              secureTextEntry
-            />
-            <TextInput
-              style={styles.champSecurite}
-              value={nouveauMdp}
-              onChangeText={setNouveauMdp}
-              placeholder="Nouveau mot de passe (4 caractères min.)"
-              placeholderTextColor={colors.texteGris}
-              secureTextEntry
-            />
-            <TouchableOpacity
-              style={styles.boutonSecurite}
-              onPress={validerChangementMdp}
-              disabled={securiteEnCours}
-            >
-              <Text style={styles.boutonSecuriteTexte}>Changer le mot de passe</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.libelleSecurite}>Code de secours</Text>
-            <Text style={styles.explicationSecurite}>
-              Il sert à récupérer ton compte si tu oublies ton mot de passe
-              (« Mot de passe oublié ? » sur l'écran de connexion). En
-              regénérer un nouveau annule l'ancien.
-            </Text>
-            {codeSecoursAffiche && (
-              <Text style={styles.codeSecours}>{codeSecoursAffiche}</Text>
-            )}
-            <TouchableOpacity
-              style={styles.boutonSecurite}
-              onPress={regenererCodeSecours}
-              disabled={securiteEnCours}
-            >
-              <Text style={styles.boutonSecuriteTexte}>
-                {codeSecoursAffiche ? 'Regénérer encore' : 'Regénérer mon code de secours'}
-              </Text>
-            </TouchableOpacity>
-
-            {messageSecurite && (
-              <Text style={[styles.messageSecurite, messageSecurite.erreur && { color: colors.rouge }]}>
-                {messageSecurite.texte}
-              </Text>
-            )}
-          </>
-        )}
-      </View>
-
       {/* MODE TEST — n'apparaît que sur un compte administrateur (drapeau
           `admin` renvoyé par le serveur, activable uniquement en base). */}
       {u.admin ? <PanneauModeTest onChangement={rafraichir} /> : null}
-
-      <TouchableOpacity style={styles.boutonDeconnexion} onPress={seDeconnecter}>
-        <LibelleIcone nom="sortie" taille={15} style={styles.boutonDeconnexionTexte}>Se déconnecter</LibelleIcone>
-      </TouchableOpacity>
     </ScrollView>
+
+    {/* LE ROUAGE FLOTTANT : posé PAR-DESSUS la page, il reste en haut à
+        droite quand on fait défiler. */}
+    {!parametresOuverts && (
+      <TouchableOpacity
+        style={styles.boutonParametres}
+        onPress={() => setParametresOuverts(true)}
+        accessibilityLabel="Paramètres"
+      >
+        <Icone nom="reglages" taille={22} couleur={da.or} />
+      </TouchableOpacity>
+    )}
+    {parametresOuverts && (
+      <Parametres
+        moi={u}
+        salle={salle}
+        onFermer={() => setParametresOuverts(false)}
+        seDeconnecter={seDeconnecter}
+        allerA={allerA}
+      />
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   conteneur: { flex: 1, backgroundColor: da.fond },
-  contenu: { padding: espacement.m, gap: 14 },
+  contenu: { padding: espacement.m, gap: 14, paddingBottom: espacement.xl },
 
   // ---- En-tête de marque ----
-  enteteMarque: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // `marginRight` : la place du rouage flottant des Paramètres, en haut à
+  // droite — sans elle, le badge « SÉRIE » passerait dessous.
+  enteteMarque: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginRight: 56,
+  },
+  boutonParametres: {
+    position: 'absolute', top: espacement.m, right: espacement.m,
+    width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: da.carte, borderWidth: 1, borderColor: da.bordureOrDouce,
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 10, shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
   surtitre: { color: da.texteGris, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
   titreMarque: { color: da.texte, fontSize: 26, fontWeight: '900', letterSpacing: 0.5 },
   badgeSaison: {
@@ -632,49 +564,4 @@ const styles = StyleSheet.create({
   // La marge basse passe ici : c'est maintenant le dernier bloc avant
   // « Bilan compétition » (la ligne de saisie de séance a été retirée).
   ligneStats: { flexDirection: 'row', marginBottom: espacement.l },
-  boutonDeconnexion: {
-    marginTop: espacement.l,
-    marginBottom: espacement.xl,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  boutonDeconnexionTexte: { color: colors.texteGris, fontWeight: '600', fontSize: 13 },
-  carteSecurite: {
-    backgroundColor: colors.carte,
-    borderRadius: 16,
-    padding: espacement.m,
-    borderWidth: 1,
-    borderColor: colors.bordure,
-    marginTop: espacement.m,
-  },
-  enteteSecurite: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  titreSecurite: { flex: 1, color: colors.texte, fontWeight: '700', fontSize: 15 },
-  libelleSecurite: {
-    color: colors.texte, fontWeight: '600', marginTop: espacement.m, marginBottom: 6,
-  },
-  explicationSecurite: { color: colors.texteGris, fontSize: 12, lineHeight: 18, marginBottom: 6 },
-  champSecurite: {
-    backgroundColor: colors.carteClaire,
-    borderRadius: 10,
-    padding: 12,
-    color: colors.texte,
-    marginBottom: 8,
-  },
-  boutonSecurite: {
-    backgroundColor: colors.carteClaire,
-    borderWidth: 1,
-    borderColor: colors.or,
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  boutonSecuriteTexte: { color: colors.or, fontWeight: '700', fontSize: 13 },
-  codeSecours: {
-    color: colors.or, fontSize: 26, fontWeight: '800', textAlign: 'center',
-    letterSpacing: 3, marginVertical: espacement.s,
-  },
-  messageSecurite: { color: colors.vert, marginTop: espacement.s, fontSize: 13 },
 });

@@ -880,6 +880,34 @@ export function IconeDiamant(props) {
   );
 }
 
+// Rouage — les PARAMÈTRES (08/11/2026). Un CONTOUR D'ENGRENAGE d'un seul
+// trait (huit dents, chacune un plateau entre deux creux) et un moyeu.
+// ⚠️ Un premier jet posait des traits détachés autour d'un anneau : à 22 px,
+// il se lisait comme un SOLEIL. Les dents doivent faire corps avec la roue.
+function contourEngrenage() {
+  const points = [];
+  const dents = 8;
+  for (let i = 0; i < dents; i += 1) {
+    const centre = (i / dents) * 2 * Math.PI;
+    const pas = (2 * Math.PI) / dents;
+    [[-0.30, 6.8], [-0.17, 9.4], [0.17, 9.4], [0.30, 6.8]].forEach(([k, r]) => {
+      const angle = centre + k * pas;
+      points.push(`${(12 + r * Math.cos(angle)).toFixed(2)} ${(12 + r * Math.sin(angle)).toFixed(2)}`);
+    });
+  }
+  return `M${points.join(' L')} Z`;
+}
+const CONTOUR_ENGRENAGE = contourEngrenage();
+
+export function IconeReglages(props) {
+  return (
+    <Cadre {...props}>
+      <Path d={CONTOUR_ENGRENAGE} strokeLinejoin="round" />
+      <Circle cx="12" cy="12" r="2.8" />
+    </Cadre>
+  );
+}
+
 // Loupe — pour le champ de recherche de la bibliothèque.
 export function IconeRecherche(props) {
   return (
@@ -970,6 +998,7 @@ export const NOMS_ICONES = {
   pousse: IconePousse,
   flamme: IconeFlamme,
   diamant: IconeDiamant,
+  reglages: IconeReglages,
 };
 
 // Le point d'entrée unique. Un nom inconnu ne dessine RIEN : une icône qui

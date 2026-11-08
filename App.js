@@ -460,6 +460,7 @@ function AppInterne() {
             seDeconnecter={seDeconnecter}
             allerA={allerA}
             rafraichir={rechargerDepuisServeur}
+            actif={actif}
           />
         );
       case 'perfs':
