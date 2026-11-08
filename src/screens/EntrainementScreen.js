@@ -58,6 +58,10 @@ import {
   detecterRenommages,
 } from '../logic/lignesProgramme';
 import LigneExerciceEditable from '../components/LigneExerciceEditable';
+import { CourbeProgres, BarresActivite } from '../components/GraphiquesProgres';
+import {
+  exercicesSuivis, courbeExercice, variation, seancesParSemaine, statistiques, volumeLisible,
+} from '../logic/progres';
 import MinuteurRepos from '../components/MinuteurRepos';
 
 // BUG CORRIGÉ (03/09/2026) : cette fonction renvoyait la date UTC
@@ -74,6 +78,12 @@ function aujourdhui() {
 
 // « lundi 7 septembre » — pour nommer un jour manqué sans faire lire une
 // date ISO à l'utilisateur.
+// « 2026-10-06 » → « 06/10/26 » : la colonne de date des records est étroite.
+function dateCourteRecord(dateISO) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateISO || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '';
+}
+
 function libelleDate(dateISO) {
   const date = new Date(`${dateISO}T12:00:00`);
   return `${jourDeLaDate(date)} ${date.getDate()} ${nomsMois[date.getMonth()]}`;
@@ -872,6 +882,12 @@ export default function EntrainementScreen({
   const [brouillonObjectifs, setBrouillonObjectifs] = useState({}); // saisie en cours (texte)
   const [exerciceAClasser, setExerciceAClasser] = useState(null);
   const [recordsOuverts, setRecordsOuverts] = useState(false);
+  // L'écran « Progrès » (08/11/2026) : l'exercice dont on regarde la courbe
+  // (null = le plus pratiqué), la mesure tracée, et la liste complète des
+  // exercices dépliée ou non.
+  const [exerciceCourbe, setExerciceCourbe] = useState(null);
+  const [mesureCourbe, setMesureCourbe] = useState('charge');
+  const [tousExercicesCourbe, setTousExercicesCourbe] = useState(false);
 
   // ---- Les séances à rattraper que l'utilisateur a MASQUÉES (08/11/2026) ----
   // Une préférence d'AFFICHAGE, propre à ce téléphone : elle vit dans
@@ -2768,7 +2784,7 @@ export default function EntrainementScreen({
           />
         ) : null}
         <TouchableOpacity onPress={() => { setVue('historique'); setEntrainementSelectionne(null); }}>
-          <Text style={styles.lienAnnuler}>← Retour à l'historique</Text>
+          <Text style={styles.lienAnnuler}>← Retour aux progrès</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -4434,8 +4450,33 @@ export default function EntrainementScreen({
     );
   }
 
-  // ================= SOUS-ÉCRAN : HISTORIQUE & RECORDS =================
+  // ================= SOUS-ÉCRAN : PROGRÈS =================
+  // Ancien « Historique & records », renommé et enrichi le 08/11/2026 (demande
+  // de Hafiz : « il va regrouper les statistiques avec aussi la possibilité de
+  // voir les performances sous forme de graphique »). La clé de vue reste
+  // 'historique' : c'est un nom interne, le changer aurait touché le retour
+  // Android, la place de défilement et le détail d'une séance pour rien.
+  // Tous les calculs : src/logic/progres.js (testés), depuis les séances déjà
+  // chargées — aucun appel serveur de plus.
   if (vue === 'historique') {
+    const stats = statistiques(entrainements, aujourdhui());
+    const semainesActivite = seancesParSemaine(entrainements, aujourdhui(), 12);
+    const suivis = exercicesSuivis(entrainements);
+    const exoCourbe = suivis.some((e) => e.exercice === exerciceCourbe)
+      ? exerciceCourbe : (suivis[0]?.exercice || null);
+    const courbe = exoCourbe ? courbeExercice(entrainements, exoCourbe, mesureCourbe) : null;
+    const evolution = courbe ? variation(courbe.points) : null;
+    const chargee = courbe?.unite === 'kg';
+    const MESURES = chargee
+      ? [['charge', 'Charge max'], ['e1rm', '1RM estimé'], ['volume', 'Volume']]
+      : [['charge', 'Reps max'], ['volume', 'Reps totales']];
+    const exercicesAffiches = tousExercicesCourbe ? suivis : suivis.slice(0, 6);
+    const tuiles = [
+      ['JOURS ENTRAÎNÉS', String(stats.joursEntraines), `${stats.seriesTotal} séries au total`],
+      ['PAR SEMAINE', String(stats.moyenneSemaine).replace('.', ','), 'moyenne des 8 dernières'],
+      ['SEMAINES D\'AFFILÉE', String(stats.semainesDAffilee), 'avec au moins une séance'],
+      ['VOLUME DU MOIS', volumeLisible(stats.volumeMois), 'charge × reps soulevées'],
+    ];
     return (
       <ScrollView
         key="historique"
@@ -4444,11 +4485,99 @@ export default function EntrainementScreen({
         contentContainerStyle={{ padding: espacement.m }}
       >
         <EnteteSousEcran
-          titre="Historique & records"
-          sousTitre="Tout ce que tu as déjà soulevé."
+          titre="Progrès"
+          sousTitre="Tes chiffres, tes courbes, tes records."
           onRetour={() => setVue('accueil')}
         />
         {bandeauEtat}
+
+        {entrainements.length > 0 && (
+          <>
+            {/* ---- Les chiffres clés ---- */}
+            <View style={styles.grilleTuiles}>
+              {tuiles.map(([titre, valeur, legende]) => (
+                <View key={titre} style={styles.tuileStat}>
+                  <Text style={styles.titreTuile}>{titre}</Text>
+                  <Text style={styles.valeurTuile}>{valeur}</Text>
+                  <Text style={styles.legendeTuile}>{legende}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* ---- L'activité, semaine par semaine ---- */}
+            <Text style={[stylesHub.libelleSection, styles.libelleProgres]}>ACTIVITÉ — 12 SEMAINES</Text>
+            <View style={styles.carteModele}>
+              <BarresActivite semaines={semainesActivite} libelleDate={libelleDate} />
+            </View>
+
+            {/* ---- La courbe d'un exercice ---- */}
+            <Text style={[stylesHub.libelleSection, styles.libelleProgres]}>COURBE PAR EXERCICE</Text>
+            <View style={styles.carteModele}>
+              <View style={styles.lignePuces}>
+                {exercicesAffiches.map((e) => (
+                  <TouchableOpacity
+                    key={e.exercice}
+                    style={[styles.puceProgres, e.exercice === exoCourbe && styles.puceProgresActive]}
+                    onPress={() => setExerciceCourbe(e.exercice)}
+                  >
+                    <Text style={[styles.puceJourTexte, e.exercice === exoCourbe && styles.puceJourTexteActif]}
+                      numberOfLines={1}>
+                      {e.exercice}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {suivis.length > 6 && (
+                  <TouchableOpacity style={styles.puceProgres}
+                    onPress={() => setTousExercicesCourbe((o) => !o)}>
+                    <Text style={[styles.puceJourTexte, { color: colors.or }]}>
+                      {tousExercicesCourbe ? 'Moins' : `+ ${suivis.length - 6} autres`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={[styles.lignePuces, { marginTop: espacement.s }]}>
+                {MESURES.map(([cle, libelle]) => {
+                  // Le 1RM n'existe pas au poids du corps : on retombe sur la
+                  // mesure par défaut plutôt que d'afficher une puce morte.
+                  const active = mesureCourbe === cle || (!chargee && cle === 'charge' && mesureCourbe === 'e1rm');
+                  return (
+                    <TouchableOpacity key={cle}
+                      style={[styles.puceMesure, active && styles.puceProgresActive]}
+                      onPress={() => setMesureCourbe(cle)}>
+                      <Text style={[styles.puceJourTexte, active && styles.puceJourTexteActif]}>{libelle}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {courbe && courbe.points.length > 0 ? (
+                <View style={{ marginTop: espacement.m }}>
+                  <CourbeProgres points={courbe.points} unite={courbe.unite} libelleDate={libelleDate} />
+                  {evolution ? (
+                    <Text style={[styles.evolution, {
+                      color: evolution.ecart > 0 ? colors.vert : evolution.ecart < 0 ? colors.rouge : colors.texteGris,
+                    }]}>
+                      {evolution.ecart > 0 ? '+' : ''}{String(evolution.ecart).replace('.', ',')} {courbe.unite}
+                      {evolution.pourcent !== null ? ` (${evolution.pourcent > 0 ? '+' : ''}${evolution.pourcent} %)` : ''}
+                      <Text style={styles.indice}>{`  depuis le ${libelleDate(evolution.depuis)}`}</Text>
+                    </Text>
+                  ) : (
+                    <Text style={styles.indice}>
+                      Une seule séance sur cet exercice : la courbe se dessinera dès la prochaine.
+                    </Text>
+                  )}
+                  <Text style={styles.noteProgres}>
+                    {mesureCourbe === 'e1rm' && chargee
+                      ? 'Le 1RM estimé est la charge que tu soulèverais une fois, déduite de ta meilleure série (formule d\'Epley) : une tendance, pas un test.'
+                      : mesureCourbe === 'volume'
+                        ? 'Le volume additionne toutes tes séries du jour sur cet exercice.'
+                        : 'Un point par jour où tu as fait l\'exercice. Touche un point pour le lire.'}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </>
+        )}
+
         {/* ---- Records personnels (calculés depuis l'historique) ---- */}
         {mesRecords.length > 0 && (
           <>
@@ -4464,7 +4593,8 @@ export default function EntrainementScreen({
             {recordsOuverts && (
               <View style={styles.carteModele}>
                 <Text style={styles.indice}>
-                  Ta série la plus lourde sur chaque exercice, toutes séances confondues.
+                  Ta série la plus lourde sur chaque exercice, toutes séances
+                  confondues. Touche un exercice pour voir sa courbe.
                 </Text>
                 {/* LECTURE SEULE (09/09/2026, demande de Hafiz : « au niveau des
                     records on ne doit pas pouvoir renommer les exercices »).
@@ -4474,20 +4604,29 @@ export default function EntrainementScreen({
                     faisant défiler la liste. Renommer se fait maintenant
                     uniquement depuis l'éditeur d'un programme, où l'on est déjà
                     en train de modifier quelque chose. */}
+                {/* Toucher un record affiche SA COURBE juste au-dessus
+                    (08/11/2026) — toujours sans rien renommer. */}
                 {mesRecords.map((r) => (
-                  <View key={r.exercice} style={styles.ligneRecord}>
-                    <Text style={styles.nomRecord} numberOfLines={1}>{r.exercice}</Text>
+                  <TouchableOpacity key={r.exercice} style={styles.ligneRecord}
+                    onPress={() => {
+                      setExerciceCourbe(r.exercice);
+                      if (!suivis.slice(0, 6).some((e) => e.exercice === r.exercice)) {
+                        setTousExercicesCourbe(true);
+                      }
+                    }}>
+                    <Text style={[styles.nomRecord, r.exercice === exoCourbe && { color: colors.or }]}
+                      numberOfLines={1}>{r.exercice}</Text>
                     <Text style={styles.valeurRecord}>
                       {r.poids > 0 ? `${r.poids} kg × ` : ''}{r.reps} reps
                     </Text>
-                    <Text style={styles.dateRecord}>{r.date}</Text>
-                  </View>
+                    <Text style={styles.dateRecord}>{dateCourteRecord(r.date)}</Text>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
           </>
         )}
-        <Text style={styles.sectionTitre}>Historique</Text>
+        <Text style={styles.sectionTitre}>Historique des séances</Text>
         {!donneesIncertaines && entrainements.length === 0 && (
           <Text style={styles.indice}>Aucune séance loggée pour l'instant.</Text>
         )}
@@ -5052,12 +5191,12 @@ export default function EntrainementScreen({
         onPress={() => setVue('nutrition')}
       />
       <LigneRaccourci
-        icone="historique"
-        titre="Historique & records"
+        icone="perfs"
+        titre="Progrès"
         resume={entrainements.length > 0
-          ? `${entrainements.length} séance${entrainements.length > 1 ? 's' : ''} enregistrée${entrainements.length > 1 ? 's' : ''}${mesRecords.length > 0 ? ` · ${mesRecords.length} record${mesRecords.length > 1 ? 's' : ''}` : ''}`
+          ? `Stats, courbes · ${entrainements.length} séance${entrainements.length > 1 ? 's' : ''}${mesRecords.length > 0 ? ` · ${mesRecords.length} record${mesRecords.length > 1 ? 's' : ''}` : ''}`
           : 'Aucune séance enregistrée pour l\'instant'}
-        onPress={() => { setRecordsOuverts(true); setVue('historique'); }}
+        onPress={() => setVue('historique')}
       />
 
       {erreur ? <TexteIcone nom="alerte" taille={13} hautAligne style={styles.messageErreur}>{erreur}</TexteIcone> : null}
@@ -5422,6 +5561,28 @@ const styles = StyleSheet.create({
     paddingVertical: 5, paddingHorizontal: 8, marginRight: 6,
   },
   boutonPublierTexte: { color: colors.rouge, fontWeight: '700', fontSize: 11 },
+  // L'écran « Progrès » (08/11/2026).
+  grilleTuiles: { flexDirection: 'row', flexWrap: 'wrap', gap: espacement.s, marginBottom: espacement.s },
+  tuileStat: {
+    flexGrow: 1, flexBasis: '45%', backgroundColor: colors.carte, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.bordure, padding: espacement.m,
+  },
+  titreTuile: { color: colors.texteGris, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  valeurTuile: { color: colors.or, fontFamily: monospace, fontWeight: '900', fontSize: 26, marginTop: 4 },
+  legendeTuile: { color: colors.texteGris, fontSize: 11, marginTop: 2 },
+  libelleProgres: { marginTop: espacement.m, marginBottom: espacement.s },
+  puceProgres: {
+    maxWidth: '100%', minHeight: 38, justifyContent: 'center',
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10,
+    backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
+  },
+  puceMesure: {
+    minHeight: 38, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 999, borderWidth: 1, borderColor: colors.bordure,
+  },
+  puceProgresActive: { borderColor: colors.or, backgroundColor: da.orVoile },
+  evolution: { fontWeight: '800', fontSize: 14, marginTop: espacement.s },
+  noteProgres: { color: colors.texteGris, fontSize: 11, lineHeight: 16, marginTop: 6 },
   carteModele: {
     backgroundColor: colors.carte, borderRadius: 12, padding: espacement.m,
     marginBottom: espacement.s, borderWidth: 1, borderColor: colors.bordure,

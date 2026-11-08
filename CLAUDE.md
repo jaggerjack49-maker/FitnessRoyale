@@ -5047,6 +5047,66 @@ plus de renommage ; « Nouveau programme » enregistre ordre, repos 3:00 et RIR 
 Aucun débordement à 360 px, boutons du minuteur à 44 px, zéro erreur console.
 ⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour les colonnes).
 
+## « Historique & records » devient « Progrès » : stats et graphiques — 08/11/2026
+
+Demande de Hafiz : « au niveau de historique et records on devrait renommer ça
+en progrès, il va regrouper les statistiques avec aussi la possibilité de voir
+les performances sous forme de graphique ».
+
+- Le raccourci de l'accueil s'appelle « Progrès » (icône `perfs`), et l'écran
+  regroupe, de haut en bas : 4 CHIFFRES CLÉS (jours entraînés, moyenne par
+  semaine sur les 8 dernières semaines terminées, semaines d'affilée, volume
+  du mois), l'ACTIVITÉ des 12 dernières semaines (barres), la COURBE d'un
+  exercice, puis « Mes records » et l'« Historique des séances » d'avant.
+- La clé de vue reste `'historique'` : nom interne, le changer aurait touché le
+  retour Android, la place de défilement et le détail d'une séance pour rien.
+- AUCUN appel serveur : tout vient des séances déjà chargées
+  (`src/logic/progres.js`, testé par `test_progres.py` +
+  `harnais/harnais_progres.mjs`). Même parti pris que les records et le volume.
+
+### Les règles de calcul (à connaître)
+
+- Une SÉANCE = un JOUR entraîné (deux séances le même jour comptent pour une),
+  comme le compteur du Profil et les défis.
+- La courbe met UN POINT PAR JOUR : la meilleure charge, le meilleur 1RM estimé
+  (formule d'Epley, poids × (1 + reps/30) — une tendance, l'écran le dit) ou le
+  volume (Σ charge × reps). Exercice au POIDS DU CORPS (aucune charge jamais
+  notée) : les mesures passent sur les répétitions, sinon la courbe serait une
+  ligne plate à 0.
+- Les semaines se calculent en UTC (`lundiISO`) : ni fuseau ni changement
+  d'heure, comme le bloc du 06/10/2026.
+- Semaines d'affilée : la semaine EN COURS encore vide ne casse pas la série
+  (elle n'est pas finie).
+
+### Les graphiques (`src/components/GraphiquesProgres.js`)
+
+- react-native-svg (aucune dépendance ajoutée), une seule série par graphique,
+  donc une seule couleur (l'or) et pas de légende. Traits de 2 px, points de
+  8 px, grille discrète, barres arrondies en haut seulement.
+- Pas un chiffre sur chaque point : on TOUCHE un point ou une barre pour le
+  lire au-dessus du graphique (le plus récent par défaut). Chaque point a une
+  zone de toucher qui va jusqu'au milieu de ses voisins : le plus proche gagne,
+  sans chevauchement.
+- Les points sont placés selon le VRAI CALENDRIER : un premier jet les espaçait
+  régulièrement, et trois semaines de pause prenaient la même place qu'un jour.
+- ⚠️ LA LARGEUR PART D'UNE ESTIMATION : le dessin a besoin de sa largeur, mesurée
+  par `onLayout`. Dans le volet de test, après un rechargement, la mesure n'est
+  jamais arrivée et les deux graphiques restaient VIDES. On part donc de la
+  colonne de lecture moins les marges (tombée pile sur la vraie largeur à
+  360 px), et la mesure corrige ensuite.
+- Toucher un RECORD affiche sa courbe (toujours sans rien renommer, voir
+  09/09/2026).
+
+### Vérifié
+
+31 cas dans le harnais, **5 mutations vues échouer** (fusion par jour, 1RM du
+jour, bascule poids du corps, moyenne sur les semaines terminées, calcul du
+lundi). Suite complète : **369 tests, tous OK.**
+Navigateur (backend local, `SondeTest`, 400 puis 360 px) : chiffres clés,
+barres et courbe affichés ; changer d'exercice, de mesure, passer à un
+exercice au poids du corps (puces « Reps max / Reps totales ») et toucher un
+record mettent bien la courbe à jour ; aucun débordement, zéro erreur console.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5059,7 +5119,7 @@ Aucun débordement à 360 px, boutons du minuteur à 44 px, zéro erreur console
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (368 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (369 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
