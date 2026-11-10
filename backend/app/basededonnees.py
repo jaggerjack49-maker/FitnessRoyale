@@ -950,17 +950,44 @@ def definir_cibles_lot(joueur_id: int, cases: list,
             for ligne in conn.execute(requete, (joueur_id, *programmes)):
                 manuelles.add((int(ligne["programme_id"]), ligne["exercice"],
                                str(ligne["semaine"])))
-        ecrites = preservees = 0
+        # On trie D'ABORD en mémoire : cases protégées mises de côté, et une
+        # même case envoyée deux fois n'est gardée qu'une fois (la dernière,
+        # comme le faisait l'écriture case par case). Postgres refuse qu'un même
+        # INSERT ... ON CONFLICT touche deux fois la même ligne.
+        a_ecrire = {}
+        preservees = 0
         for case in cases:
             cle = (int(case["programme_id"]), case["exercice"], str(case["semaine"]))
             if cle in manuelles:
                 preservees += 1
                 continue
-            _ecrire_case(conn, joueur_id, cle[0], cle[1], cle[2],
-                         case.get("series"), case.get("reps"), case.get("poids"),
-                         case.get("origine") or "plan")
-            ecrites += 1
-    return {"ecrites": ecrites, "preservees": preservees}
+            a_ecrire[cle] = (joueur_id, cle[0], cle[1], cle[2],
+                             case.get("series"), case.get("reps"), case.get("poids"),
+                             case.get("origine") or "plan")
+        # ⚠️ UNE REQUÊTE PAR PAQUET, PAS DEUX PAR CASE (bug de Hafiz du
+        # 10/11/2026 : « Bloc NON démarré… (Aborted) »). L'ancienne boucle
+        # faisait un DELETE + un INSERT par case : un programme de 5 séances,
+        # 30 exercices et 5 colonnes = 150 cases = 300 allers-retours vers Neon,
+        # bien au-delà des 12 s de l'app. Une seule connexion ne suffisait pas :
+        # c'est chaque REQUÊTE qui traverse le réseau.
+        # `ON CONFLICT … DO UPDATE` (SQLite 3.24+ et Postgres) remplace la
+        # case si elle existe déjà — la contrainte UNIQUE (programme_id,
+        # exercice, semaine) de la table la désigne. Paquets de 100 cases :
+        # 800 paramètres, sous la vieille limite SQLite de 999.
+        lignes = list(a_ecrire.values())
+        for debut in range(0, len(lignes), 100):
+            paquet = lignes[debut:debut + 100]
+            trous = ", ".join("(?, ?, ?, ?, ?, ?, ?, ?)" for _ in paquet)
+            conn.execute(
+                "INSERT INTO cibles_semaine "
+                "(joueur_id, programme_id, exercice, semaine, series, reps, poids, origine) "
+                "VALUES " + trous + " "
+                "ON CONFLICT (programme_id, exercice, semaine) DO UPDATE SET "
+                "joueur_id = excluded.joueur_id, series = excluded.series, "
+                "reps = excluded.reps, poids = excluded.poids, origine = excluded.origine",
+                tuple(valeur for ligne in paquet for valeur in ligne),
+            )
+    return {"ecrites": len(lignes), "preservees": preservees}
 
 
 def effacer_cible_semaine(programme_id: int, exercice: str, semaine: str) -> None:

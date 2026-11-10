@@ -114,12 +114,10 @@ export default function ProfilScreen({
             FITNESS <Text style={{ color: da.or }}>ROYALE</Text>
           </Text>
         </View>
-        <View style={styles.badgeSaison}>
-          <Text style={styles.badgeSaisonTitre}>SÉRIE</Text>
-          <LibelleIcone nom="flamme" taille={11} ecart={3} couleur={da.or} style={styles.badgeSaisonValeur}>
-            {`${u.serieJours} j`}
-          </LibelleIcone>
-        </View>
+        {/* Le badge « SÉRIE » a été retiré le 10/11/2026 (demande de Hafiz :
+            il était collé au rouage des Paramètres). Il affichait d'ailleurs
+            toujours « 0 j » : la série de jours n'est pas suivie côté serveur
+            pour un vrai compte (voir « À faire »). */}
       </View>
 
       {/* ---- MON ARÈNE : la mise en scène du palier ---- */}
@@ -406,7 +404,7 @@ const styles = StyleSheet.create({
 
   // ---- En-tête de marque ----
   // `marginRight` : la place du rouage flottant des Paramètres, en haut à
-  // droite — sans elle, le badge « SÉRIE » passerait dessous.
+  // droite — le titre ne doit jamais passer dessous.
   enteteMarque: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginRight: 56,
   },
@@ -419,12 +417,6 @@ const styles = StyleSheet.create({
   },
   surtitre: { color: da.texteGris, fontSize: 11, letterSpacing: 3, fontWeight: '600' },
   titreMarque: { color: da.texte, fontSize: 26, fontWeight: '900', letterSpacing: 0.5 },
-  badgeSaison: {
-    borderWidth: 1, borderColor: da.bordureOrDouce, borderRadius: 6,
-    paddingVertical: 5, paddingHorizontal: 8, alignItems: 'center',
-  },
-  badgeSaisonTitre: { color: da.or, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  badgeSaisonValeur: { color: da.texteGris, fontSize: 10, marginTop: 2 },
 
   // ---- Trois chiffres clés ----
   ligneTuiles: { flexDirection: 'row', gap: 10 },

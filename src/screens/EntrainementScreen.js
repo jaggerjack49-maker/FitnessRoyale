@@ -1028,6 +1028,9 @@ export default function EntrainementScreen({
   // enregistrés (et non du dernier programme consulté).
   function ouvrirTableau(nom, seances, cible) {
     setTableauDe({ nom, seances, cible });
+    // Le tableau affiche désormais `erreur` (10/11/2026) : on n'y apporte pas
+    // le message d'un autre écran.
+    setErreur('');
     setSemainesTableau(cible?.duree_semaines || 4);
     setDechargeTableau(!!cible?.avec_deload);
     setVue('tableau');
@@ -1149,6 +1152,7 @@ export default function EntrainementScreen({
       );
       return;
     }
+    setErreur('');
     setBlocOccupe(true);
     try {
       await api.definirCiblesLot(moi.id, cases);
@@ -1163,8 +1167,8 @@ export default function EntrainementScreen({
       setTableauDe((t) => (t ? { ...t, cible: { ...t.cible, date_debut: dateISO } } : t));
     } catch (err) {
       setErreur(
-        'Bloc NON démarré : le serveur n\'a pas pu enregistrer le plan '
-        + `(${err.message || 'aucune réponse'}).`
+        `Le bloc n'a pas démarré : ${err.message || "le serveur n'a pas répondu"}. `
+        + 'Rien n\'a été changé, tu peux réessayer.'
       );
       await chargerTout();
     } finally {
@@ -1212,14 +1216,15 @@ export default function EntrainementScreen({
       setErreur('Rien à recalculer : il ne reste aucune semaine dans ce bloc.');
       return;
     }
+    setErreur('');
     setBlocOccupe(true);
     try {
       await api.definirCiblesLot(moi.id, suite);
       await chargerTout();
     } catch (err) {
       setErreur(
-        'Suite du bloc NON recalculée '
-        + `(${err.message || 'aucune réponse'}) — le plan n'a pas changé.`
+        `La suite du bloc n'a pas été recalculée : ${err.message || "le serveur n'a pas répondu"}. `
+        + "Le plan n'a pas changé, tu peux réessayer."
       );
       await chargerTout();
     } finally {
@@ -2624,6 +2629,7 @@ export default function EntrainementScreen({
         onArreter={arreterBloc}
         onRecalculer={recalculerLaSuite}
         occupe={blocOccupe}
+        erreur={erreur}
       />
     );
   }

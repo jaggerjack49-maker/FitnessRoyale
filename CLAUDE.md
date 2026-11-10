@@ -5353,6 +5353,56 @@ ligne du face pull ouvre l'éditeur JUSTE EN DESSOUS, pré-rempli (1 / 15 / 35) 
 reps passées à 12 → case enregistrée en base (`origine = manuel`), éditeur
 refermé, et la ligne « Fait » repasse au vert.
 
+## « Bloc NON démarré (Aborted) » + le badge Série retiré — 10/11/2026
+
+Deux captures de Hafiz (`icones/Screenshot_2026-11-08-20-*`).
+
+### 1. Démarrer un bloc échouait : 300 requêtes sur UNE connexion
+
+Message vu sur l'APK : « Bloc NON démarré : le serveur n'a pas pu enregistrer
+le plan (Aborted) ». « Aborted » = l'app a abandonné au bout de 12 s.
+CAUSE : `definir_cibles_lot` empruntait bien UNE seule connexion (le test du
+06/10 le vérifiait), mais faisait encore un DELETE + un INSERT PAR CASE. Or
+c'est chaque REQUÊTE qui traverse le réseau vers Neon, pas seulement chaque
+connexion. Son programme (5 séances, 5 colonnes) fait facilement 150 cases =
+300 allers-retours. Mesuré en test : **307 requêtes pour 150 cases**.
+- CORRECTIF (`basededonnees.py`) : un seul `INSERT … VALUES (…), (…) ON CONFLICT
+  (programme_id, exercice, semaine) DO UPDATE` par paquet de 100 cases
+  (SQLite 3.24+ et Postgres ; 800 paramètres, sous la vieille limite de 999).
+  La contrainte UNIQUE de la table désigne la case. Une case envoyée deux fois
+  dans le même lot est dédoublonnée en mémoire (la dernière gagne) — Postgres
+  refuse qu'un même INSERT touche deux fois la même ligne. 150 cases = 2 requêtes.
+- La règle des corrections manuelles protégées est inchangée (elles sont
+  écartées avant l'écriture).
+- ⚠️ LEÇON : compter les CONNEXIONS ne suffit pas, il faut aussi compter les
+  REQUÊTES. Nouveau test `test_le_nombre_de_REQUETES_ne_depend_pas_du_nombre_de_cases`
+  (compte les appels à `_ConnexionAdaptee.execute`), vu échouer sur l'ancien
+  code (27 requêtes pour 10 cases, 307 pour 150). + un test « même case deux
+  fois dans un lot ». C'est un correctif SERVEUR : il vaut pour l'APK déjà
+  installé dès le déploiement.
+
+### 2. Le message lui-même
+
+- `src/api.js` traduit les erreurs RÉSEAU pour toute l'app : « Aborted »
+  devient « le serveur a mis plus de 12 secondes à répondre », « Failed to
+  fetch » devient « le serveur est injoignable — vérifie ta connexion
+  internet ». Toujours SANS `status`, pour que la file des séances distingue
+  encore « pas de réponse » de « le serveur a dit non ».
+- Le message s'affichait au bas de « Mes programmes », hors de vue : le tableau
+  reçoit maintenant `erreur` et l'affiche dans un cadre rouge juste sous le
+  panneau du bloc. Il est effacé à l'ouverture du tableau et à chaque nouvel
+  essai. Nouveau libellé : « Le bloc n'a pas démarré : … Rien n'a été changé,
+  tu peux réessayer. »
+- Vérifié dans le navigateur (serveur local, réseau du lot bloqué exprès) :
+  le message apparaît sous le panneau ; réseau rétabli → « SEMAINE 1 SUR 4 »,
+  8 cases en base, plus de message.
+
+### 3. Le badge « SÉRIE » quitte l'en-tête du Profil
+
+Il était collé au rouage des Paramètres. Retiré (il affichait de toute façon
+toujours « 0 j » : la série de jours n'est pas suivie côté serveur, voir
+« À faire »).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5365,7 +5415,7 @@ refermé, et la ligne « Fait » repasse au vert.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (370 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (372 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

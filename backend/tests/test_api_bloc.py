@@ -207,6 +207,63 @@ class TestBlocServeur(unittest.TestCase):
             "l'écriture en lot est repartie en N+1.",
         )
 
+    def test_le_nombre_de_REQUETES_ne_depend_pas_du_nombre_de_cases(self):
+        """Bug de Hafiz du 10/11/2026 : « Bloc NON démarré (Aborted) ».
+
+        Le test d'au-dessus passait : une seule CONNEXION pour 4 ou 40 cases.
+        Mais sur cette connexion, l'écriture faisait encore un DELETE + un
+        INSERT PAR CASE — et c'est chaque requête qui traverse le réseau vers
+        Neon. 150 cases = 300 allers-retours, l'app abandonnait au bout de
+        12 s. On compte donc aussi les requêtes."""
+        h, jid = self._inscrire("PlanRequetes")
+        p = self._programme(h, jid)
+        def lot(nb_exos):
+            return [
+                {"programme_id": p["id"], "exercice": f"exercice {i}",
+                 "semaine": str(n), "series": 3, "reps": 8, "poids": 100}
+                for i in range(nb_exos) for n in range(1, 6)
+            ]
+        vraie = db._ConnexionAdaptee.execute
+        compte = {"n": 0}
+        def execute_compte(conn, *args, **kwargs):
+            compte["n"] += 1
+            return vraie(conn, *args, **kwargs)
+        couts = []
+        for cases in (lot(2), lot(30)):   # 10 cases, puis 150
+            compte["n"] = 0
+            db._ConnexionAdaptee.execute = execute_compte
+            try:
+                r = self.client.put(f"/joueurs/{jid}/cibles-semaine/lot",
+                                    json={"cases": cases}, headers=h)
+            finally:
+                db._ConnexionAdaptee.execute = vraie
+            self.assertEqual(r.status_code, 200)
+            couts.append(compte["n"])
+        # 150 cases tiennent en 2 paquets de 100 : au plus une requête de plus.
+        self.assertLessEqual(
+            couts[1] - couts[0], 1,
+            f"10 cases ont coûté {couts[0]} requêtes et 150 en ont coûté {couts[1]} : "
+            "l'écriture en lot repart case par case.",
+        )
+        # Et le contenu est bien là : 150 cases, réécrites sans doublon.
+        cases = self.client.get(f"/joueurs/{jid}/cibles-semaine", headers=h).json()
+        self.assertEqual(len(cases), 150)
+
+    def test_un_lot_reecrit_une_case_existante_sans_doublon(self):
+        h, jid = self._inscrire("PlanReecrit")
+        p = self._programme(h, jid)
+        case = {"programme_id": p["id"], "exercice": "squat", "semaine": "1",
+                "series": 3, "reps": 8, "poids": 100}
+        self.client.put(f"/joueurs/{jid}/cibles-semaine/lot", json={"cases": [case]}, headers=h)
+        # La même case deux fois dans un lot : la DERNIÈRE gagne.
+        r = self.client.put(f"/joueurs/{jid}/cibles-semaine/lot", json={"cases": [
+            {**case, "poids": 105}, {**case, "poids": 110},
+        ]}, headers=h)
+        self.assertEqual(r.status_code, 200)
+        cases = self.client.get(f"/joueurs/{jid}/cibles-semaine", headers=h).json()
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0]["poids"], 110)
+
     def test_un_lot_vide_est_refuse(self):
         h, jid = self._inscrire("PlanVide")
         r = self.client.put(f"/joueurs/{jid}/cibles-semaine/lot",

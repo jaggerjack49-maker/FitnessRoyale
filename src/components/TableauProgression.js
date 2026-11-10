@@ -331,6 +331,10 @@ export default function TableauProgression({
   nbSemaines, avecDeload, onChangerSemaines, onBasculerDecharge, onCorriger, onFermer,
   // Le BLOC (05/10/2026) : sa date de début, l'état constaté, et les actions.
   dateDebut, aujourdhui, ecarts, onDemarrer, onArreter, onRecalculer, occupe,
+  // Le message d'échec d'un démarrage ou d'un recalcul (10/11/2026) : il
+  // s'affichait au bas de « Mes programmes », donc hors de vue du tableau où
+  // l'on venait de toucher le bouton.
+  erreur,
 }) {
   // La case ouverte en correction : { programmeId, exercice, ligne }.
   const [caseOuverte, setCaseOuverte] = useState(null);
@@ -445,6 +449,12 @@ export default function TableauProgression({
           )))}
           occupe={occupe}
         />
+      ) : null}
+      {erreur ? (
+        <View style={styles.boiteErreur}>
+          <Icone nom="alerte" taille={14} couleur={colors.rouge} />
+          <Text style={styles.texteErreur}>{erreur}</Text>
+        </View>
       ) : null}
 
       {lignesVides ? (
@@ -636,6 +646,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   marqueCourante: { color: colors.or, fontSize: 9, fontWeight: '700', marginTop: 1 },
+  boiteErreur: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    borderWidth: 1, borderColor: colors.rouge, borderRadius: 12,
+    padding: espacement.m, marginTop: espacement.s,
+  },
+  texteErreur: { flex: 1, color: colors.rouge, fontSize: 13, lineHeight: 18 },
   marqueFaite: { color: colors.vert, fontSize: 9, fontWeight: '700', marginTop: 1 },
   // Une séance faite, sous la ligne du plan (10/11/2026).
   ligneFait: {

@@ -162,6 +162,15 @@ async function appel(chemin, options = {}, delaiMs = DELAI_MAX_MS) {
         ...options.headers,
       },
       signal: controleur.signal,
+    }).catch((err) => {
+      // « Aborted » / « Failed to fetch » ne disent rien à personne (retour de
+      // Hafiz du 10/11/2026 : « je ne comprends pas le message d'erreur »).
+      // On traduit, SANS `status` : le reste de l'app reconnaît ainsi « le
+      // serveur n'a pas répondu » (≠ « le serveur a dit non », qui en a un).
+      if (err && err.name === 'AbortError') {
+        throw new Error(`le serveur a mis plus de ${Math.round(delaiMs / 1000)} secondes à répondre`);
+      }
+      throw new Error('le serveur est injoignable — vérifie ta connexion internet');
     });
     if (!reponse.ok) {
       const corps = await reponse.json().catch(() => ({}));
