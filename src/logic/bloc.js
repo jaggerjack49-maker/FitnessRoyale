@@ -196,6 +196,71 @@ export function ecartsDuBlocComplet(bloc, idsSeances, entrainements, cibles,
   return { semainesSautees, chargesDifferentes };
 }
 
+// CE QUI A ÉTÉ FAIT, SEMAINE PAR SEMAINE DU BLOC (10/11/2026).
+//
+// Demande de Hafiz : « le tableau doit être connecté aux séances du
+// programme… si en ce moment on fait une séance, elle se répercute sur le
+// tableau correspondant à la semaine du programme ».
+// Une case du plan dit ce qui était PRÉVU ; cette fonction dit ce qui a été
+// FAIT, rangé sous la MÊME clé (`cleCase(séance, exercice, semaine)`) pour que
+// l'écran pose l'un sous l'autre sans rien recalculer.
+//
+// Pour chaque séance faite pendant le bloc, par exercice : le nombre de séries,
+// et la MEILLEURE série (la plus lourde ; à charge égale, celle qui a le plus de
+// reps — même règle que les records). Une séance faite deux fois la même
+// semaine (un Push le lundi ET le jeudi) donne deux entrées, dans l'ordre des
+// dates : on montre ce qui a été fait, on ne le fond pas en un chiffre.
+// Seules les séances rattachées au programme comptent : une séance libre ne
+// dit rien du plan de ce programme.
+export function realiseDuBloc(bloc, idsSeances, entrainements) {
+  const realise = {};
+  if (!bloc || !bloc.date_debut || !bloc.duree_semaines) return realise;
+  const faites = seancesParSemaine(bloc, idsSeances, entrainements);
+  Object.keys(faites).forEach((semaine) => {
+    [...faites[semaine]]
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      .forEach((seance) => {
+        const parExercice = {};
+        (Array.isArray(seance.series) ? seance.series : []).forEach((serie) => {
+          if (!serie || typeof serie.exercice !== 'string') return;
+          const reps = Number(serie.reps);
+          const poids = Math.max(0, Number(serie.poids) || 0);
+          if (!Number.isFinite(reps) || reps <= 0) return;
+          const actuel = parExercice[serie.exercice]
+            || { date: seance.date, series: 0, reps: 0, poids: -1 };
+          actuel.series += 1;
+          if (poids > actuel.poids || (poids === actuel.poids && reps > actuel.reps)) {
+            actuel.poids = poids;
+            actuel.reps = reps;
+          }
+          parExercice[serie.exercice] = actuel;
+        });
+        Object.entries(parExercice).forEach(([exercice, fait]) => {
+          const cle = cleCase(seance.programme_id, exercice, semaine);
+          if (!realise[cle]) realise[cle] = [];
+          realise[cle].push(fait);
+        });
+      });
+  });
+  return realise;
+}
+
+// Ce qui a été fait tient-il le plan ? 'atteint' si la meilleure série égale ou
+// dépasse la charge ET les reps prévues, et s'il y a au moins autant de séries ;
+// 'manque' sinon. Une charge PLUS LOURDE que prévu compte comme atteinte même
+// avec quelques reps de moins : on ne reproche pas d'avoir chargé davantage. null quand il n'y a rien à comparer (pas de plan pour cette
+// case, ou rien de fait). Une charge non prévue (case sans kg) n'est pas jugée
+// sur la charge.
+export function comparaisonAuPlan(fait, prevu) {
+  if (!fait || !prevu) return null;
+  const chargeOk = prevu.poids === null || prevu.poids === undefined
+    || Number(fait.poids) >= Number(prevu.poids);
+  const repsOk = !prevu.reps || Number(fait.reps) >= Number(prevu.reps)
+    || Number(fait.poids) > Number(prevu.poids || 0);
+  const seriesOk = !prevu.series || Number(fait.series) >= Number(prevu.series);
+  return chargeOk && repsOk && seriesOk ? 'atteint' : 'manque';
+}
+
 // Y a-t-il quelque chose à signaler ?
 export function blocADerive(ecarts) {
   if (!ecarts) return false;

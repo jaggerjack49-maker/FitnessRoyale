@@ -21,15 +21,31 @@
 // Ce qu'on perdait en ne voyant plus deux semaines côte à côte, la petite
 // ligne « +2,5 kg » sous chaque exercice le rend : elle dit ce qui change
 // depuis la semaine précédente.
+//
+// LE TABLEAU MONTRE AUSSI CE QUI A ÉTÉ FAIT (10/11/2026, demande de Hafiz :
+// « le tableau doit être connecté aux séances du programme… si en ce moment on
+// fait une séance, elle se répercute sur le tableau correspondant à la semaine
+// du programme »). Une fois le bloc démarré, chaque séance du programme faite
+// pendant le bloc s'affiche SOUS l'exercice, dans la semaine du bloc où elle a
+// été faite : « Fait le lun. 9 nov. : 3 × 8 à 105 kg », en vert si le plan est
+// tenu, en rouge sinon. Calcul : `realiseDuBloc` (src/logic/bloc.js, testé).
+// Rien n'est stocké en plus : ce sont les séances déjà enregistrées, rangées
+// par semaine — une séance qu'on termine apparaît donc tout de suite.
+//
+// CORRIGER UNE CASE S'OUVRE SOUS LA LIGNE TOUCHÉE (10/11/2026) : l'éditeur
+// s'affichait tout en bas du tableau, loin de la ligne qu'on venait de toucher
+// — sur un programme de dix exercices, il fallait le chercher.
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet,
 } from 'react-native';
 import { colors, espacement } from '../theme';
 import { monospace } from '../designSystem';
-import { TexteIcone, LibelleIcone } from './Icones';
+import { Icone, TexteIcone, LibelleIcone } from './Icones';
 import { projeterProgramme, SEMAINES_MAX } from '../logic/projectionProgramme';
-import { semaineDuBloc, finDuBloc, blocADerive } from '../logic/bloc';
+import {
+  semaineDuBloc, finDuBloc, blocADerive, realiseDuBloc, comparaisonAuPlan, cleCase,
+} from '../logic/bloc';
 
 const LARGEUR_CASE = 54;    // une colonne de valeur (séries / reps / charge)
 
@@ -48,6 +64,19 @@ function progresDepuis(avant, apres) {
   if (dReps) morceaux.push(`${signe(dReps)} rep${Math.abs(dReps) > 1 ? 's' : ''}`);
   if (dPoids) morceaux.push(`${signe(dPoids).replace('.', ',')} kg`);
   return morceaux.length ? `${morceaux.join(' · ')} vs semaine d'avant` : null;
+}
+
+// « 2026-11-09 » → « lun. 9 nov. » : la date courte d'une séance faite.
+function dateCourte(dateISO) {
+  const d = new Date(`${dateISO}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateISO || '';
+  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// « 3 × 8 à 105 kg » (ou « 3 × 12 » au poids du corps).
+function resumeFait(fait) {
+  const kg = fait.poids > 0 ? ` à ${String(fait.poids).replace('.', ',')} kg` : '';
+  return `${fait.series} × ${fait.reps}${kg}`;
 }
 
 function enTeteSemaine(semaine) {
@@ -318,6 +347,18 @@ export default function TableauProgression({
 
   const lignesVides = tableau.every((bloc) => bloc.lignes.every((l) => l.semaines.length === 0));
 
+  // CE QUI A ÉTÉ FAIT pendant le bloc, rangé sous les mêmes clés que le plan.
+  // Rien tant que le bloc n'est pas démarré : sans date de début, une séance
+  // n'appartient à aucune semaine.
+  const blocActuel = dateDebut
+    ? { id: 0, date_debut: dateDebut, duree_semaines: nbSemaines, avec_deload: avecDeload }
+    : null;
+  const realise = blocActuel
+    ? realiseDuBloc(blocActuel, (seances || []).map((x) => x.id), entrainements)
+    : {};
+  // Les semaines où au moins une séance du programme a été faite (puces « faite »).
+  const semainesFaites = new Set(Object.keys(realise).map((cle) => cle.split('|').pop()));
+
   // En quelle semaine du bloc on est — UNE SEULE définition, utilisée par
   // l'en-tête de colonne comme par le panneau.
   const semaineEnCours = dateDebut
@@ -335,7 +376,13 @@ export default function TableauProgression({
       : colonnes[0];
 
   return (
-    <ScrollView style={styles.conteneur} contentContainerStyle={{ padding: espacement.m }}>
+    <ScrollView
+      style={styles.conteneur}
+      // Une marge basse quand une case est ouverte : sur Android, le clavier
+      // rétrécit la fenêtre, il faut de quoi faire remonter les champs.
+      contentContainerStyle={{ padding: espacement.m, paddingBottom: caseOuverte ? 340 : espacement.m }}
+      keyboardShouldPersistTaps="handled"
+    >
       <TexteIcone nom="tableau" taille={20} couleur={colors.or} style={styles.titre}>{nom}</TexteIcone>
       <Text style={styles.sousTitre}>
         Ce que l'app te propose semaine après semaine, à partir de tes dernières
@@ -425,7 +472,9 @@ export default function TableauProgression({
                   <Text style={[styles.puceTexte, active && styles.puceTexteActif]}>
                     {semaine === 'decharge' ? 'Décharge' : `Sem. ${semaine}`}
                   </Text>
-                  {courante ? <Text style={styles.marqueCourante}>en cours</Text> : null}
+                  {courante ? <Text style={styles.marqueCourante}>en cours</Text>
+                    : semainesFaites.has(String(semaine))
+                      ? <Text style={styles.marqueFaite}>faite</Text> : null}
                 </TouchableOpacity>
               );
             })}
@@ -457,16 +506,19 @@ export default function TableauProgression({
                   const s = index >= 0 ? ligne.semaines[index] : null;
                   const progres = s && index > 0 && s.semaine !== 'decharge'
                     ? progresDepuis(ligne.semaines[index - 1], s) : null;
+                  const faits = realise[cleCase(bloc.seance.id, ligne.exercice, semaineAffichee)] || [];
+                  const ouverte = caseOuverte && caseOuverte.programmeId === bloc.seance.id
+                    && caseOuverte.exercice === ligne.exercice;
                   return (
+                    <View key={ligne.exercice}>
                     <TouchableOpacity
-                      key={ligne.exercice}
                       disabled={!s}
                       style={[
                         styles.ligneTableau,
                         s && s.semaine === 'decharge' && styles.celluleDecharge,
                         s && s.source === 'manuel' && styles.celluleManuelle,
                       ]}
-                      onPress={() => setCaseOuverte({
+                      onPress={() => setCaseOuverte(ouverte ? null : {
                         programmeId: bloc.seance.id, exercice: ligne.exercice, ligne: s,
                       })}
                     >
@@ -489,6 +541,34 @@ export default function TableauProgression({
                         </Text>
                       )}
                     </TouchableOpacity>
+                    {/* CE QUI A ÉTÉ FAIT cette semaine-là, sous la ligne du plan. */}
+                    {faits.map((fait) => {
+                      const verdict = comparaisonAuPlan(fait, s);
+                      const tenu = verdict !== 'manque';
+                      return (
+                        <View key={fait.date} style={styles.ligneFait}>
+                          <Icone nom={tenu ? 'valide' : 'alerte'} taille={13}
+                            couleur={tenu ? colors.vert : colors.rouge} />
+                          <Text style={[styles.texteFait, { color: tenu ? colors.vert : colors.rouge }]}>
+                            Fait le {dateCourte(fait.date)} : {resumeFait(fait)}
+                            {verdict === 'manque' ? ' — en dessous du plan' : ''}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    {ouverte ? (
+                      <EditeurCase
+                        ligne={caseOuverte.ligne}
+                        exercice={caseOuverte.exercice}
+                        onFermer={() => setCaseOuverte(null)}
+                        onEnregistrer={(valeurs) => {
+                          onCorriger(caseOuverte.programmeId, caseOuverte.exercice,
+                            caseOuverte.ligne.semaine, valeurs);
+                          setCaseOuverte(null);
+                        }}
+                      />
+                    ) : null}
+                    </View>
                   );
                 })}
               </View>
@@ -497,23 +577,13 @@ export default function TableauProgression({
         </>
       )}
 
-      {caseOuverte ? (
-        <EditeurCase
-          ligne={caseOuverte.ligne}
-          exercice={caseOuverte.exercice}
-          onFermer={() => setCaseOuverte(null)}
-          onEnregistrer={(valeurs) => {
-            onCorriger(caseOuverte.programmeId, caseOuverte.exercice,
-              caseOuverte.ligne.semaine, valeurs);
-            setCaseOuverte(null);
-          }}
-        />
-      ) : (
-        <Text style={styles.aideCorrection}>
-          Touche une case pour la corriger : ta valeur remplace celle que l'app
-          propose, et les cases bleutées sont celles que tu as écrites.
-        </Text>
-      )}
+      <Text style={styles.aideCorrection}>
+        Touche une ligne pour la corriger : ta valeur remplace celle que l'app
+        propose, et les lignes bleutées sont celles que tu as écrites.
+        {dateDebut
+          ? " Sous chaque exercice, ce que tu as vraiment fait cette semaine-là : en vert si le plan est tenu, en rouge sinon."
+          : ''}
+      </Text>
 
       <TexteIcone nom={dateDebut ? 'programme' : 'alerte'} taille={14} hautAligne style={styles.note}>
         {dateDebut
@@ -566,6 +636,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   marqueCourante: { color: colors.or, fontSize: 9, fontWeight: '700', marginTop: 1 },
+  marqueFaite: { color: colors.vert, fontSize: 9, fontWeight: '700', marginTop: 1 },
+  // Une séance faite, sous la ligne du plan (10/11/2026).
+  ligneFait: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    paddingLeft: 10, paddingRight: 10, paddingVertical: 6,
+    backgroundColor: colors.fond, borderBottomWidth: 1, borderColor: colors.bordure,
+  },
+  texteFait: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 16 },
 
   grille: {
     borderWidth: 1, borderColor: colors.bordure, borderRadius: 10, overflow: 'hidden',
@@ -653,9 +731,10 @@ const styles = StyleSheet.create({
     color: colors.texteGris, fontSize: 12, lineHeight: 17,
     marginTop: espacement.s,
   },
+  // Ouvert SOUS la ligne touchée, dans la grille : il en prend la largeur.
   editeur: {
-    backgroundColor: colors.carte, borderRadius: 12, borderWidth: 1,
-    borderColor: colors.or, padding: espacement.m, marginTop: espacement.s,
+    backgroundColor: colors.carte, borderTopWidth: 1, borderBottomWidth: 1,
+    borderColor: colors.or, padding: espacement.m,
   },
   titreEditeur: { color: colors.texte, fontWeight: '800', marginBottom: espacement.s },
   ligneChamps: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },

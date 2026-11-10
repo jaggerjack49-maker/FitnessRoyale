@@ -13,7 +13,7 @@
 import {
   semaineDuBloc, blocEnCours, finDuBloc, ciblePrevue,
   ecartsDuBloc, ecartsDuBlocComplet, ciblePrevueDansBloc,
-  blocADerive, semainesARecalculer, cleCase,
+  blocADerive, semainesARecalculer, cleCase, realiseDuBloc, comparaisonAuPlan,
 } from '../../../src/logic/bloc.js';
 
 const cas = [];
@@ -315,5 +315,72 @@ verifier("plan absent : on ne constate aucun écart de charge",
   () => ecartsDuBloc(BLOC, [seance('2026-10-06', 3, 110)], null, '2026-10-07')
     .chargesDifferentes,
   []);
+
+// ---- CE QUI A ÉTÉ FAIT, semaine par semaine (10/11/2026) ----
+verifier('réalisé : une séance en semaine 2 se range sous la case de la semaine 2',
+  () => realiseDuBloc(BLOC, [7], [seance('2026-10-13', 3, 102.5)]),
+  { [cleCase(7, 'Squat', 2)]: [{ date: '2026-10-13', series: 3, reps: 8, poids: 102.5 }] });
+
+verifier('réalisé : la meilleure série est la plus lourde, puis la plus longue',
+  () => realiseDuBloc(BLOC, [7], [{
+    id: 1, date: '2026-10-06', programme_id: 7, series: [
+      { exercice: 'Squat', reps: 10, poids: 95 },
+      { exercice: 'Squat', reps: 6, poids: 100 },
+      { exercice: 'Squat', reps: 7, poids: 100 },
+    ],
+  }])[cleCase(7, 'Squat', 1)],
+  [{ date: '2026-10-06', series: 3, reps: 7, poids: 100 }]);
+
+verifier('réalisé : la même séance deux fois dans la semaine = deux entrées, dans l\'ordre',
+  () => realiseDuBloc(BLOC, [7], [seance('2026-10-09', 2, 105), seance('2026-10-06', 3, 100)])
+    [cleCase(7, 'Squat', 1)].map((f) => f.date),
+  ['2026-10-06', '2026-10-09']);
+
+verifier('réalisé : une séance libre (autre programme) ne compte pas',
+  () => realiseDuBloc(BLOC, [7], [seance('2026-10-06', 3, 100, null)]),
+  {});
+
+verifier('réalisé : hors du bloc (avant le début ou après la fin) ne compte pas',
+  () => realiseDuBloc(BLOC, [7], [seance('2026-10-01', 3, 100), seance('2026-11-20', 3, 100)]),
+  {});
+
+verifier('réalisé : la décharge a sa propre case',
+  () => Object.keys(realiseDuBloc(BLOC_D, [7], [seance('2026-11-03', 1, 100)])),
+  [cleCase(7, 'Squat', 'decharge')]);
+
+verifier('réalisé : un programme complet range chaque séance sous SON numéro',
+  () => Object.keys(realiseDuBloc(BLOC, [7, 8], [
+    seance('2026-10-06', 3, 100, 7, 'Squat'),
+    seance('2026-10-07', 3, 60, 8, 'Traction'),
+  ])).sort(),
+  [cleCase(7, 'Squat', 1), cleCase(8, 'Traction', 1)].sort());
+
+verifier('réalisé : bloc pas démarré → rien',
+  () => realiseDuBloc({ ...BLOC, date_debut: null }, [7], [seance('2026-10-06', 3, 100)]),
+  {});
+
+verifier('réalisé : données abîmées ne plantent pas',
+  () => realiseDuBloc(BLOC, [7], [null, { date: '2026-10-06', programme_id: 7, series: [null,
+    { exercice: 'Squat', reps: 0, poids: 100 }, { exercice: 12, reps: 5 }] }, 'x']),
+  {});
+
+verifier('comparaison : plan tenu',
+  () => comparaisonAuPlan({ series: 3, reps: 8, poids: 102.5 }, { series: 3, reps: 8, poids: 102.5 }),
+  'atteint');
+verifier('comparaison : charge plus légère → manqué',
+  () => comparaisonAuPlan({ series: 3, reps: 8, poids: 100 }, { series: 3, reps: 8, poids: 102.5 }),
+  'manque');
+verifier('comparaison : moins de reps à la même charge → manqué',
+  () => comparaisonAuPlan({ series: 3, reps: 6, poids: 102.5 }, { series: 3, reps: 8, poids: 102.5 }),
+  'manque');
+verifier('comparaison : une série de moins → manqué',
+  () => comparaisonAuPlan({ series: 2, reps: 8, poids: 102.5 }, { series: 3, reps: 8, poids: 102.5 }),
+  'manque');
+verifier('comparaison : plus lourd avec un peu moins de reps → atteint',
+  () => comparaisonAuPlan({ series: 3, reps: 7, poids: 110 }, { series: 3, reps: 8, poids: 102.5 }),
+  'atteint');
+verifier('comparaison : rien de prévu ou rien de fait → rien à dire',
+  () => [comparaisonAuPlan(null, { reps: 8 }), comparaisonAuPlan({ reps: 8 }, null)],
+  [null, null]);
 
 process.stdout.write(JSON.stringify(cas, null, 2));

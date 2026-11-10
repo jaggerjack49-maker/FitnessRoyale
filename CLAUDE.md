@@ -5303,6 +5303,56 @@ demande toujours, et « Rester » demande bien le retour à la page 4 (espion su
 45 s CONTINUE de tourner en arrière-plan : il a mélangé l'état d'un test
 suivant. Recharger la page avant de refaire un test.
 
+## Tableau du bloc : l'éditeur sous la ligne, et les séances faites — 10/11/2026
+
+Deux demandes de Hafiz : « lorsqu'on veut modifier une ligne les champs se
+retrouvent tout en bas » et « le tableau doit être connecté aux séances du
+programme lorsqu'on active par exemple 4 semaines… si en ce moment on fait une
+séance, elle se répercute sur le tableau correspondant à la semaine du
+programme ».
+
+### 1. L'éditeur d'une case s'ouvre SOUS la ligne touchée
+
+Il s'affichait en bas du tableau, loin de la ligne : sur un programme de dix
+exercices il fallait le chercher. Il vit maintenant dans la grille, juste sous
+la ligne, pleine largeur ; toucher la même ligne le referme. Une marge basse
+de 340 px est ajoutée tant qu'il est ouvert (même parade au clavier Android
+que l'écran de séance, 02/09/2026).
+
+### 2. Ce qui a été FAIT s'affiche sous ce qui était PRÉVU
+
+- `realiseDuBloc(bloc, idsSeances, entrainements)` (`src/logic/bloc.js`) range
+  les séances du programme faites pendant le bloc sous la MÊME clé que le plan
+  (`cleCase(séance, exercice, semaine)`) : nombre de séries et MEILLEURE série
+  (la plus lourde, puis la plus longue — la règle des records). Une séance faite
+  deux fois la même semaine (Push lundi ET jeudi) donne deux entrées. Une
+  séance libre ne compte pas : elle ne dit rien du plan de ce programme.
+- `comparaisonAuPlan(fait, prevu)` : 'atteint' (charge ET reps ET séries au
+  niveau du plan ; une charge plus lourde avec quelques reps de moins compte
+  comme atteinte) ou 'manque'.
+- À l'écran : sous chaque exercice de la semaine affichée, « Fait le mar.
+  10 nov. : 3 × 8 à 105 kg » en vert, ou « … — en dessous du plan » en rouge.
+  Les puces de semaine portent « faite » quand la semaine a été entraînée.
+- Rien n'est stocké en plus : ce sont les séances déjà chargées. Une séance
+  qu'on termine apparaît donc TOUT DE SUITE dans la semaine du bloc où elle a
+  été faite. Rien ne s'affiche tant que le bloc n'est pas démarré : sans date
+  de début, une séance n'appartient à aucune semaine.
+
+### Vérifié
+
+`harnais_bloc.mjs` : 15 cas de plus (rangement par semaine, meilleure série,
+deux séances la même semaine, séance libre exclue, hors bloc, décharge,
+programme complet à plusieurs séances, bloc non démarré, données abîmées, et la
+comparaison au plan), joués sous les 3 fuseaux de `test_bloc.py`. **3 mutations
+vues échouer.**
+Navigateur (390 px, serveur LOCAL, données posées par l'API locale : bloc
+« Push » démarré le lundi 9 novembre, séance du 10) : semaine 1 « en cours »,
+« Fait le mar. 10 nov. : 3 × 8 à 105 kg » en vert sous le développé couché,
+« 1 × 12 à 35 kg — en dessous du plan » en rouge sous le face pull ; toucher la
+ligne du face pull ouvre l'éditeur JUSTE EN DESSOUS, pré-rempli (1 / 15 / 35) ;
+reps passées à 12 → case enregistrée en base (`origine = manuel`), éditeur
+refermé, et la ligne « Fait » repasse au vert.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
