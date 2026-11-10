@@ -184,7 +184,12 @@ export function seancesParSemaine(entrainements, aujourdhuiISO, nbSemaines = 12)
 //                      remontant depuis la semaine en cours (si elle est encore
 //                      vide, on part de la précédente : la semaine n'est pas
 //                      finie, la série n'est pas encore cassée) ;
-//   volumeMois       — Σ charge × reps du mois civil en cours, en kg.
+//   volumeMois       — Σ charge × reps du mois civil en cours, en kg ;
+//   dureeMoyenne     — minutes, moyenne des séances CHRONOMÉTRÉES seulement
+//                      (10/11/2026) : une séance d'avant le chrono n'a pas de
+//                      durée, la compter pour 0 ferait mentir la moyenne.
+//                      null s'il n'y en a aucune ; `nbChronometrees` dit sur
+//                      combien de séances elle porte.
 export function statistiques(entrainements, aujourdhuiISO) {
   const seances = seancesValides(entrainements).filter((e) => seriesValides(e).length > 0);
   const jours = new Set(seances.map((e) => e.date));
@@ -207,13 +212,31 @@ export function statistiques(entrainements, aujourdhuiISO) {
     .reduce((t, e) => t + seriesValides(e)
       .reduce((v, s) => v + Math.max(0, Number(s.poids) || 0) * Number(s.reps), 0), 0);
 
+  const durees = seances
+    .map((e) => Number(e.duree_minutes))
+    .filter((m) => Number.isFinite(m) && m > 0);
+  const dureeMoyenne = durees.length
+    ? Math.round(durees.reduce((t, m) => t + m, 0) / durees.length)
+    : null;
+
   return {
     joursEntraines: jours.size,
     seriesTotal,
     moyenneSemaine,
     semainesDAffilee,
     volumeMois: Math.round(volumeMois),
+    dureeMoyenne,
+    nbChronometrees: durees.length,
   };
+}
+
+// « 47 min », « 1 h 05 » : la durée d'une séance, telle qu'on la dit.
+// Vide si la durée est inconnue — on n'affiche jamais « 0 min ».
+export function dureeSeanceLisible(minutes) {
+  const m = Math.round(Number(minutes));
+  if (!Number.isFinite(m) || m <= 0) return '';
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
 
 // « 12 450 kg » → « 12,5 t » au-delà de 10 tonnes : un nombre à six chiffres

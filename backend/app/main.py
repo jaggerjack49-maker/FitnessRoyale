@@ -321,6 +321,10 @@ class NouvelEntrainement(BaseModel):
     # L'identifiant « local-… » donné par l'app (08/11/2026) : il fait
     # reconnaître une séance déjà reçue quand l'app la renvoie. Facultatif.
     cle_locale: str | None = Field(default=None, max_length=64)
+    # La durée RÉELLE en minutes, mesurée par le chrono de l'app (10/11/2026).
+    # Facultative : absente, la séance du jour garde l'estimation (≈3 min par
+    # série). Bornée à 5 h — au-delà, l'app n'en envoie pas (séance oubliée).
+    duree_minutes: int | None = Field(default=None, ge=1, le=300)
 
 
 # ----- Endpoints -----
@@ -1715,8 +1719,11 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
         joueur_id, entrainement.programme_id, jour,
         datetime.now().isoformat(timespec="milliseconds"),
         [s.model_dump() for s in entrainement.series],
-        regles_seances.duree_estimee(len(entrainement.series)),
+        # La durée MESURÉE prime sur l'estimation (10/11/2026) : c'est elle qui
+        # alimente le compteur du Profil et le défi du jour (≥ 30 min).
+        entrainement.duree_minutes or regles_seances.duree_estimee(len(entrainement.series)),
         entrainement.cle_locale,
+        entrainement.duree_minutes,
     )
 
 

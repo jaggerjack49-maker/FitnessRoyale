@@ -506,6 +506,11 @@ def initialiser():
         # NULL pour toutes les séances d'avant : comportement inchangé.
         if not _colonne_existe(conn, "entrainements", "cle_locale"):
             conn.execute("ALTER TABLE entrainements ADD COLUMN cle_locale TEXT")
+        # La DURÉE RÉELLE d'une séance, en minutes (10/11/2026), mesurée par le
+        # chrono de l'app. NULL pour une séance d'avant, ou dont la durée n'a
+        # pas pu être mesurée honnêtement (voir src/logic/seanceLibre.js).
+        if not _colonne_existe(conn, "entrainements", "duree_minutes"):
+            conn.execute("ALTER TABLE entrainements ADD COLUMN duree_minutes INTEGER")
         # LE TABLEAU DE PROGRESSION (04/10/2026) — trois ajouts, tous additifs.
         # 1) Une FOURCHETTE de reps (« 5 - 10 ») : `reps_cibles` reste le bas,
         #    `reps_cibles_max` le haut. NULL = objectif simple, comportement
@@ -2080,7 +2085,8 @@ def _memes_series(a: list, b: list) -> bool:
 
 def enregistrer_entrainement_complet(joueur_id: int, programme_id: int | None, jour: str,
                                      cree_le: str, series: list, minutes: int,
-                                     cle_locale: str | None = None) -> dict:
+                                     cle_locale: str | None = None,
+                                     duree_minutes: int | None = None) -> dict:
     """Enregistre UNE séance terminée — d'un seul bloc (08/11/2026).
 
     Retour de Hafiz : « 14 séances gardées sur ce téléphone », qui ne
@@ -2143,9 +2149,9 @@ def enregistrer_entrainement_complet(joueur_id: int, programme_id: int | None, j
 
         # 3. Tout d'un bloc.
         entrainement_id = conn.execute(
-            "INSERT INTO entrainements (joueur_id, programme_id, date, cree_le, cle_locale) "
-            "VALUES (?, ?, ?, ?, ?) RETURNING id",
-            (joueur_id, programme_id, jour, cree_le, cle_locale),
+            "INSERT INTO entrainements (joueur_id, programme_id, date, cree_le, cle_locale, "
+            "duree_minutes) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+            (joueur_id, programme_id, jour, cree_le, cle_locale, duree_minutes),
         ).lastrowid
         if series:
             conn.execute(

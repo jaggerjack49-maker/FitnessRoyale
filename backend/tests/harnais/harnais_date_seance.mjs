@@ -88,6 +88,11 @@ verifier('les valeurs des séries sont intactes',
   () => seriesSansJour(series(LUNDI, 2)).map((s) => [s.numero_serie, s.reps, s.poids]),
   [[1, 8, 100], [2, 8, 100]]);
 
+verifier("l'instant d'une série ne part pas non plus au serveur (10/11/2026)",
+  () => Object.keys(seriesSansJour([{ exercice: 'Squat', numero_serie: 1, reps: 8, poids: 100,
+    jour: LUNDI, instant: 123 }])[0]).sort(),
+  ['exercice', 'numero_serie', 'poids', 'reps']);
+
 verifier('seriesSansJour sur des données abîmées',
   () => seriesSansJour([null, 'texte']), [null, 'texte']);
 

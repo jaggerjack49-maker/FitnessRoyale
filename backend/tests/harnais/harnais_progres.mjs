@@ -2,7 +2,7 @@
 // (src/logic/progres.js) et rend le résultat en JSON pour test_progres.py.
 import {
   lundiISO, e1rm, exercicesSuivis, courbeExercice, variation,
-  seancesParSemaine, statistiques, volumeLisible,
+  seancesParSemaine, statistiques, volumeLisible, dureeSeanceLisible,
 } from '../../../src/logic/progres.js';
 
 const s = (exercice, poids, reps) => ({ exercice, poids, reps });
@@ -82,14 +82,44 @@ const cas = [
   // ---- Les chiffres clés ----
   ['stats : chiffres clés',
     () => statistiques(historique, '2026-11-08'),
-    { joursEntraines: 5, seriesTotal: 11, moyenneSemaine: 0.4, semainesDAffilee: 1, volumeMois: 790 }],
+    { joursEntraines: 5, seriesTotal: 11, moyenneSemaine: 0.4, semainesDAffilee: 1, volumeMois: 790,
+      dureeMoyenne: null, nbChronometrees: 0 }],
   ['stats : la semaine en cours vide ne casse pas la série',
     () => statistiques([seance('2026-10-27', s('Squat', 100, 5)), seance('2026-10-20', s('Squat', 100, 5))],
       '2026-11-03').semainesDAffilee,
     2],
   ['stats : aucun historique',
     () => statistiques([], '2026-11-08'),
-    { joursEntraines: 0, seriesTotal: 0, moyenneSemaine: 0, semainesDAffilee: 0, volumeMois: 0 }],
+    { joursEntraines: 0, seriesTotal: 0, moyenneSemaine: 0, semainesDAffilee: 0, volumeMois: 0,
+      dureeMoyenne: null, nbChronometrees: 0 }],
+
+  // ---- La durée moyenne (10/11/2026) ----
+  ['durée moyenne : seulement les séances chronométrées',
+    () => {
+      const st = statistiques([
+        { ...seance('2026-11-03', s('Squat', 100, 5)), duree_minutes: 40 },
+        { ...seance('2026-11-04', s('Squat', 100, 5)), duree_minutes: 61 },
+        seance('2026-11-05', s('Squat', 100, 5)), // d'avant le chrono : ne compte pas
+      ], '2026-11-08');
+      return [st.dureeMoyenne, st.nbChronometrees];
+    },
+    [51, 2]],
+  ['durée moyenne : valeurs abîmées ignorées',
+    () => {
+      const st = statistiques([
+        { ...seance('2026-11-03', s('Squat', 100, 5)), duree_minutes: 30 },
+        { ...seance('2026-11-04', s('Squat', 100, 5)), duree_minutes: 'abc' },
+        { ...seance('2026-11-05', s('Squat', 100, 5)), duree_minutes: 0 },
+        { ...seance('2026-11-06', s('Squat', 100, 5)), duree_minutes: -10 },
+      ], '2026-11-08');
+      return [st.dureeMoyenne, st.nbChronometrees];
+    },
+    [30, 1]],
+  ['durée : 47 min', () => dureeSeanceLisible(47), '47 min'],
+  ['durée : 1 h 05', () => dureeSeanceLisible(65), '1 h 05'],
+  ['durée : 2 h 00', () => dureeSeanceLisible(120), '2 h 00'],
+  ['durée : inconnue → vide, jamais « 0 min »', () => [dureeSeanceLisible(null),
+    dureeSeanceLisible(0), dureeSeanceLisible('x')], ['', '', '']],
   ['volume : en kg', () => volumeLisible(790), '790 kg'],
   ['volume : milliers séparés', () => volumeLisible(9500), '9 500 kg'],
   ['volume : en tonnes au-delà de 10 000', () => volumeLisible(12450), '12,5 t'],

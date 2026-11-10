@@ -5447,6 +5447,69 @@ il y a une connexion internet, et des choses enregistrées ou non.
   affiche « CONNEXION IMPOSSIBLE / Impossible de se connecter. Vérifie ta
   connexion internet, puis réessaie… ».
 
+## La durée réelle d'une séance : historique + durée moyenne — 10/11/2026
+
+Demande de Hafiz : « au niveau de l'historique on peut ajouter la durée de la
+séance, et au niveau des stats on ajoute la durée moyenne des séances ».
+
+### D'où vient la durée
+
+Le CHRONO de séance (08/11/2026) donnait le DÉBUT. Restait la FIN, et ce
+n'est PAS le moment où l'on touche « Terminer » : une séance oubliée ouverte et
+terminée le lendemain durerait 12 heures (le risque noté le 08/11 dans
+« À faire »). `dureeReelleMinutes(debut, series, maintenant)`
+(`src/logic/seanceLibre.js`, testée) :
+- chaque série retient son `instant` (en plus de son `jour`), et la fin
+  retenue est la DERNIÈRE SÉRIE NOTÉE + 10 min de marge (dernière récup,
+  rangement) — ou l'instant réel si l'on termine avant la fin de cette marge ;
+- PAS DE MESURE (null) si le chrono n'a pas de départ, si aucune série ne porte
+  d'instant (séance d'avant ce correctif), ou si le résultat dépasse 5 h (séance
+  reprise le lendemain). On n'invente pas : mieux vaut pas de durée qu'une
+  fausse.
+- `instant`, comme `jour`, ne part jamais tel quel au serveur
+  (`seriesSansJour` le retire) : la durée part À PART, dans `duree_minutes`.
+
+### Côté serveur
+
+- Colonne `duree_minutes` sur `entrainements` (migration additive, NULL pour
+  les séances d'avant), champ facultatif `duree_minutes` (1 à 300) sur
+  `POST /joueurs/{id}/entrainements`, relu par `SELECT *`.
+- ⚠️ ELLE PRIME SUR L'ESTIMATION pour la séance du jour (≈3 min par série,
+  `seances.py`), donc pour le compteur du Profil ET le défi du jour (≥ 30 min).
+  Conséquence voulue mais à connaître : une séance courte chronométrée à
+  18 min ne valide plus le défi du jour, alors que l'estimation lui aurait
+  donné 20 min minimum. L'estimation reste le repli quand rien n'est mesuré.
+- La file d'attente du téléphone envoie aussi la durée (`seance.duree_minutes`).
+
+### À l'écran (Entraînement → Progrès)
+
+- Historique : « Push · 3 exercices · 8 séries · 52 min », et le détail d'une
+  séance « mardi 10 novembre · 52 min ». Format `dureeSeanceLisible`
+  (`src/logic/progres.js`) : « 47 min », « 1 h 05 », jamais « 0 min ».
+- Une 5e tuile « DURÉE MOYENNE » : moyenne des séances CHRONOMÉTRÉES seulement
+  (une séance d'avant le chrono n'a pas de durée, la compter pour 0 ferait
+  mentir la moyenne), avec « sur N séances chronométrées » dessous, ou « — /
+  mesurée à ta prochaine séance » s'il n'y en a encore aucune.
+- ⚠️ LES SÉANCES D'AVANT LE 10/11/2026 N'ONT PAS DE DURÉE : leur ligne
+  d'historique reste sans minutes. Pas de saisie à la main pour l'instant.
+
+### Vérifié
+
+Tests : `test_api_duree_seance.py` (7 cas : rangée et relue, absente → null,
+prime pour la séance du jour, sinon estimation, deux séances additionnées,
+valeurs absurdes refusées, renvoi qui ne double pas les minutes) ; harnais
+`seance_libre` (+10 cas : oubliée la nuit → dernière série + 10 min, reprise le
+lendemain → null, désordre, données abîmées), `progres` (+6), `date_seance`
+(+1). **4 mutations vues échouer** (fin = « Terminer », moyenne qui compte les
+séances sans durée, `instant` envoyé au serveur, durée mesurée ignorée par le
+serveur). Suite complète : **381 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL) : séance libre de 2 séries, départ reculé de
+52 min dans la mémoire, dernière série il y a 2 min → l'app envoie
+`duree_minutes: 52` et des séries sans `jour` ni `instant` ; historique
+« Séance libre · … · 52 min » et « Push · … · 47 min », détail « mardi
+10 novembre · 52 min », tuile « DURÉE MOYENNE 50 min — sur 2 séances
+chronométrées ». Zéro erreur console.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5459,7 +5522,7 @@ il y a une connexion internet, et des choses enregistrées ou non.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (374 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (381 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -5494,10 +5557,9 @@ il y a une connexion internet, et des choses enregistrées ou non.
   locale — mais on ne peut pas continuer à s'entraîner tant que le serveur ne répond pas. À
   traiter par un chemin explicite si le besoin se présente, jamais par le retour d'un mode
   hors-ligne complet (voir « Le mode hors-ligne est supprimé »)
-- Champ durée explicite pour une séance loggée (Entraînement) — actuellement estimée automatiquement
-  (~3 min/série) pour alimenter le compteur hebdo du Profil, voir "Entraînement". Depuis le
-  08/11/2026 le CHRONO de séance mesure la vraie durée, mais seulement à l'écran : l'envoyer au
-  serveur demande de décider quoi faire d'une séance oubliée ouverte toute une nuit
+- Saisir ou corriger À LA MAIN la durée d'une séance (historique) — depuis le 10/11/2026 la
+  durée RÉELLE est mesurée par le chrono et envoyée au serveur, mais les séances d'avant n'en ont
+  pas, et une durée non mesurable (séance reprise le lendemain) reste vide
 - Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait
   depuis le 04/09/2026 — voir « Le NOM d'un exercice est son identifiant »)
 - Un programme « vidé » d'un jour (🗑 dans la semaine type) reste dans « Mes programmes » sans

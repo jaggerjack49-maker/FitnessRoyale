@@ -11,8 +11,11 @@ l'endroit où la séance est enregistrée — sinon la même règle existerait �
 endroits, et le projet a déjà payé ce genre de division (voir CLAUDE.md :
 « UNE SEULE DÉFINITION »).
 
-⚠️ C'est une ESTIMATION, pas une mesure. Un champ « durée réelle » reste noté
-dans « À faire » ; le jour où il existera, il remplacera simplement cet appel.
+⚠️ C'est une ESTIMATION, pas une mesure. Depuis le 10/11/2026 l'app envoie la
+durée RÉELLE (mesurée par son chrono) quand elle le peut, et c'est elle qui
+prime (voir `creer_entrainement` dans main.py). Cette estimation ne sert plus
+que de repli : séance d'avant le chrono, ou durée impossible à mesurer
+honnêtement (séance oubliée ouverte, voir src/logic/seanceLibre.js).
 """
 
 MINUTES_PAR_SERIE = 3   # une série + sa récupération

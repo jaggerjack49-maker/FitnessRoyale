@@ -3,7 +3,12 @@
 // rend le résultat en JSON pour test_seance_libre.py.
 import {
   secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
+  dureeReelleMinutes,
 } from '../../../src/logic/seanceLibre.js';
+
+const MIN = 60_000;
+const T0 = 1_800_000_000_000; // un instant de départ quelconque
+const serieA = (minutes) => ({ exercice: 'Squat', reps: 8, poids: 100, instant: T0 + minutes * MIN });
 
 const s = (exercice, reps, poids = 50) => ({ exercice, reps, poids });
 
@@ -18,6 +23,28 @@ const cas = [
   ['affichage : 59:59', () => chronoLisible(3599), '59:59'],
   ['affichage : passe aux heures', () => chronoLisible(3725), '1:02:05'],
   ['affichage : valeur abîmée → 0:00', () => chronoLisible(NaN), '0:00'],
+
+  // ---- La durée réelle (10/11/2026) ----
+  ["durée : terminée juste après la dernière série → jusqu'à Terminer",
+    () => dureeReelleMinutes(T0, [serieA(5), serieA(40)], T0 + 43 * MIN), 43],
+  ['durée : oubliée ouverte la nuit → dernière série + 10 min',
+    () => dureeReelleMinutes(T0, [serieA(5), serieA(50)], T0 + 14 * 60 * MIN), 60],
+  ['durée : séries dans le désordre → la plus tardive compte',
+    () => dureeReelleMinutes(T0, [serieA(50), serieA(5), serieA(20)], T0 + 51 * MIN), 51],
+  ['durée : reprise le lendemain (> 5 h) → pas de mesure',
+    () => dureeReelleMinutes(T0, [serieA(5), serieA(20 * 60)], T0 + 20 * 60 * MIN), null],
+  ["durée : séries sans instant (d'avant le chrono) → pas de mesure",
+    () => dureeReelleMinutes(T0, [{ reps: 8, poids: 100 }], T0 + 40 * MIN), null],
+  ["durée : pas d'instant de départ → pas de mesure",
+    () => dureeReelleMinutes(null, [serieA(5)], T0 + 40 * MIN), null],
+  ['durée : séance très courte → au moins 1 min',
+    () => dureeReelleMinutes(T0, [serieA(0)], T0 + 10_000), 1],
+  ['durée : instant antérieur au départ ignoré',
+    () => dureeReelleMinutes(T0, [{ instant: T0 - 5 * MIN }, serieA(30)], T0 + 31 * MIN), 31],
+  ['durée : données abîmées → pas de mesure, pas de plantage',
+    () => dureeReelleMinutes(T0, [null, 'texte', { instant: 'abc' }], T0 + 10 * MIN), null],
+  ['durée : pas une liste → pas de mesure',
+    () => dureeReelleMinutes(T0, "n'importe quoi", T0 + 10 * MIN), null],
 
   // ---- L'objectif déduit ----
   ['objectif : séries faites + reps de la dernière',

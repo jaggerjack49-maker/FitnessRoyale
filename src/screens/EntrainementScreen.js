@@ -52,6 +52,7 @@ import {
 } from '../logic/rattrapage';
 import {
   secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
+  dureeReelleMinutes,
 } from '../logic/seanceLibre';
 import { reposDe, prochaineEtape, libelleEtape } from '../logic/repos';
 import {
@@ -62,6 +63,7 @@ import LigneExerciceEditable from '../components/LigneExerciceEditable';
 import { CourbeProgres, BarresActivite } from '../components/GraphiquesProgres';
 import {
   exercicesSuivis, courbeExercice, variation, seancesParSemaine, statistiques, volumeLisible,
+  dureeSeanceLisible,
 } from '../logic/progres';
 import MinuteurRepos from '../components/MinuteurRepos';
 
@@ -1512,7 +1514,8 @@ export default function EntrainementScreen({
             && !String(seance.programme_id).startsWith('local-')
             ? seance.programme_id : null;
           const cree = await api.creerEntrainement(
-            moi.id, programmeId, seance.date, seance.series, seance.id
+            moi.id, programmeId, seance.date, seance.series, seance.id,
+            seance.duree_minutes || null
           );
           await stockageSeance.retirerSeanceEnAttente(seance.id);
           setEntrainements((liste) =>
@@ -2404,7 +2407,10 @@ export default function EntrainementScreen({
         // dater la séance au bon jour si on l'enregistre plus tard.
         [exercice]: [
           ...existantes,
-          { numero_serie: existantes.length + 1, reps, poids, jour: aujourdhui() },
+          // `instant` (10/11/2026) : QUAND cette série a été notée. Il sert à
+          // mesurer la durée réelle de la séance (dureeReelleMinutes) et, comme
+          // `jour`, il ne part jamais tel quel au serveur.
+          { numero_serie: existantes.length + 1, reps, poids, jour: aujourdhui(), instant: Date.now() },
         ],
       };
     });
@@ -2510,11 +2516,17 @@ export default function EntrainementScreen({
     }
     setEnregistrementEnCours(true);
     const jour = jourEnregistrement;
+    // LA DURÉE RÉELLE (10/11/2026) : du début du chrono à la dernière série
+    // notée (+ une marge), jamais jusqu'au toucher de « Terminer » — une
+    // séance oubliée ouverte la nuit ne compte pas 10 h. null si elle ne peut
+    // pas être mesurée honnêtement : le serveur garde alors son estimation.
+    const dureeMinutes = dureeReelleMinutes(debutChrono, seriesDeLaSeance, Date.now());
     const local = {
       id: `local-${Date.now()}`,
       programme_id: programmeActif?.id ?? null,
       date: jour,
       series: toutesLesSeries,
+      duree_minutes: dureeMinutes,
     };
     setEntrainements((e) => [local, ...e]);
 
@@ -2531,7 +2543,9 @@ export default function EntrainementScreen({
     try {
       const programmeId = programmeActif && !String(programmeActif.id).startsWith('local-')
         ? programmeActif.id : null;
-      const cree = await api.creerEntrainement(moi.id, programmeId, jour, toutesLesSeries, local.id);
+      const cree = await api.creerEntrainement(
+        moi.id, programmeId, jour, toutesLesSeries, local.id, dureeMinutes
+      );
       // Confirmée par le serveur : elle peut enfin sortir de la file.
       await stockageSeance.retirerSeanceEnAttente(local.id);
       setNbEnAttente((n) => Math.max(0, n - 1));
@@ -2554,7 +2568,7 @@ export default function EntrainementScreen({
     // ⚠️ LE JOUR COMPTE : une séance faite hier et enregistrée aujourd'hui
     // alimente le compteur d'HIER (même règle que src/logic/dateSeance.js).
     const dureeEstimee = Math.max(20, toutesLesSeries.length * 3);
-    await ajouterSeanceLocale?.(dureeEstimee, jour);
+    await ajouterSeanceLocale?.(dureeMinutes || dureeEstimee, jour);
 
     // Le volume de la semaine vient de changer : on remet à jour le message du
     // rappel de suivi (sinon il annoncerait des chiffres périmés).
@@ -2647,7 +2661,11 @@ export default function EntrainementScreen({
         <TexteIcone nom="calendrier" taille={19} couleur={colors.or} style={styles.titre}>
           {typeDeSeance(entrainementSelectionne, programmes)}
         </TexteIcone>
-        <Text style={styles.sousTitre}>{libelleDate(entrainementSelectionne.date)}</Text>
+        <Text style={styles.sousTitre}>
+          {libelleDate(entrainementSelectionne.date)}
+          {dureeSeanceLisible(entrainementSelectionne.duree_minutes)
+            ? ` · ${dureeSeanceLisible(entrainementSelectionne.duree_minutes)}` : ''}
+        </Text>
         {parExercice.map((groupe) => (
           <View key={groupe.exercice} style={styles.carteExercice}>
             <Text style={styles.nomExercice}>{groupe.exercice}</Text>
@@ -4279,6 +4297,13 @@ export default function EntrainementScreen({
       ['PAR SEMAINE', String(stats.moyenneSemaine).replace('.', ','), 'moyenne des 8 dernières'],
       ['SEMAINES D\'AFFILÉE', String(stats.semainesDAffilee), 'avec au moins une séance'],
       ['VOLUME DU MOIS', volumeLisible(stats.volumeMois), 'charge × reps soulevées'],
+      // La durée moyenne (10/11/2026) : seulement sur les séances CHRONOMÉTRÉES
+      // — celles d'avant le chrono n'ont pas de durée, elles ne comptent pas.
+      ['DURÉE MOYENNE',
+        stats.dureeMoyenne ? dureeSeanceLisible(stats.dureeMoyenne) : '—',
+        stats.nbChronometrees
+          ? `sur ${stats.nbChronometrees} séance${stats.nbChronometrees > 1 ? 's' : ''} chronométrée${stats.nbChronometrees > 1 ? 's' : ''}`
+          : 'mesurée à ta prochaine séance'],
     ];
     return (
       <ScrollView
@@ -4455,6 +4480,8 @@ export default function EntrainementScreen({
               <Text style={styles.indice}>
                 <Text style={styles.typeHistorique}>{typeDeSeance(e, programmes)}</Text>
                 {' · '}{exercicesUniques.length} exercice{exercicesUniques.length > 1 ? 's' : ''} · {nbSeries} série{nbSeries > 1 ? 's' : ''}
+                {/* La durée réelle, quand le chrono l'a mesurée (10/11/2026). */}
+                {dureeSeanceLisible(e.duree_minutes) ? ` · ${dureeSeanceLisible(e.duree_minutes)}` : ''}
               </Text>
             </TouchableOpacity>
           );

@@ -725,9 +725,13 @@ export async function planifierLot(joueurId, elements) {
 // `cleLocale` (08/11/2026) : l'identifiant « local-… » de la séance. Il fait
 // reconnaître au serveur une séance DÉJÀ REÇUE quand on la renvoie (réponse
 // perdue, délai dépassé) : sans lui, chaque renvoi créait un doublon.
-export async function creerEntrainement(joueurId, programmeId, dateJour, series, cleLocale = null) {
+// `dureeMinutes` (10/11/2026) : la durée RÉELLE mesurée par le chrono, ou
+// null — le serveur garde alors son estimation (≈3 min par série).
+export async function creerEntrainement(joueurId, programmeId, dateJour, series,
+  cleLocale = null, dureeMinutes = null) {
   return post(`/joueurs/${joueurId}/entrainements`, {
     programme_id: programmeId, date: dateJour, series, cle_locale: cleLocale,
+    ...(dureeMinutes ? { duree_minutes: dureeMinutes } : {}),
   });
 }
 

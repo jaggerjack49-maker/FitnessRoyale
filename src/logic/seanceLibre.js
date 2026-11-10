@@ -36,6 +36,40 @@ export function chronoLisible(secondes) {
 }
 
 // ---------------------------------------------------------------------------
+// LA DURÉE RÉELLE D'UNE SÉANCE (10/11/2026)
+// ---------------------------------------------------------------------------
+// Demande de Hafiz : la durée dans l'historique, et la durée moyenne dans les
+// stats. Le chrono donne le DÉBUT ; reste à décider de la FIN.
+//
+// ⚠️ PAS « le moment où l'on touche Terminer » : une séance oubliée ouverte
+// et terminée le lendemain matin durerait 12 heures. La fin retenue est la
+// DERNIÈRE SÉRIE NOTÉE (chaque série retient son `instant`), plus une marge
+// pour la dernière récupération et le rangement — sauf si l'on termine avant
+// la fin de cette marge, auquel cas c'est l'instant réel.
+// On ne mesure RIEN (null → le serveur garde son estimation) quand :
+//   - le chrono n'a pas d'instant de départ (séance d'avant le chrono) ;
+//   - aucune série ne porte d'instant (séries notées avant ce correctif) ;
+//   - le résultat dépasse 5 h : une séance reprise le lendemain, pas un
+//     entraînement de 5 h. Mieux vaut l'estimation qu'un chiffre faux.
+export const MARGE_APRES_DERNIERE_SERIE_MS = 10 * 60 * 1000;
+export const DUREE_MAX_MINUTES = 300;
+
+export function dureeReelleMinutes(debutMs, series, finMs) {
+  const debut = Number(debutMs);
+  const fin = Number(finMs);
+  if (!Number.isFinite(debut) || debut <= 0 || !Number.isFinite(fin)) return null;
+  const instants = (Array.isArray(series) ? series : [])
+    .map((s) => Number(s && s.instant))
+    .filter((t) => Number.isFinite(t) && t >= debut);
+  if (instants.length === 0) return null;
+  const derniere = Math.max(...instants);
+  const finRetenue = Math.min(fin, derniere + MARGE_APRES_DERNIERE_SERIE_MS);
+  if (finRetenue <= debut) return null;
+  const minutes = Math.max(1, Math.round((finRetenue - debut) / 60000));
+  return minutes > DUREE_MAX_MINUTES ? null : minutes;
+}
+
+// ---------------------------------------------------------------------------
 // D'UNE SÉANCE À UN PROGRAMME
 // ---------------------------------------------------------------------------
 

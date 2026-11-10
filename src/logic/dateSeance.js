@@ -68,11 +68,13 @@ export function jourDeLaSeance(series, { dateDebut = null, jourJ = null } = {}) 
 // Le jour d'une série est une information LOCALE à l'app : on l'enlève avant
 // d'envoyer la séance au serveur (et avant de la ranger dans l'historique
 // affiché, pour que les deux aient exactement la même forme).
+// Même chose pour son `instant` (10/11/2026) : il ne sert qu'à mesurer la
+// durée de la séance (voir seanceLibre.js), qui part au serveur à part.
 export function seriesSansJour(series) {
   if (!Array.isArray(series)) return [];
   return series.map((serie) => {
     if (!serie || typeof serie !== 'object') return serie;
-    const { jour, ...reste } = serie;
+    const { jour, instant, ...reste } = serie;
     return reste;
   });
 }
