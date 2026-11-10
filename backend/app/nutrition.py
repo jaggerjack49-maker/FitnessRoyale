@@ -117,7 +117,7 @@ def _obtenir_client():
     if _client is None:
         if not est_configuree():
             raise AnalyseNonConfiguree(
-                "L'analyse des repas n'est pas encore configurée sur le serveur."
+                "L'analyse des repas en photo n'est pas encore disponible."
             )
         import anthropic
 

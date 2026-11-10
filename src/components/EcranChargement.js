@@ -10,7 +10,7 @@
 //    répond vraiment pas. C'EST LE REMPLAÇANT DU MODE HORS-LIGNE : avant,
 //    l'app entrait quand même, avec un profil de démonstration qu'on pouvait
 //    prendre pour son propre compte vidé de ses données. Ici on s'arrête, on
-//    dit l'adresse appelée et on propose de réessayer.
+//    dit quoi faire et on propose de réessayer (« CONNEXION IMPOSSIBLE »).
 //
 // LE FOND est l'illustration fournie par Hafiz (06/09/2026), préparée par
 // `scripts/preparer_fond_chargement.py`. Ce script COUPE le bandeau peint
@@ -84,10 +84,11 @@ function BarreIndeterminee() {
   );
 }
 
-// `erreur` : le message du serveur muet (null = on attend encore).
-// `adresse` : l'adresse appelée — la première chose à vérifier quand ça ne
-// répond pas (serveur local pas lancé, mauvaise adresse dans app.json…).
-export default function EcranChargement({ reveil, erreur, adresse, onReessayer }) {
+// `erreur` : le message quand la connexion a échoué (null = on attend encore).
+// L'adresse appelée n'est plus affichée (10/11/2026, demande de Hafiz : aucun
+// message ne parle de serveur). Pour la retrouver en développement :
+// api.adresseServeur(), ou le panneau réseau du navigateur.
+export default function EcranChargement({ reveil, erreur, onReessayer }) {
   return (
     <ImageBackground
       source={FOND}
@@ -104,26 +105,25 @@ export default function EcranChargement({ reveil, erreur, adresse, onReessayer }
       <View style={styles.bandeau}>
         {erreur ? (
           <>
-            <Text style={styles.message}>SERVEUR INJOIGNABLE</Text>
+            <Text style={styles.message}>CONNEXION IMPOSSIBLE</Text>
             <Text style={styles.erreur}>{erreur}</Text>
             <TouchableOpacity style={styles.boutonReessayer} onPress={onReessayer}>
               <Text style={styles.boutonReessayerTexte}>↻ RÉESSAYER</Text>
             </TouchableOpacity>
             <Text style={styles.precision}>
-              Fitness Royale a besoin du serveur : tes séances, tes perfs et le
-              classement vivent là-bas, jamais sur le téléphone.
+              Fitness Royale a besoin d'internet : tes séances, tes perfs et le
+              classement sont enregistrés en ligne, pas sur le téléphone.
             </Text>
-            {adresse ? <Text style={styles.adresse}>Adresse appelée : {adresse}</Text> : null}
           </>
         ) : (
           <>
             <Text style={styles.message}>
-              {reveil ? 'RÉVEIL DU SERVEUR…' : 'CONNEXION AU SERVEUR…'}
+              {reveil ? 'CONNEXION EN COURS…' : 'CONNEXION…'}
             </Text>
             <BarreIndeterminee />
             <Text style={styles.precision}>
               {reveil
-                ? 'Il dormait — jusqu\'à 1 minute, c\'est normal'
+                ? 'Première connexion de la journée — jusqu\'à 1 minute, c\'est normal'
                 : '— PLUS FORTS ENSEMBLE —'}
             </Text>
           </>
@@ -194,12 +194,6 @@ const styles = StyleSheet.create({
   },
   boutonReessayerTexte: {
     color: '#12100a', fontWeight: '900', fontSize: 14, letterSpacing: 1.5,
-  },
-  adresse: {
-    color: colors.texteGris,
-    fontSize: 10,
-    marginTop: 8,
-    textAlign: 'center',
   },
   precision: {
     color: colors.texteGris,

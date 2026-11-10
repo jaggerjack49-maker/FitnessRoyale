@@ -5384,9 +5384,9 @@ connexion. Son programme (5 séances, 5 colonnes) fait facilement 150 cases =
 ### 2. Le message lui-même
 
 - `src/api.js` traduit les erreurs RÉSEAU pour toute l'app : « Aborted »
-  devient « le serveur a mis plus de 12 secondes à répondre », « Failed to
-  fetch » devient « le serveur est injoignable — vérifie ta connexion
-  internet ». Toujours SANS `status`, pour que la file des séances distingue
+  devient « la connexion est trop lente », « Failed to fetch » devient « pas
+  de connexion internet » (libellés revus dans la foulée, voir la section
+  suivante). Toujours SANS `status`, pour que la file des séances distingue
   encore « pas de réponse » de « le serveur a dit non ».
 - Le message s'affichait au bas de « Mes programmes », hors de vue : le tableau
   reçoit maintenant `erreur` et l'affiche dans un cadre rouge juste sous le
@@ -5403,6 +5403,50 @@ Il était collé au rouage des Paramètres. Retiré (il affichait de toute faço
 toujours « 0 j » : la série de jours n'est pas suivie côté serveur, voir
 « À faire »).
 
+## Plus jamais le mot « serveur » à l'écran — 10/11/2026
+
+Demande de Hafiz, en voyant « Bloc NON démarré : le serveur n'a pas pu
+enregistrer le plan » : « ne parle pas de serveur dans un message d'erreur ni
+partout ailleurs ». Pour la personne qui s'entraîne, il n'y a pas de serveur :
+il y a une connexion internet, et des choses enregistrées ou non.
+
+- **38 textes réécrits** (trouvés avec le parseur Babel, pas à l'œil — une
+  recherche texte remontait 96 lignes, surtout des noms de variables
+  `moiServeur` et des commentaires) :
+  - « Changement NON enregistré côté serveur (…) » → « Changement NON
+    enregistré (…) » (et pareil pour réglage, case, programme) ;
+  - « Le serveur n'a pas pu supprimer « X » » → « « X » n'a pas pu être
+    supprimé » ;
+  - les erreurs réseau (`src/api.js`) : « la connexion est trop lente »,
+    « pas de connexion internet », « Une erreur est survenue (code 500) » ;
+  - la file des séances : « Enregistrement de N séances… », « L'app n'a pas
+    pu enregistrer N séances », « (la connexion était trop lente) » ;
+  - l'écran de démarrage : « CONNEXION… », « CONNEXION EN COURS… » + « Première
+    connexion de la journée — jusqu'à 1 minute », et en cas d'échec
+    « CONNEXION IMPOSSIBLE » + « Fitness Royale a besoin d'internet ».
+    L'ADRESSE APPELÉE n'y est plus affichée (c'était un outil de diagnostic,
+    donc du vocabulaire de développeur) — en développement : `api.adresseServeur()`
+    ou le panneau réseau du navigateur. Sur une coupure réseau, le message ne
+    répète plus le détail entre parenthèses ; une vraie réponse d'erreur
+    (avec un code) le garde ;
+  - le bandeau d'un compte vide de l'Entraînement : « Aucune séance ni
+    programme enregistré pour l'instant sur le compte « X » (n°N) ».
+- **Côté backend**, deux messages renvoyés tels quels à l'app : « Vidéo
+  introuvable : elle a peut-être déjà été jugée » et « L'analyse des repas en
+  photo n'est pas encore disponible ».
+- **VERROU** : `backend/tests/test_pas_de_serveur_a_l_ecran.py` — l'app via
+  `harnais/textes_affiches.cjs` (parseur Babel : chaînes, gabarits, texte JSX,
+  jamais les commentaires ni les noms de variables), le backend via `ast`
+  (toutes les chaînes sauf les docstrings). Vu ÉCHOUER sur un « côté serveur »
+  remis dans un écran et dans main.py. Le harnais accepte n'importe quel motif
+  (`node textes_affiches.cjs <racine> <motif>`) : réutilisable le jour où un
+  autre mot doit disparaître.
+- Les commentaires, les noms de fonctions (`reveillerServeur`…) et ce fichier
+  CLAUDE.md gardent le mot : c'est le vocabulaire du code, pas de l'écran.
+- Vérifié dans le navigateur (app locale, aucun serveur lancé) : l'écran
+  affiche « CONNEXION IMPOSSIBLE / Impossible de se connecter. Vérifie ta
+  connexion internet, puis réessaie… ».
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5415,7 +5459,7 @@ toujours « 0 j » : la série de jours n'est pas suivie côté serveur, voir
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (372 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (374 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

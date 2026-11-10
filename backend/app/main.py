@@ -1032,7 +1032,7 @@ def fichier_video(video_id: int):
         raise HTTPException(404, "Vidéo introuvable.")
     chemin = regles_videos.chemin_video(video["fichier"])
     if not chemin.exists():
-        raise HTTPException(404, "Fichier vidéo introuvable sur le serveur.")
+        raise HTTPException(404, "Vidéo introuvable : elle a peut-être déjà été jugée.")
     return FileResponse(chemin)
 
 
@@ -1805,7 +1805,7 @@ def analyser_repas(joueur_id: int, photo: PhotoRepas,
         raise HTTPException(400, "Photo illisible.")
     # Pas de clé sur le serveur : on le dit AVANT de compter une analyse.
     if not nutrition.est_configuree():
-        raise HTTPException(503, "L'analyse des repas n'est pas encore configurée sur le serveur.")
+        raise HTTPException(503, "L'analyse des repas en photo n'est pas encore disponible.")
     jour = date.today().isoformat()
     deja = db.nb_analyses_du_jour(joueur_id, jour)
     if deja >= nutrition.QUOTA_ANALYSES_PAR_JOUR:

@@ -303,14 +303,14 @@ function AppInterne() {
       if (encoreAJour() && joueurs) setJoueursServeur(joueurs);
     } catch (erreur) {
       if (encoreAJour()) {
-        // Le message brut du navigateur (« Failed to fetch ») ne dit rien à
-        // personne : on le garde entre parenthèses, derrière une phrase qui
-        // indique quoi faire.
-        const detail = erreur && erreur.message ? ` (${erreur.message})` : '';
+        // Une coupure réseau (pas de `status`) : la phrase dit déjà tout, le
+        // détail (« pas de connexion internet ») ne ferait que la répéter.
+        // Une vraie réponse d'erreur (un `status`), elle, garde son détail.
+        const detail = erreur && erreur.status && erreur.message ? ` (${erreur.message})` : '';
         setErreurServeur(
-          `Pas de réponse du serveur${detail}. Vérifie ta connexion internet,`
-          + " puis réessaie : s'il dormait, il peut mettre jusqu'à une minute"
-          + ' à se lever.'
+          `Impossible de se connecter${detail}. Vérifie ta connexion internet,`
+          + " puis réessaie : la première connexion de la journée peut prendre"
+          + " jusqu'à une minute."
         );
       }
     } finally {
@@ -455,7 +455,7 @@ function AppInterne() {
       // Un refus du serveur (ErreurAPI) se raconte tel quel ; une coupure
       // réseau, elle, ne dit rien d'utile en anglais (« Failed to fetch »).
       if (erreur instanceof api.ErreurAPI) return erreur.message;
-      return `le serveur n'a pas répondu (${erreur.message || 'raison inconnue'})`;
+      return `la connexion a échoué (${erreur.message || 'raison inconnue'})`;
     }
   }
 
@@ -610,7 +610,6 @@ function AppInterne() {
         <StatusBar style="light" />
         <EcranChargement
           erreur={erreurServeur}
-          adresse={api.adresseServeur()}
           onReessayer={demarrer}
         />
       </View>

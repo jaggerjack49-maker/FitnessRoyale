@@ -1053,7 +1053,7 @@ export default function EntrainementScreen({
       }
     } catch (err) {
       setErreur(
-        'Réglage NON enregistré côté serveur '
+        'Réglage NON enregistré '
         + `(${err.message || 'aucune réponse'}) — il vaut pour cet affichage seulement.`
       );
     }
@@ -1081,7 +1081,7 @@ export default function EntrainementScreen({
       }
     } catch (err) {
       setErreur(
-        'Case NON enregistrée côté serveur '
+        'Case NON enregistrée '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1167,7 +1167,7 @@ export default function EntrainementScreen({
       setTableauDe((t) => (t ? { ...t, cible: { ...t.cible, date_debut: dateISO } } : t));
     } catch (err) {
       setErreur(
-        `Le bloc n'a pas démarré : ${err.message || "le serveur n'a pas répondu"}. `
+        `Le bloc n'a pas démarré : ${err.message || 'la connexion a échoué'}. `
         + 'Rien n\'a été changé, tu peux réessayer.'
       );
       await chargerTout();
@@ -1223,7 +1223,7 @@ export default function EntrainementScreen({
       await chargerTout();
     } catch (err) {
       setErreur(
-        `La suite du bloc n'a pas été recalculée : ${err.message || "le serveur n'a pas répondu"}. `
+        `La suite du bloc n'a pas été recalculée : ${err.message || 'la connexion a échoué'}. `
         + "Le plan n'a pas changé, tu peux réessayer."
       );
       await chargerTout();
@@ -1581,7 +1581,7 @@ export default function EntrainementScreen({
           await api.changerJoursProgramme(programmeExistant.id, restants);
         } catch (err) {
           setErreur(
-            'Changement NON enregistré côté serveur '
+            'Changement NON enregistré '
             + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
           );
           await chargerTout();
@@ -1597,7 +1597,7 @@ export default function EntrainementScreen({
         await api.changerExercicesProgramme(programmeExistant.id, exercices);
       } catch (err) {
         setErreur(
-          'Changement NON enregistré côté serveur '
+          'Changement NON enregistré '
           + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
         );
         await chargerTout();
@@ -1614,7 +1614,7 @@ export default function EntrainementScreen({
       setProgrammes((liste) => liste.map((p) => (p.id === local.id ? cree : p)));
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1655,7 +1655,7 @@ export default function EntrainementScreen({
       await api.definirObjectifsSeries(moi.id, objectifs);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1683,7 +1683,7 @@ export default function EntrainementScreen({
       await api.definirGroupeExercice(moi.id, exercice, groupe);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1719,7 +1719,7 @@ export default function EntrainementScreen({
       await api.changerJoursProgramme(programme.id, jours);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1750,7 +1750,7 @@ export default function EntrainementScreen({
       await api.changerExercicesProgramme(programme.id, exercices);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1769,7 +1769,7 @@ export default function EntrainementScreen({
       await api.changerJoursProgramme(programme.id, restants);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1804,7 +1804,7 @@ export default function EntrainementScreen({
           // message le dit. On ne resynchronise PAS ici : la boucle continue,
           // le rechargement se fait à la fin.
           setErreur(
-            `« ${seance.nom} » n'a pas pu être créé côté serveur `
+            `« ${seance.nom} » n'a pas pu être créé `
             + `(${err.message || 'aucune réponse'}).`
           );
         }
@@ -1858,7 +1858,7 @@ export default function EntrainementScreen({
       setPlanning(await api.planningDuJoueur(moi.id));
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1880,7 +1880,7 @@ export default function EntrainementScreen({
       setPlanning((l) => l.map((pl) => (pl.id === local.id ? cree : pl)));
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -1903,7 +1903,7 @@ export default function EntrainementScreen({
     } catch (err) {
       setErreur(
         err.message
-        || "Le serveur n'a pas pu retirer cette date — elle est toujours là."
+        || "Cette date n'a pas pu être retirée — elle est toujours là."
       );
       await chargerTout();
     }
@@ -2023,7 +2023,7 @@ export default function EntrainementScreen({
       setProgrammes(await api.programmesDuJoueur(moi.id));
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -2062,7 +2062,7 @@ export default function EntrainementScreen({
       }
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -2122,7 +2122,7 @@ export default function EntrainementScreen({
     } catch (err) {
       setErreur(
         err.message
-        || `Le serveur n'a pas pu supprimer « ${cycle.nom} » — le programme est toujours là.`
+        || `« ${cycle.nom} » n'a pas pu être supprimé — le programme est toujours là.`
       );
       await chargerTout();
     }
@@ -2149,7 +2149,7 @@ export default function EntrainementScreen({
       setProgrammes(await api.programmesDuJoueur(moi.id));
     } catch (err) {
       setErreur(
-        'Programme NON enregistré côté serveur '
+        'Programme NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -2166,7 +2166,7 @@ export default function EntrainementScreen({
     } catch (err) {
       setErreur(
         err.message
-        || `Le serveur n'a pas pu supprimer « ${programme.nom} » — la séance est toujours là.`
+        || `« ${programme.nom} » n'a pas pu être supprimée — la séance est toujours là.`
       );
       await chargerTout();
     }
@@ -2344,7 +2344,7 @@ export default function EntrainementScreen({
       await api.changerExercicesProgramme(programme.id, exercices);
     } catch (err) {
       setErreur(
-        'Changement NON enregistré côté serveur '
+        'Changement NON enregistré '
         + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
       );
       await chargerTout();
@@ -2377,7 +2377,7 @@ export default function EntrainementScreen({
     } catch (err) {
       return {
         ok: false,
-        message: `Programme NON créé (${err.message || 'le serveur n\'a pas répondu'}). Réessaie.`,
+        message: `Programme NON créé (${err.message || 'la connexion a échoué'}). Réessaie.`,
       };
     }
   }
@@ -3320,7 +3320,7 @@ export default function EntrainementScreen({
           <TexteIcone nom={etatChargement === 'echec' ? 'alerte' : 'horloge'}
             taille={14} hautAligne style={styles.texteBandeau}>
             {etatChargement === 'echec'
-              ? "Tes séances et programmes n'ont pas pu être chargés — le serveur met parfois du temps à se réveiller. Ils ne sont PAS perdus : l'app réessaie toute seule."
+              ? "Tes séances et programmes n'ont pas pu être chargés — la première connexion de la journée peut être lente. Ils ne sont PAS perdus : l'app réessaie toute seule."
               : 'Chargement de tes séances et programmes…'}
           </TexteIcone>
           {etatChargement === 'echec' && erreur ? (
@@ -3345,10 +3345,10 @@ export default function EntrainementScreen({
           <TexteIcone nom={Object.keys(refusFile).length > 0 ? 'alerte' : 'horloge'}
             taille={14} hautAligne style={styles.texteBandeau}>
             {envoiFileEnCours
-              ? `Envoi au serveur de ${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''}…`
+              ? `Enregistrement de ${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''}…`
               : Object.keys(refusFile).length > 0
-                ? `Le serveur a refusé ${Object.keys(refusFile).length} séance${Object.keys(refusFile).length > 1 ? 's' : ''} terminée${Object.keys(refusFile).length > 1 ? 's' : ''}. ${Object.keys(refusFile).length > 1 ? 'Elles restent' : 'Elle reste'} sur ce téléphone, rien n'est perdu.`
-                : `${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''} ${nbEnAttente > 1 ? "n'ont" : "n'a"} pas encore été enregistrée${nbEnAttente > 1 ? 's' : ''} sur le serveur (il n'a pas répondu à temps). ${nbEnAttente > 1 ? 'Elles sont' : 'Elle est'} en sécurité sur ce téléphone et ${nbEnAttente > 1 ? 'partiront' : 'partira'} toute${nbEnAttente > 1 ? 's' : ''} seule${nbEnAttente > 1 ? 's' : ''}.`}
+                ? `L'app n'a pas pu enregistrer ${Object.keys(refusFile).length} séance${Object.keys(refusFile).length > 1 ? 's' : ''} terminée${Object.keys(refusFile).length > 1 ? 's' : ''}. ${Object.keys(refusFile).length > 1 ? 'Elles restent' : 'Elle reste'} sur ce téléphone, rien n'est perdu.`
+                : `${nbEnAttente} séance${nbEnAttente > 1 ? 's' : ''} terminée${nbEnAttente > 1 ? 's' : ''} ${nbEnAttente > 1 ? "n'ont" : "n'a"} pas encore été enregistrée${nbEnAttente > 1 ? 's' : ''} (la connexion était trop lente). ${nbEnAttente > 1 ? 'Elles sont' : 'Elle est'} en sécurité sur ce téléphone et ${nbEnAttente > 1 ? 'partiront' : 'partira'} toute${nbEnAttente > 1 ? 's' : ''} seule${nbEnAttente > 1 ? 's' : ''}.`}
           </TexteIcone>
           {!envoiFileEnCours && Object.keys(refusFile).length > 0 ? (
             <Text style={styles.detailBandeau}>
@@ -3371,7 +3371,7 @@ export default function EntrainementScreen({
           )}
           <ConfirmationSuppression
             actif={confirmerOubliFile && Object.keys(refusFile).length > 0}
-            question={`Effacer ${Object.keys(refusFile).length > 1 ? `ces ${Object.keys(refusFile).length} séances` : 'cette séance'} de ce téléphone ? Le serveur ne les a jamais reçues : elles seront perdues pour de bon.`}
+            question={`Effacer ${Object.keys(refusFile).length > 1 ? `ces ${Object.keys(refusFile).length} séances` : 'cette séance'} de ce téléphone ? Elles n'ont jamais été enregistrées : elles seront perdues pour de bon.`}
             libelleConfirmer="Oui, effacer"
             onConfirmer={oublierSeancesRefusees}
             onAnnuler={() => setConfirmerOubliFile(false)}
@@ -3391,8 +3391,8 @@ export default function EntrainementScreen({
         <View style={styles.bandeauCompte}>
           <TexteIcone nom="valide" taille={14} hautAligne couleur={colors.vert}
             style={styles.texteBandeau}>
-            Chargement réussi — mais le serveur n'a renvoyé AUCUNE séance ni
-            programme pour « {moi.pseudo} » (compte n°{moi.id}).
+            Aucune séance ni programme enregistré pour l'instant sur le compte
+            « {moi.pseudo} » (n°{moi.id}).
           </TexteIcone>
           <Text style={styles.detailBandeau}>
             Si ce n'est pas ton compte habituel, déconnecte-toi depuis le Profil

@@ -144,7 +144,7 @@ function messageErreurDepuis(corps, statutHTTP) {
       .map((d) => (typeof d === 'string' ? d : d?.msg || JSON.stringify(d)))
       .join(' · ');
   }
-  return `Erreur serveur (${statutHTTP})`;
+  return `Une erreur est survenue (code ${statutHTTP})`;
 }
 
 // Requête HTTP avec délai maximum : au-delà de delaiMs, on abandonne.
@@ -165,12 +165,15 @@ async function appel(chemin, options = {}, delaiMs = DELAI_MAX_MS) {
     }).catch((err) => {
       // « Aborted » / « Failed to fetch » ne disent rien à personne (retour de
       // Hafiz du 10/11/2026 : « je ne comprends pas le message d'erreur »).
+      // ⚠️ RÈGLE (10/11/2026, Hafiz) : AUCUN message affiché ne parle de
+      // « serveur » — on parle de connexion, d'enregistrement, de réessayer.
+      // Verrouillé par backend/tests/test_pas_de_serveur_a_l_ecran.py.
       // On traduit, SANS `status` : le reste de l'app reconnaît ainsi « le
       // serveur n'a pas répondu » (≠ « le serveur a dit non », qui en a un).
       if (err && err.name === 'AbortError') {
-        throw new Error(`le serveur a mis plus de ${Math.round(delaiMs / 1000)} secondes à répondre`);
+        throw new Error('la connexion est trop lente');
       }
-      throw new Error('le serveur est injoignable — vérifie ta connexion internet');
+      throw new Error('pas de connexion internet');
     });
     if (!reponse.ok) {
       const corps = await reponse.json().catch(() => ({}));
