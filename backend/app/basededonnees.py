@@ -710,6 +710,11 @@ def initialiser():
                 proteines INTEGER
             )
         """)
+        # Objectifs de GLUCIDES et de LIPIDES (11/11/2026, demande de Hafiz) :
+        # migration additive, NULL = pas d'objectif (comme kcal et protéines).
+        for colonne in ("glucides", "lipides"):
+            if not _colonne_existe(conn, "objectifs_nutrition", colonne):
+                conn.execute(f"ALTER TABLE objectifs_nutrition ADD COLUMN {colonne} INTEGER")
         # Une ligne par photo ENVOYÉE à l'IA (qu'elle aboutisse ou non) : c'est
         # ce qui coûte de l'argent, donc ce qui est plafonné par jour.
         _executer_creation_table(conn, """
@@ -767,22 +772,29 @@ def supprimer_repas(repas_id: int) -> None:
 
 
 def objectifs_nutrition(joueur_id: int) -> dict:
-    """{kcal, proteines} — None pour un objectif pas encore fixé."""
+    """{kcal, proteines, glucides, lipides} — None pour un objectif pas encore fixé."""
     with connexion() as conn:
         ligne = conn.execute(
-            "SELECT kcal, proteines FROM objectifs_nutrition WHERE joueur_id = ?", (joueur_id,)
+            "SELECT kcal, proteines, glucides, lipides FROM objectifs_nutrition "
+            "WHERE joueur_id = ?", (joueur_id,)
         ).fetchone()
-        return dict(ligne) if ligne else {"kcal": None, "proteines": None}
+        if ligne:
+            return dict(ligne)
+        return {"kcal": None, "proteines": None, "glucides": None, "lipides": None}
 
 
-def definir_objectifs_nutrition(joueur_id: int, kcal, proteines) -> None:
+def definir_objectifs_nutrition(joueur_id: int, kcal, proteines,
+                                glucides=None, lipides=None) -> None:
     """Remplace l'objectif du jour (ON CONFLICT … DO UPDATE : portable
     SQLite 3.24+ et Postgres)."""
     with connexion() as conn:
         conn.execute(
-            "INSERT INTO objectifs_nutrition (joueur_id, kcal, proteines) VALUES (?, ?, ?) "
-            "ON CONFLICT (joueur_id) DO UPDATE SET kcal = excluded.kcal, proteines = excluded.proteines",
-            (joueur_id, kcal, proteines),
+            "INSERT INTO objectifs_nutrition (joueur_id, kcal, proteines, glucides, lipides) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT (joueur_id) DO UPDATE SET kcal = excluded.kcal, "
+            "proteines = excluded.proteines, glucides = excluded.glucides, "
+            "lipides = excluded.lipides",
+            (joueur_id, kcal, proteines, glucides, lipides),
         )
 
 

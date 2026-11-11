@@ -5510,6 +5510,39 @@ Navigateur (390 px, serveur LOCAL) : séance libre de 2 séries, départ reculé
 10 novembre · 52 min », tuile « DURÉE MOYENNE 50 min — sur 2 séances
 chronométrées ». Zéro erreur console.
 
+## Nutrition : glucides et lipides à égalité avec calories et protéines — 11/11/2026
+
+Demande de Hafiz : « dans la nutrition, ajoute aussi les glucides et les
+lipides ». Les repas les ENREGISTRAIENT déjà (l'analyse photo les estime, la
+table `repas` les garde depuis le 18/09/2026), mais l'écran ne les montrait
+qu'en petit texte gris, sans objectif ni barre.
+
+- **Côté serveur** : colonnes `glucides` et `lipides` sur `objectifs_nutrition`
+  (migration additive juste après la création de la table, NULL = pas
+  d'objectif), champs facultatifs dans `ObjectifsNutrition` (glucides 0-1000 g,
+  lipides 0-500 g). `GET/PUT /joueurs/{id}/objectifs-nutrition` et le journal
+  du jour renvoient désormais les QUATRE objectifs.
+- **Côté écran** (`CarteNutrition.js`) :
+  - le bilan du jour affiche quatre lignes de même forme (`LigneMacro`, table
+    `MACROS`) : pastille de couleur, nom, « mangé / objectif », et une barre dès
+    qu'un objectif est fixé. Sans objectif, la ligne montre quand même ce qui a
+    été mangé ;
+  - le formulaire d'objectif a quatre champs avec un LIBELLÉ chacun (un
+    placeholder disparaît dès qu'on tape) ;
+  - la saisie « À la main » prend aussi glucides et lipides ;
+  - le total du brouillon d'une photo affiche G et L.
+- Couleurs : calories en or, protéines en bleu (inchangé), glucides en violet et
+  lipides en orangé — deux nouvelles clés `colors.macroGlucides` /
+  `colors.macroLipides` dans `src/theme.js`. Ce sont des DONNÉES, jamais des
+  boutons.
+- Tests : `test_api_nutrition.py` (objectifs : les quatre valeurs relues,
+  valeurs absurdes refusées en 422). Suite complète : **381 tests, tous OK.**
+- Vérifié dans le navigateur (390 px, serveur LOCAL) : objectifs 2400 / 160 /
+  280 / 75 enregistrés en base ; repas « Riz poulet » saisi à la main
+  (650 kcal, 45 / 80 / 15 g) → quatre barres remplies (650 / 2400 kcal,
+  45 / 160 g, 80 / 280 g, 15 / 75 g) et la ligne du journal « P 45 g · G 80 g ·
+  L 15 g ». Aucun débordement, zéro erreur console.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

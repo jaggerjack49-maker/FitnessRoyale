@@ -41,6 +41,34 @@ function Barre({ valeur, objectif, couleur }) {
   );
 }
 
+// LES QUATRE MACROS DU JOUR (11/11/2026, demande de Hafiz : « ajoute aussi les
+// glucides et les lipides »). Une ligne chacune, même forme pour les quatre :
+// la pastille de couleur, le nom, « mangé / objectif », et la barre dès qu'un
+// objectif est fixé. Sans objectif, la ligne montre quand même ce qui a été
+// mangé — c'était le cas des glucides et lipides jusqu'ici, en petit texte gris.
+const MACROS = [
+  { cle: 'kcal', total: 'kcal', libelle: 'Calories', unite: 'kcal', couleur: colors.or },
+  { cle: 'proteines', total: 'proteines_g', libelle: 'Protéines', unite: 'g', couleur: colors.accent },
+  { cle: 'glucides', total: 'glucides_g', libelle: 'Glucides', unite: 'g', couleur: colors.macroGlucides },
+  { cle: 'lipides', total: 'lipides_g', libelle: 'Lipides', unite: 'g', couleur: colors.macroLipides },
+];
+
+function LigneMacro({ macro, valeur, objectif }) {
+  return (
+    <View style={styles.macro}>
+      <View style={styles.enteteMacro}>
+        <View style={[styles.pastilleMacro, { backgroundColor: macro.couleur }]} />
+        <Text style={styles.libelleMacro}>{macro.libelle}</Text>
+        <Text style={styles.valeurMacro}>
+          <Text style={styles.chiffreMacro}>{Math.round(Number(valeur) || 0)}</Text>
+          {objectif ? ` / ${objectif}` : ''} {macro.unite}
+        </Text>
+      </View>
+      {objectif ? <Barre valeur={valeur} objectif={objectif} couleur={macro.couleur} /> : null}
+    </View>
+  );
+}
+
 export default function CarteNutrition({ moi, actif = true }) {
   const [journal, setJournal] = useState(null); // { repas, totaux, objectifs }
   const [analyseEnCours, setAnalyseEnCours] = useState(false);
@@ -51,7 +79,10 @@ export default function CarteNutrition({ moi, actif = true }) {
   const [editionObjectifs, setEditionObjectifs] = useState(false);
   const [champKcal, setChampKcal] = useState('');
   const [champProteines, setChampProteines] = useState('');
-  const [saisieManuelle, setSaisieManuelle] = useState(null); // { nom, kcal, proteines }
+  const [champGlucides, setChampGlucides] = useState('');
+  const [champLipides, setChampLipides] = useState('');
+  // { nom, kcal, proteines, glucides, lipides }
+  const [saisieManuelle, setSaisieManuelle] = useState(null);
 
   // Le « jour » est celui du TÉLÉPHONE (date locale), comme le calendrier.
   const jour = enISO(new Date());
@@ -142,6 +173,8 @@ export default function CarteNutrition({ moi, actif = true }) {
     const aliment = {
       nom: saisieManuelle.nom.trim(), kcal,
       proteines_g: nombreSaisi(saisieManuelle.proteines) ?? 0,
+      glucides_g: nombreSaisi(saisieManuelle.glucides) ?? 0,
+      lipides_g: nombreSaisi(saisieManuelle.lipides) ?? 0,
     };
     if (await ajouterAuJournal(saisieManuelle.nom, 'manuel', alimentsAEnvoyer({ aliments: [aliment] }))) {
       setSaisieManuelle(null);
@@ -162,16 +195,22 @@ export default function CarteNutrition({ moi, actif = true }) {
   function ouvrirObjectifs() {
     setChampKcal(journal?.objectifs?.kcal ? String(journal.objectifs.kcal) : '');
     setChampProteines(journal?.objectifs?.proteines ? String(journal.objectifs.proteines) : '');
+    setChampGlucides(journal?.objectifs?.glucides ? String(journal.objectifs.glucides) : '');
+    setChampLipides(journal?.objectifs?.lipides ? String(journal.objectifs.lipides) : '');
     setEditionObjectifs(true);
   }
 
   async function enregistrerObjectifs() {
     try {
-      const kcal = nombreSaisi(champKcal);
-      const proteines = nombreSaisi(champProteines);
+      const entier = (texte) => {
+        const n = nombreSaisi(texte);
+        return n === null ? null : Math.round(n);
+      };
       await api.changerObjectifsNutrition(moi.id, {
-        kcal: kcal === null ? null : Math.round(kcal),
-        proteines: proteines === null ? null : Math.round(proteines),
+        kcal: entier(champKcal),
+        proteines: entier(champProteines),
+        glucides: entier(champGlucides),
+        lipides: entier(champLipides),
       });
       setEditionObjectifs(false);
       await charger();
@@ -189,34 +228,46 @@ export default function CarteNutrition({ moi, actif = true }) {
     <View style={styles.carte}>
       <TexteIcone nom="couverts" taille={15} couleur={colors.or} style={styles.titre}>Nutrition — aujourd'hui</TexteIcone>
 
-      {/* ---- Bilan du jour ---- */}
-      <Text style={styles.ligneBilan}>
-        <Text style={styles.chiffre}>{totaux.kcal}</Text>
-        {objectifs.kcal ? ` / ${objectifs.kcal}` : ''} kcal
-        {'   ·   '}
-        <Text style={styles.chiffre}>{Math.round(totaux.proteines_g)}</Text>
-        {objectifs.proteines ? ` / ${objectifs.proteines}` : ''} g protéines
-      </Text>
-      {objectifs.kcal ? <Barre valeur={totaux.kcal} objectif={objectifs.kcal} couleur={colors.or} /> : null}
-      {objectifs.proteines ? (
-        <Barre valeur={totaux.proteines_g} objectif={objectifs.proteines} couleur={colors.accent} />
-      ) : null}
+      {/* ---- Bilan du jour : les quatre macros ---- */}
+      {MACROS.map((m) => (
+        <LigneMacro key={m.cle} macro={m} valeur={totaux[m.total]} objectif={objectifs[m.cle]} />
+      ))}
       <Text style={styles.indice}>
         {reste || 'Pas encore d\'objectif du jour.'}
-        {'  ·  '}Glucides {Math.round(totaux.glucides_g)} g · Lipides {Math.round(totaux.lipides_g)} g
       </Text>
 
       {!editionObjectifs ? (
         <TouchableOpacity onPress={ouvrirObjectifs}>
-          <TexteIcone nom="cible" taille={13} ecart={6} style={styles.lien}>{objectifs.kcal ? 'Modifier mon objectif du jour' : 'Fixer mon objectif du jour'}</TexteIcone>
+          <TexteIcone nom="cible" taille={13} ecart={6} style={styles.lien}>{MACROS.some((m) => objectifs[m.cle]) ? 'Modifier mon objectif du jour' : 'Fixer mon objectif du jour'}</TexteIcone>
         </TouchableOpacity>
       ) : (
         <View style={styles.bloc}>
+          {/* Chaque champ porte son LIBELLÉ : un placeholder disparaît dès
+              qu'on tape (leçon de l'écran de séance, 01/10/2026). Tous
+              facultatifs : un champ vide = pas d'objectif pour cette macro. */}
           <View style={styles.ligne}>
-            <TextInput style={[styles.champ, styles.champMoyen]} value={champKcal} onChangeText={setChampKcal}
-              keyboardType="numeric" placeholder="kcal (ex. 2400)" placeholderTextColor={colors.texteGris} />
-            <TextInput style={[styles.champ, styles.champMoyen]} value={champProteines} onChangeText={setChampProteines}
-              keyboardType="numeric" placeholder="protéines g (ex. 160)" placeholderTextColor={colors.texteGris} />
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>CALORIES (KCAL)</Text>
+              <TextInput style={styles.champ} value={champKcal} onChangeText={setChampKcal}
+                keyboardType="numeric" placeholder="ex. 2400" placeholderTextColor={colors.texteGris} />
+            </View>
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>PROTÉINES (G)</Text>
+              <TextInput style={styles.champ} value={champProteines} onChangeText={setChampProteines}
+                keyboardType="numeric" placeholder="ex. 160" placeholderTextColor={colors.texteGris} />
+            </View>
+          </View>
+          <View style={styles.ligne}>
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>GLUCIDES (G)</Text>
+              <TextInput style={styles.champ} value={champGlucides} onChangeText={setChampGlucides}
+                keyboardType="numeric" placeholder="ex. 280" placeholderTextColor={colors.texteGris} />
+            </View>
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>LIPIDES (G)</Text>
+              <TextInput style={styles.champ} value={champLipides} onChangeText={setChampLipides}
+                keyboardType="numeric" placeholder="ex. 75" placeholderTextColor={colors.texteGris} />
+            </View>
           </View>
           <View style={styles.ligne}>
             <TouchableOpacity style={styles.boutonOr} onPress={enregistrerObjectifs}>
@@ -249,7 +300,7 @@ export default function CarteNutrition({ moi, actif = true }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.boutonBord, styles.boutonLarge]}
-              onPress={() => setSaisieManuelle({ nom: '', kcal: '', proteines: '' })}
+              onPress={() => setSaisieManuelle({ nom: '', kcal: '', proteines: '', glucides: '', lipides: '' })}
             >
               <LibelleIcone nom="crayon" taille={14} ecart={6} style={styles.boutonBordTexte}>À la main</LibelleIcone>
             </TouchableOpacity>
@@ -281,6 +332,14 @@ export default function CarteNutrition({ moi, actif = true }) {
             <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.proteines} keyboardType="numeric"
               placeholder="protéines g" placeholderTextColor={colors.texteGris}
               onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, proteines: t }))} />
+          </View>
+          <View style={styles.ligne}>
+            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.glucides} keyboardType="numeric"
+              placeholder="glucides g" placeholderTextColor={colors.texteGris}
+              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, glucides: t }))} />
+            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.lipides} keyboardType="numeric"
+              placeholder="lipides g" placeholderTextColor={colors.texteGris}
+              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, lipides: t }))} />
           </View>
           <View style={styles.ligne}>
             <TouchableOpacity style={styles.boutonOr} onPress={enregistrerManuel} disabled={envoiEnCours}>
@@ -319,6 +378,7 @@ export default function CarteNutrition({ moi, actif = true }) {
           ))}
           <Text style={styles.ligneBilan}>
             Total : <Text style={styles.chiffre}>{totauxBrouillon.kcal}</Text> kcal · P {totauxBrouillon.proteines_g} g
+            {' '}· G {totauxBrouillon.glucides_g} g · L {totauxBrouillon.lipides_g} g
           </Text>
           <Text style={styles.indice}>
             Confiance de l'IA : {LIBELLES_CONFIANCE[brouillon.confiance] || 'faible'}
@@ -381,6 +441,17 @@ const styles = StyleSheet.create({
   chiffre: { color: colors.or, fontWeight: '800', fontSize: 16 },
   piste: { height: 8, backgroundColor: colors.carteClaire, borderRadius: 4, marginTop: 6, overflow: 'hidden' },
   remplissage: { height: 8, borderRadius: 4 },
+  // Les quatre macros du bilan (11/11/2026).
+  macro: { marginTop: 8 },
+  enteteMacro: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pastilleMacro: { width: 8, height: 8, borderRadius: 4 },
+  libelleMacro: { flex: 1, color: colors.texteDoux, fontSize: 13, fontWeight: '700' },
+  valeurMacro: { color: colors.texteGris, fontSize: 13 },
+  chiffreMacro: { color: colors.texte, fontWeight: '800', fontSize: 15 },
+  champAvecLibelle: { flex: 1 },
+  libelleChamp: {
+    color: colors.texteGris, fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4,
+  },
   indice: { color: colors.texteGris, fontSize: 12, marginTop: 4 },
   texte: { color: colors.texte, fontSize: 14 },
   // `paddingVertical` ET PAS seulement `marginTop` : la marge n'agrandit pas

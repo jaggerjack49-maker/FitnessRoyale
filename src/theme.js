@@ -16,6 +16,11 @@ export const colors = {
   or: da.or,                 // couleur "Royale" — l'accent de marque
   accent: '#55c8f0',         // bleu clair de la maquette (statut « vérifié communauté »)
   vert: '#3DDC84',           // progression positive
+  // Les deux macros ajoutées à la Nutrition (11/11/2026) : des teintes bien
+  // distinctes de l'or (calories) et du bleu (protéines), pour qu'on lise
+  // chaque barre d'un coup d'œil. Ce sont des DONNÉES, jamais des boutons.
+  macroGlucides: '#b06ef5',  // violet
+  macroLipides: '#f08a4b',   // orangé
   rouge: '#ff5470',          // défaite / négatif (rouge de la maquette)
   texte: da.texte,           // blanc cassé, plus doux qu'un blanc pur
   texteDoux: da.texteDoux,   // entre le blanc et le gris : du texte de lecture

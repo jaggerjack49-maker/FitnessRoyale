@@ -196,16 +196,24 @@ class TestApiNutrition(unittest.TestCase):
 
     def test_objectifs(self):
         h, j = self._inscrire("EmmaObjectif")
-        self.assertEqual(self.client.get(f"/joueurs/{j}/objectifs-nutrition", headers=h).json(),
-                         {"kcal": None, "proteines": None})
+        vide = {"kcal": None, "proteines": None, "glucides": None, "lipides": None}
+        self.assertEqual(self.client.get(f"/joueurs/{j}/objectifs-nutrition", headers=h).json(), vide)
         r = self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
                             json={"kcal": 2400, "proteines": 160})
-        self.assertEqual(r.json(), {"kcal": 2400, "proteines": 160})
+        self.assertEqual(r.json(), {**vide, "kcal": 2400, "proteines": 160})
+        # Glucides et lipides (11/11/2026).
+        r = self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
+                            json={"kcal": 2400, "proteines": 160, "glucides": 280, "lipides": 75})
+        self.assertEqual(r.json(), {"kcal": 2400, "proteines": 160, "glucides": 280, "lipides": 75})
         r = self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
                             json={"kcal": 2200, "proteines": None})
-        self.assertEqual(r.json(), {"kcal": 2200, "proteines": None})
+        self.assertEqual(r.json(), {**vide, "kcal": 2200})
         self.assertEqual(self.client.get(f"/joueurs/{j}/repas", headers=h).json()["objectifs"],
-                         {"kcal": 2200, "proteines": None})
+                         {**vide, "kcal": 2200})
+        self.assertEqual(self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
+                                         json={"glucides": -1}).status_code, 422)
+        self.assertEqual(self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
+                                         json={"lipides": 900}).status_code, 422)
         self.assertEqual(self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=h,
                                          json={"kcal": 50}).status_code, 422)
         self.assertEqual(self.client.put(f"/joueurs/{j}/objectifs-nutrition", headers=self.h_bob,

@@ -1786,6 +1786,9 @@ class NouveauRepas(BaseModel):
 class ObjectifsNutrition(BaseModel):
     kcal: int | None = Field(default=None, ge=800, le=8000)
     proteines: int | None = Field(default=None, ge=0, le=500)
+    # Glucides et lipides (11/11/2026) — facultatifs comme les deux autres.
+    glucides: int | None = Field(default=None, ge=0, le=1000)
+    lipides: int | None = Field(default=None, ge=0, le=500)
 
 
 def _jour_valide(jour: str | None) -> str:
@@ -1888,7 +1891,9 @@ def lire_objectifs_nutrition(joueur_id: int, courant: dict = Depends(auth.utilis
 @app.put("/joueurs/{joueur_id}/objectifs-nutrition")
 def changer_objectifs_nutrition(joueur_id: int, objectifs: ObjectifsNutrition,
                                 courant: dict = Depends(auth.utilisateur_courant)):
-    """L'objectif du jour (kcal et protéines). Un champ vide = pas d'objectif."""
+    """L'objectif du jour (kcal, protéines, glucides, lipides). Un champ vide
+    = pas d'objectif."""
     auth.verifier_proprietaire(courant, joueur_id)
-    db.definir_objectifs_nutrition(joueur_id, objectifs.kcal, objectifs.proteines)
+    db.definir_objectifs_nutrition(joueur_id, objectifs.kcal, objectifs.proteines,
+                                   objectifs.glucides, objectifs.lipides)
     return db.objectifs_nutrition(joueur_id)
