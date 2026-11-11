@@ -5543,6 +5543,74 @@ qu'en petit texte gris, sans objectif ni barre.
   45 / 160 g, 80 / 280 g, 15 / 75 g) et la ligne du journal « P 45 g · G 80 g ·
   L 15 g ». Aucun débordement, zéro erreur console.
 
+## Séance : retirer un exercice + noter le RIR ressenti — 11/11/2026
+
+Demande de Hafiz : « supprimer un exercice pendant la séance libre et pouvoir
+noter l'effort ressenti pendant la série via le RIR ».
+
+### Retirer un exercice de la séance
+
+- Une croix ronde (40 px + `hitSlop`) à droite du nom de chaque exercice, dans
+  l'écran de séance — séance libre ET séance d'un programme.
+- Exercice SANS série notée : retiré tout de suite (rien à perdre). AVEC des
+  séries : question en deux temps (`ConfirmationSuppression`, « Retirer « X » de
+  la séance ? Sa série notée sera effacée. ») — sur un programme, elle précise
+  que le programme, lui, ne change pas.
+- `retirerExerciceDeSeance` retire l'exercice, ses séries, ses champs de saisie
+  et une édition de série en cours. La séance en cours étant mémorisée à chaque
+  changement, le retrait survit à une relance de l'app.
+
+### Le RIR ressenti, série par série
+
+- RIR = les reps qu'on avait encore en réserve (0 = jusqu'à l'échec). À NE PAS
+  CONFONDRE avec `rir_cible` du programme (l'effort VISÉ, 08/11/2026) : celui-ci
+  est l'effort RESSENTI, noté après coup.
+- Serveur : colonne `rir` sur `series_journal` (migration additive, NULL = pas
+  noté), champ facultatif `rir` (0 à 10) dans `SerieLoggee`, inséré par
+  `enregistrer_entrainement_complet` et relu dans l'historique.
+  **0 est une vraie valeur** (test dédié).
+- App : une 3e case « RIR » à côté de RÉPÉTITIONS et CHARGE (« — » si vide), une
+  ligne d'aide sous le PREMIER exercice seulement, et la série s'affiche
+  « 100 kg × 8 reps · RIR 2 » pendant la séance ET dans le détail d'une séance
+  passée (`libelleSerie`, une seule définition). Modifiable en touchant la série.
+- Le RIR est VIDÉ après chaque série, contrairement aux reps et à la charge
+  (gardées depuis le 02/09/2026) : l'effort change d'une série à l'autre, le
+  garder ferait noter une valeur qu'on n'a pas ressentie.
+- `lireRirSaisi` (`src/logic/seanceLibre.js`) : vide → `null` (pas noté), entier
+  0-10 → nombre, tout le reste → `undefined` (refusé). Elle sert à la saisie, à
+  la modification ET à l'envoi (`terminerSeance`), qui ne peuvent donc pas
+  diverger.
+- Rien n'utilise encore le RIR pour CALCULER (suggestion de charge, stats) :
+  il est noté et relu, c'est tout. Piste si besoin : ne monter la charge que si
+  le RIR des dernières séries le permet.
+
+### Au passage : une saisie refusée se voit enfin
+
+« Entre des reps et un poids valides » partait dans le message d'erreur GÉNÉRAL,
+tout en bas de l'écran de séance — caché sous le minuteur de repos et la barre
+d'onglets (mesuré : y = 736 sur 800). Les deux refus de saisie (reps/poids, RIR)
+s'affichent maintenant DANS la carte de l'exercice, sous ses champs
+(`erreurSaisie`).
+
+### Vérifié
+
+`test_api_rir_serie.py` (4 cas : rangé et relu, facultatif, 0 gardé, -1/11 →
+422) ; harnais `seance_libre` (+11 cas) — **2 mutations vues échouer** (RIR 11
+accepté, RIR non affiché). Suite complète : **385 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : Curl sans série retiré d'un
+coup ; Squat et Dips avec séries → question, Dips retiré après « Oui, retirer » ;
+RIR 12 refusé avec le message sous les champs de Curl ; séries « RIR 2 » et
+« RIR 0 » puis la 2e modifiée en « RIR 1 » ; « Terminer » envoie seulement
+Squat avec `rir: 2` et `rir: 1`, relus en base et affichés dans le détail de
+l'historique. Zéro erreur console. ⚠️ Demande un NOUVEL APK (et le serveur
+déployé avant, pour la colonne).
+
+⚠️ INCIDENT DE MÉTHODE : une passe de mutation a fini par `git checkout` sur
+`seanceLibre.js`, qui portait des changements NON COMMITÉS — les deux nouvelles
+fonctions ont été effacées, puis restaurées depuis la copie faite avant la
+mutation. Pour restaurer après une mutation : la COPIE, jamais `git checkout`
+tant que le fichier a du travail en cours.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5555,7 +5623,7 @@ qu'en petit texte gris, sans objectif ni barre.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (381 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (385 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

@@ -312,6 +312,9 @@ class SerieLoggee(BaseModel):
     numero_serie: int = Field(gt=0, le=50)
     reps: int = Field(gt=0, le=200)
     poids: float = Field(ge=0, le=500)
+    # L'effort RESSENTI (11/11/2026) : combien de répétitions on avait encore
+    # en réserve. Facultatif ; 0 = jusqu'à l'échec, une vraie valeur.
+    rir: int | None = Field(default=None, ge=0, le=10)
 
 
 class NouvelEntrainement(BaseModel):

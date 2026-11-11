@@ -3,7 +3,7 @@
 // rend le résultat en JSON pour test_seance_libre.py.
 import {
   secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
-  dureeReelleMinutes,
+  dureeReelleMinutes, lireRirSaisi, libelleSerie,
 } from '../../../src/logic/seanceLibre.js';
 
 const MIN = 60_000;
@@ -45,6 +45,22 @@ const cas = [
     () => dureeReelleMinutes(T0, [null, 'texte', { instant: 'abc' }], T0 + 10 * MIN), null],
   ['durée : pas une liste → pas de mesure',
     () => dureeReelleMinutes(T0, "n'importe quoi", T0 + 10 * MIN), null],
+
+  // ---- Le RIR ressenti d'une série (11/11/2026) ----
+  ["RIR : vide = pas noté", () => [lireRirSaisi(''), lireRirSaisi('  '), lireRirSaisi(null),
+    lireRirSaisi(undefined)], [null, null, null, null]],
+  ["RIR : 0 est une vraie valeur (l'échec)", () => lireRirSaisi('0'), 0],
+  ["RIR : un nombre déjà numérique passe", () => lireRirSaisi(2), 2],
+  ["RIR : 10 accepté, 11 refusé", () => [lireRirSaisi('10'), lireRirSaisi('11')], [10, undefined]],
+  ["RIR : texte, négatif, décimal refusés", () => [lireRirSaisi('abc'), lireRirSaisi('-1'),
+    lireRirSaisi('2.5'), lireRirSaisi('2,5')], [undefined, undefined, undefined, undefined]],
+  ["RIR : espaces autour tolérés", () => lireRirSaisi(' 3 '), 3],
+  ["libellé : sans RIR", () => libelleSerie({ poids: 100, reps: 8 }), '100 kg × 8 reps'],
+  ["libellé : RIR null = pas affiché", () => libelleSerie({ poids: 100, reps: 8, rir: null }),
+    '100 kg × 8 reps'],
+  ["libellé : avec RIR", () => libelleSerie({ poids: 100, reps: 8, rir: 2 }), '100 kg × 8 reps · RIR 2'],
+  ["libellé : RIR 0 affiché", () => libelleSerie({ poids: 60, reps: 12, rir: 0 }), '60 kg × 12 reps · RIR 0'],
+  ["libellé : données abîmées", () => [libelleSerie(null), libelleSerie('texte')], ['', '']],
 
   // ---- L'objectif déduit ----
   ['objectif : séries faites + reps de la dernière',

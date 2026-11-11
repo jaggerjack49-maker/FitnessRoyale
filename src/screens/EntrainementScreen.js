@@ -52,7 +52,7 @@ import {
 } from '../logic/rattrapage';
 import {
   secondesEcoulees, chronoLisible, objectifDepuisSeries, exercicesPourProgramme,
-  dureeReelleMinutes,
+  dureeReelleMinutes, lireRirSaisi, libelleSerie,
 } from '../logic/seanceLibre';
 import { reposDe, prochaineEtape, libelleEtape } from '../logic/repos';
 import {
@@ -992,6 +992,13 @@ export default function EntrainementScreen({
   const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
   // Quelle série est ouverte en modification : `${exercice}#${index}` ou null.
   const [serieEnEdition, setSerieEnEdition] = useState(null);
+  // L'exercice dont on demande le retrait de la séance (11/11/2026) : la
+  // question n'est posée que s'il a déjà des séries notées.
+  const [exerciceARetirer, setExerciceARetirer] = useState(null);
+  // Une saisie de série refusée (11/11/2026) : { exercice, message }. Le
+  // message s'affiche DANS la carte de l'exercice, sous ses champs — affiché
+  // en bas de l'écran, il finissait caché sous le minuteur de repos.
+  const [erreurSaisie, setErreurSaisie] = useState(null);
 
   // Renommages d'exercices détectés au dernier enregistrement d'une séance,
   // en attente de la réponse « partout ou seulement ici ? ».
@@ -2394,10 +2401,17 @@ export default function EntrainementScreen({
     const reps = parseInt(saisie.reps, 10);
     const poids = parseFloat((saisie.poids || '').replace(',', '.'));
     if (isNaN(reps) || reps <= 0 || isNaN(poids) || poids < 0) {
-      setErreur('Entre des reps et un poids valides.');
+      setErreurSaisie({ exercice, message: 'Entre des reps et un poids valides.' });
       return;
     }
-    setErreur(null);
+    // Le RIR ressenti (11/11/2026) : facultatif, mais s'il est tapé il doit
+    // être un entier de 0 à 10.
+    const rir = lireRirSaisi(saisie.rir);
+    if (rir === undefined) {
+      setErreurSaisie({ exercice, message: 'Le RIR est un nombre de 0 à 10 (les reps que tu avais encore en réserve).' });
+      return;
+    }
+    setErreurSaisie(null);
     setSeriesLoggees((s) => {
       const existantes = s[exercice] || [];
       return {
@@ -2410,7 +2424,7 @@ export default function EntrainementScreen({
           // `instant` (10/11/2026) : QUAND cette série a été notée. Il sert à
           // mesurer la durée réelle de la séance (dureeReelleMinutes) et, comme
           // `jour`, il ne part jamais tel quel au serveur.
-          { numero_serie: existantes.length + 1, reps, poids, jour: aujourdhui(), instant: Date.now() },
+          { numero_serie: existantes.length + 1, reps, poids, rir, jour: aujourdhui(), instant: Date.now() },
         ],
       };
     });
@@ -2418,8 +2432,11 @@ export default function EntrainementScreen({
     // 02/09/2026) : les séries d'un même exercice se font presque toujours à
     // la même charge et au même nombre de reps. Il n'y a donc plus qu'à
     // toucher « + Série », et à corriger un champ seulement quand ça change.
+    // Le RIR, lui, est VIDÉ : l'effort change d'une série à l'autre (on
+    // finit souvent plus près de l'échec), le garder ferait noter une valeur
+    // qu'on n'a pas vraiment ressentie.
     setChampsSaisie((c) => ({
-      ...c, [exercice]: { reps: String(reps), poids: String(poids) },
+      ...c, [exercice]: { reps: String(reps), poids: String(poids), rir: '' },
     }));
     // LE REPOS SE LANCE TOUT SEUL (08/11/2026, demande de Hafiz) : la durée
     // fixée dans le programme pour CET exercice, sinon 1 min 30. Un repos à 0
@@ -2454,6 +2471,35 @@ export default function EntrainementScreen({
 
   // On renumérote après coup : sans ça, supprimer la série 2 laisserait
   // « Série 1, Série 3 » à l'écran ET dans ce qui part au serveur.
+  // RETIRER UN EXERCICE DE LA SÉANCE (11/11/2026, demande de Hafiz : « on
+  // doit pouvoir supprimer un exercice pendant la séance libre »). Il ne
+  // touche QUE la séance en cours : un programme suivi n'est pas modifié.
+  // Ses séries notées partent avec lui — d'où la question posée avant, dès
+  // qu'il en a (`exerciceARetirer`).
+  function retirerExerciceDeSeance(exercice) {
+    setExerciceARetirer(null);
+    setSerieEnEdition(null);
+    setExercicesSession((l) => l.filter((e) => e !== exercice));
+    setSeriesLoggees((tout) => {
+      const copie = { ...tout };
+      delete copie[exercice];
+      return copie;
+    });
+    setChampsSaisie((c) => {
+      const copie = { ...c };
+      delete copie[exercice];
+      return copie;
+    });
+  }
+
+  function demanderRetraitExercice(exercice) {
+    if ((seriesLoggees[exercice] || []).length === 0) {
+      retirerExerciceDeSeance(exercice);
+    } else {
+      setExerciceARetirer(exercice);
+    }
+  }
+
   function supprimerSerie(exercice, index) {
     setSerieEnEdition(null);
     setSeriesLoggees((tout) => {
@@ -2476,7 +2522,10 @@ export default function EntrainementScreen({
       if (!serie) return tout;
       const reps = Math.max(1, parseInt(serie.reps, 10) || 1);
       const poids = Math.max(0, parseFloat(String(serie.poids).replace(',', '.')) || 0);
-      series[index] = { ...serie, reps, poids };
+      // Un RIR illisible n'est pas gardé : mieux vaut « pas noté » qu'un faux.
+      const rirLu = lireRirSaisi(serie.rir);
+      const rir = rirLu === undefined ? null : rirLu;
+      series[index] = { ...serie, reps, poids, rir };
       return { ...tout, [exercice]: series };
     });
     setSerieEnEdition(null);
@@ -2509,7 +2558,15 @@ export default function EntrainementScreen({
     // On retire le `jour` de chaque série : il est propre à l'app (il a
     // servi à choisir la date ci-dessus), le serveur reçoit exactement les
     // mêmes champs qu'avant.
-    const toutesLesSeries = seriesSansJour(seriesDeLaSeance);
+    // Le RIR est remis au propre ici (11/11/2026) : une série encore OUVERTE
+    // en modification au moment de « Terminer » peut porter un RIR tapé de
+    // travers — envoyé tel quel, le serveur refuserait TOUTE la séance (422).
+    // Illisible = « pas noté », jamais un refus.
+    const toutesLesSeries = seriesSansJour(seriesDeLaSeance).map((s) => {
+      if (!s || typeof s !== 'object') return s;
+      const rir = lireRirSaisi(s.rir);
+      return { ...s, rir: rir === undefined ? null : rir };
+    });
     if (toutesLesSeries.length === 0) {
       setErreur('Ajoute au moins une série avant de terminer.');
       return;
@@ -2671,7 +2728,7 @@ export default function EntrainementScreen({
             <Text style={styles.nomExercice}>{groupe.exercice}</Text>
             {groupe.series.map((s, i) => (
               <Text key={i} style={styles.serieFaite}>
-                Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
+                Série {s.numero_serie} : {libelleSerie(s)}
               </Text>
             ))}
           </View>
@@ -2952,10 +3009,28 @@ export default function EntrainementScreen({
           return (
             <View key={exercice} style={styles.carteExercice}>
               {/* L'ORDRE DU PROGRAMME se lit (« 1. », « 2. »…), et le repos /
-                  RIR fixés sont rappelés sous le nom (08/11/2026). */}
-              <Text style={styles.nomExercice}>
-                <Text style={styles.numeroExercice}>{indexExo + 1}. </Text>{exercice}
-              </Text>
+                  RIR fixés sont rappelés sous le nom (08/11/2026). La croix
+                  retire l'exercice de CETTE séance (11/11/2026). */}
+              <View style={styles.enteteExerciceSeance}>
+                <Text style={[styles.nomExercice, { flex: 1 }]}>
+                  <Text style={styles.numeroExercice}>{indexExo + 1}. </Text>{exercice}
+                </Text>
+                <TouchableOpacity
+                  style={styles.boutonRetirerExercice}
+                  hitSlop={ZONE_TACTILE}
+                  accessibilityLabel={`Retirer ${exercice} de la séance`}
+                  onPress={() => demanderRetraitExercice(exercice)}
+                >
+                  <Icone nom="croix" taille={14} couleur={colors.texteGris} />
+                </TouchableOpacity>
+              </View>
+              <ConfirmationSuppression
+                actif={exerciceARetirer === exercice}
+                question={`Retirer « ${exercice} » de la séance ? ${seriesFaites.length > 1 ? `Ses ${seriesFaites.length} séries notées seront effacées.` : 'Sa série notée sera effacée.'}${programmeActif ? ' Ton programme, lui, ne change pas.' : ''}`}
+                libelleConfirmer="Oui, retirer"
+                onConfirmer={() => retirerExerciceDeSeance(exercice)}
+                onAnnuler={() => setExerciceARetirer(null)}
+              />
               {reglages ? (
                 <TexteIcone nom="horloge" taille={12} ecart={5} style={styles.reglagesSeance}>
                   {reglages.replace('repos', 'Repos')}{cibleExo?.rir_cible !== null
@@ -3026,7 +3101,7 @@ export default function EntrainementScreen({
                     <TouchableOpacity key={i} onPress={() => setSerieEnEdition(cle)}>
                       <View style={styles.ligneSerieFaite}>
                         <Text style={styles.serieFaite}>
-                          Série {s.numero_serie} : {s.poids} kg × {s.reps} reps
+                          Série {s.numero_serie} : {libelleSerie(s)}
                         </Text>
                         <Icone nom="crayon" taille={12} couleur={colors.texteGris} />
                       </View>
@@ -3051,6 +3126,15 @@ export default function EntrainementScreen({
                       keyboardType="numeric"
                       placeholder="Kg"
                       placeholderTextColor={colors.texteGris}
+                    />
+                    <TextInput
+                      style={[styles.champ, styles.champRir]}
+                      value={s.rir === null || s.rir === undefined ? '' : String(s.rir)}
+                      onChangeText={(v) => modifierSerie(exercice, i, 'rir', v)}
+                      keyboardType="numeric"
+                      placeholder="RIR"
+                      placeholderTextColor={colors.texteGris}
+                      maxLength={2}
                     />
                     <TouchableOpacity
                       style={styles.boutonAjouterSerie}
@@ -3106,6 +3190,20 @@ export default function EntrainementScreen({
                     placeholderTextColor={colors.texteGris}
                   />
                 </View>
+                {/* Le RIR RESSENTI (11/11/2026) — facultatif, vidé après
+                    chaque série. Plus étroit : un ou deux chiffres. */}
+                <View style={styles.colonneChampRir}>
+                  <Text style={styles.libelleChampSerie}>RIR</Text>
+                  <TextInput
+                    style={[styles.champ, styles.champSaisieSerie]}
+                    value={saisie.rir || ''}
+                    onChangeText={(v) => majChampSaisie(exercice, 'rir', v)}
+                    keyboardType="numeric"
+                    placeholder="—"
+                    placeholderTextColor={colors.texteGris}
+                    maxLength={2}
+                  />
+                </View>
                 <TouchableOpacity
                   style={[styles.boutonAjouterSerie, styles.boutonSerieAligne]}
                   onPress={() => ajouterSerie(exercice)}
@@ -3113,6 +3211,18 @@ export default function EntrainementScreen({
                   <LibelleIcone nom="plus" taille={13} ecart={5} style={styles.boutonAjouterSerieTexte}>Série</LibelleIcone>
                 </TouchableOpacity>
               </View>
+              {/* L'explication du RIR, sous le PREMIER exercice seulement :
+                  répétée sous chacun, elle encombrerait l'écran de séance. */}
+              {erreurSaisie && erreurSaisie.exercice === exercice ? (
+                <TexteIcone nom="alerte" taille={13} hautAligne style={styles.erreurSaisie}>
+                  {erreurSaisie.message}
+                </TexteIcone>
+              ) : null}
+              {indexExo === 0 ? (
+                <Text style={styles.aideRir}>
+                  RIR = les reps que tu avais encore en réserve (0 = jusqu'à l'échec). Facultatif.
+                </Text>
+              ) : null}
             </View>
           );
         })}
@@ -5202,6 +5312,18 @@ const styles = StyleSheet.create({
   // s'aligner sur le BAS des champs, pas sur le milieu de la colonne.
   ligneAjoutSerie: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: espacement.s },
   colonneChampSerie: { flex: 1 },
+  // Le RIR (11/11/2026) : un ou deux chiffres, une colonne plus étroite.
+  colonneChampRir: { width: 58 },
+  champRir: { width: 52 },
+  aideRir: { color: colors.texteGris, fontSize: 11, marginTop: 6, lineHeight: 15 },
+  erreurSaisie: { color: colors.rouge, fontSize: 13, marginTop: 8, lineHeight: 18 },
+  // Le nom de l'exercice et sa croix de retrait sur la même ligne : le nom
+  // garde toute la place qu'il lui faut (il passe à la ligne, jamais écrasé).
+  enteteExerciceSeance: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  boutonRetirerExercice: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.carteClaire, borderWidth: 1, borderColor: colors.bordure,
+  },
   libelleChampSerie: {
     color: colors.texteGris, fontSize: 10, fontWeight: '800',
     letterSpacing: 1, marginBottom: 4,

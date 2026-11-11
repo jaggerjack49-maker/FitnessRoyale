@@ -70,6 +70,39 @@ export function dureeReelleMinutes(debutMs, series, finMs) {
 }
 
 // ---------------------------------------------------------------------------
+// LE RIR RESSENTI D'UNE SÉRIE (11/11/2026)
+// ---------------------------------------------------------------------------
+// Demande de Hafiz : « noter l'effort ressenti pendant la série via le RIR ».
+// Le RIR (« reps in reserve ») = combien de répétitions on avait encore en
+// réserve : 0 = jusqu'à l'échec. FACULTATIF à chaque série.
+// À ne pas confondre avec le RIR VISÉ d'un programme (`rir_cible`).
+
+export const RIR_MAX = 10;
+
+// Ce qu'on a tapé dans le champ RIR :
+//   - champ vide            → null      (pas noté, c'est permis) ;
+//   - un entier de 0 à 10   → ce nombre (0 est une VRAIE valeur : l'échec) ;
+//   - n'importe quoi d'autre → undefined (refusé : l'écran le dit).
+export function lireRirSaisi(texte) {
+  const brut = String(texte ?? '').trim();
+  if (brut === '') return null;
+  if (!/^\d{1,2}$/.test(brut)) return undefined;
+  const n = parseInt(brut, 10);
+  return n >= 0 && n <= RIR_MAX ? n : undefined;
+}
+
+// « 100 kg × 8 reps · RIR 2 » — UNE SEULE écriture d'une série, pour l'écran
+// de séance ET le détail d'une séance passée.
+export function libelleSerie(serie) {
+  if (!serie || typeof serie !== 'object') return '';
+  const base = `${serie.poids} kg × ${serie.reps} reps`;
+  const rir = Number(serie.rir);
+  const aRir = serie.rir !== null && serie.rir !== undefined && serie.rir !== ''
+    && Number.isFinite(rir);
+  return aRir ? `${base} · RIR ${rir}` : base;
+}
+
+// ---------------------------------------------------------------------------
 // D'UNE SÉANCE À UN PROGRAMME
 // ---------------------------------------------------------------------------
 

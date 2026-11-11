@@ -511,6 +511,12 @@ def initialiser():
         # pas pu être mesurée honnêtement (voir src/logic/seanceLibre.js).
         if not _colonne_existe(conn, "entrainements", "duree_minutes"):
             conn.execute("ALTER TABLE entrainements ADD COLUMN duree_minutes INTEGER")
+        # Le RIR RESSENTI d'une série (11/11/2026, demande de Hafiz : « noter
+        # l'effort ressenti pendant la série via le RIR »). Facultatif : NULL
+        # quand on ne l'a pas noté. À ne pas confondre avec `rir_cible` de
+        # `programme_exercices`, qui est l'effort VISÉ par le programme.
+        if not _colonne_existe(conn, "series_journal", "rir"):
+            conn.execute("ALTER TABLE series_journal ADD COLUMN rir INTEGER")
         # LE TABLEAU DE PROGRESSION (04/10/2026) — trois ajouts, tous additifs.
         # 1) Une FOURCHETTE de reps (« 5 - 10 ») : `reps_cibles` reste le bas,
         #    `reps_cibles_max` le haut. NULL = objectif simple, comportement
@@ -2069,7 +2075,7 @@ def _lire_entrainement(conn, entrainement_id: int) -> dict | None:
     entrainement = dict(ligne)
     entrainement["series"] = [
         dict(r) for r in conn.execute(
-            "SELECT exercice, numero_serie, reps, poids FROM series_journal "
+            "SELECT exercice, numero_serie, reps, poids, rir FROM series_journal "
             "WHERE entrainement_id = ? ORDER BY id",
             (entrainement_id,),
         )
@@ -2167,10 +2173,11 @@ def enregistrer_entrainement_complet(joueur_id: int, programme_id: int | None, j
         ).lastrowid
         if series:
             conn.execute(
-                "INSERT INTO series_journal (entrainement_id, exercice, numero_serie, reps, poids) "
-                "VALUES " + ", ".join(["(?, ?, ?, ?, ?)"] * len(series)),
+                "INSERT INTO series_journal (entrainement_id, exercice, numero_serie, reps, poids, "
+                "rir) VALUES " + ", ".join(["(?, ?, ?, ?, ?, ?)"] * len(series)),
                 tuple(v for s in series for v in (
-                    entrainement_id, s["exercice"], s["numero_serie"], s["reps"], s["poids"])),
+                    entrainement_id, s["exercice"], s["numero_serie"], s["reps"], s["poids"],
+                    s.get("rir"))),
             )
         # La séance du jour (même règle que `enregistrer_seance_du_jour` : UNE
         # par jour, minutes additionnées), dans la même transaction.
@@ -2213,7 +2220,7 @@ def entrainements_du_joueur(joueur_id: int) -> list:
         ids = [s["id"] for s in seances]
         par_seance = {}
         for r in conn.execute(
-            "SELECT entrainement_id, exercice, numero_serie, reps, poids FROM series_journal "
+            "SELECT entrainement_id, exercice, numero_serie, reps, poids, rir FROM series_journal "
             f"WHERE entrainement_id IN ({_marques(len(ids))}) ORDER BY id",
             tuple(ids),
         ):
