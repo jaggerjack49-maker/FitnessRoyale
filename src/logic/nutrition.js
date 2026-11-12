@@ -98,3 +98,59 @@ export function libelleReste(consomme, objectif, unite) {
   const reste = Math.round(o - nombrePositif(consomme));
   return reste >= 0 ? `Il te reste ${reste} ${unite}` : `Objectif dépassé de ${-reste} ${unite}`;
 }
+
+// ---------------------------------------------------------------------------
+// LE JOURNAL NUTRITION (12/11/2026, demande de Hafiz : « il faut un log pour
+// la nutrition »). Les totaux de chaque jour viennent du serveur
+// (GET /joueurs/{id}/nutrition/historique) ; ici, seulement ce qu'on en tire.
+
+const RE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+// Le jour 'AAAA-MM-JJ' décalé de n jours (n négatif = dans le passé).
+// Calcul en UTC, volontairement : une date ISO est un JOUR, pas un instant —
+// ni fuseau ni changement d'heure ne peuvent faire sauter un jour (même règle
+// que le bloc, 06/10/2026). null pour une date illisible.
+export function decalerJour(jourISO, n) {
+  const m = RE_DATE.exec(String(jourISO ?? ''));
+  const decalage = Number(n);
+  if (!m || !Number.isFinite(decalage)) return null;
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + Math.round(decalage) * 86400000;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  const mois = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const jour = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${mois}-${jour}`;
+}
+
+// La moyenne des jours NOTÉS (un jour sans repas n'est pas un jour à 0 kcal :
+// c'est un jour où l'on n'a rien noté — le compter ferait mentir la moyenne,
+// même règle que la durée moyenne des séances du 10/11/2026).
+// { nbJours, kcal, proteines_g, glucides_g, lipides_g } ou null sans aucun jour.
+export function moyennesNutrition(jours) {
+  const notes = (Array.isArray(jours) ? jours : []).filter(
+    (j) => j && typeof j === 'object' && Number(j.nb_repas) > 0,
+  );
+  if (notes.length === 0) return null;
+  const somme = (cle) => notes.reduce((t, j) => t + nombrePositif(j[cle]), 0);
+  return {
+    nbJours: notes.length,
+    kcal: Math.round(somme('kcal') / notes.length),
+    proteines_g: Math.round(somme('proteines_g') / notes.length),
+    glucides_g: Math.round(somme('glucides_g') / notes.length),
+    lipides_g: Math.round(somme('lipides_g') / notes.length),
+  };
+}
+
+// Où en est une journée par rapport à son objectif de calories ?
+// 'objectif' à ±10 % près, sinon 'sous' ou 'dessus' ; null sans objectif.
+// Le ±10 % est assumé : personne ne mange au kcal près, et une estimation
+// photo n'est de toute façon pas plus précise que ça.
+export const TOLERANCE_OBJECTIF = 0.1;
+export function etatDuJour(kcal, objectif) {
+  const o = Number(objectif);
+  if (!Number.isFinite(o) || o <= 0) return null;
+  const v = nombrePositif(kcal);
+  if (v < o * (1 - TOLERANCE_OBJECTIF)) return 'sous';
+  if (v > o * (1 + TOLERANCE_OBJECTIF)) return 'dessus';
+  return 'objectif';
+}

@@ -5611,6 +5611,72 @@ fonctions ont été effacées, puis restaurées depuis la copie faite avant la
 mutation. Pour restaurer après une mutation : la COPIE, jamais `git checkout`
 tant que le fichier a du travail en cours.
 
+## Nutrition : naviguer de jour en jour + un JOURNAL des 30 derniers jours — 12/11/2026
+
+Retour de Hafiz : « on ne peut toujours pas noter les glucides et les lipides à la main ni
+même fixer les objectifs, et il faut un log pour la nutrition ».
+
+- ⚠️ LA PREMIÈRE MOITIÉ N'ÉTAIT PAS UN BUG : la mise à jour glucides/lipides (commit du
+  11/11/2026) était commitée mais PAS POUSSÉE — le site web et l'APK tournaient donc sur
+  l'ancienne version. Le code marchait (vérifié le 11/11). LEÇON : quand Hafiz dit « toujours
+  pas », vérifier d'abord `git log origin/master..HEAD` avant de chercher un bug.
+- La saisie « À la main » porte maintenant un LIBELLÉ par champ (NOM, CALORIES, PROTÉINES,
+  GLUCIDES, LIPIDES), comme les objectifs : avec des placeholders seuls, on ne voyait plus quel
+  champ était lequel dès qu'on tapait. « Seuls le nom et les calories sont obligatoires. »
+  Le lien d'objectifs dit enfin ce qu'il règle (« Fixer mes objectifs (calories, protéines,
+  glucides, lipides) »).
+
+### Le jour affiché se choisit (< jour >)
+
+- La carte n'est plus figée sur aujourd'hui : flèches de 44 px pour reculer d'un jour (jamais
+  dans le futur, la flèche droite s'éteint sur aujourd'hui), « Revenir à aujourd'hui ».
+- Sur un jour passé on peut AJOUTER (photo ou à la main) ou RETIRER un repas : le repas part
+  avec la date du jour AFFICHÉ (`date: jour` dans `ajouterAuJournal`) — c'est ce qui permet de
+  noter un repas oublié la veille.
+- Changer de jour vide ce qui était en cours (brouillon photo, saisie, suppression armée) :
+  sinon un repas commencé pour lundi partirait sur mardi.
+- Le titre « Nutrition » de la carte a disparu (doublon de l'en-tête de l'écran) : c'est le
+  JOUR qui titre la carte.
+
+### Le journal (`GET /joueurs/{id}/nutrition/historique?jours=30&jusqu_au=AAAA-MM-JJ`)
+
+- Serveur : `db.bilans_nutrition` — UNE requête `GROUP BY date` (somme des kcal et macros,
+  nombre de repas), quel que soit le nombre de jours. Fenêtre de 1 à 90 jours (400 sinon),
+  bornes incluses ; `jusqu_au` = le jour LOCAL du téléphone. Un jour sans repas n'a pas de
+  ligne. Réservé au propriétaire.
+- Écran : une carte « Journal » sous la carte du jour — la MOYENNE des jours notés, puis une
+  ligne par jour (du plus récent au plus ancien) : date, nombre de repas, kcal / objectif avec
+  barre, badge « Objectif tenu » (±10 %) / « Sous l'objectif » / « Au-dessus », et P · G · L.
+  Toucher un jour l'affiche dans la carte du haut et REMONTE l'écran (`onRemonter`, qui
+  appelle `scrollTo` sur le ScrollView de la vue Nutrition — EntrainementScreen combine la ref
+  de `usePlaceDefilement` avec la sienne).
+- Les calculs vivent dans `src/logic/nutrition.js` (testés) :
+  - `decalerJour(iso, n)` en UTC (ni fuseau ni changement d'heure, comme le bloc) ;
+  - `moyennesNutrition(jours)` : moyenne des jours NOTÉS seulement — un jour sans repas n'est
+    pas un jour à 0 kcal (même règle que la durée moyenne des séances, 10/11/2026) ;
+  - `etatDuJour(kcal, objectif)` avec `TOLERANCE_OBJECTIF = 0.1`.
+- Le jour affiché et le journal sont chargés ensemble en `Promise.allSettled` : l'un peut
+  s'afficher si l'autre échoue (leçon du 16/09/2026). Ajouter/supprimer recharge les deux.
+- L'objectif utilisé pour les badges est l'objectif ACTUEL (un seul objectif est stocké, pas
+  d'historique d'objectifs) : changer son objectif reteinte tout le journal.
+
+### Vérifié
+
+`test_api_historique_nutrition.py` (6 cas : totaux par jour, fenêtre et bornes, compte vide,
+vie privée 403/401, bornes absurdes 400, UNE seule requête pour 1 ou 30 repas) + 7 cas dans
+`harnais_nutrition.mjs`. **4 mutations vues échouer** (moyenne qui compte les jours vides,
+tolérance haute retirée, décalage de date faux, borne de début exclue). Suite complète :
+**391 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : le journal affiche « Hier · 3 repas ·
+2750 / 2400 kcal · Au-dessus », « Lundi 9 novembre · 900 · Sous l'objectif », moyenne 2150 ;
+◀ ouvre hier avec ses 3 repas ; « Shaker whey » ajouté à la main sur hier → enregistré au
+11/11 en base, hier passe à 4 repas / 2970 kcal et la moyenne à 2223 ; toucher « Lundi 9
+novembre » l'affiche en haut et remonte l'écran (532 → 0). Aucun débordement, zéro erreur
+console.
+⚠️ PIÈGE DE VÉRIFICATION : `curl` dans Git Bash abîme les accents d'un corps JSON (« There
+was an error parsing the body ») — pas un bug du serveur : le même repas envoyé en vrai UTF-8
+(Python) passe. Poser les données de test avec Python, pas curl.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5623,7 +5689,7 @@ tant que le fichier a du travail en cours.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (385 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (391 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

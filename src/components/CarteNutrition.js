@@ -21,12 +21,37 @@ import * as api from '../api';
 import { enISO } from '../logic/rattrapage';
 import {
   ajusterPortion, alimentsAEnvoyer, brouillonDepuisAnalyse, libelleReste, progression,
-  totauxAliments,
+  totauxAliments, decalerJour, moyennesNutrition, etatDuJour,
 } from '../logic/nutrition';
+import { jourDeLaDate } from '../data/programmesStandards';
 
 // Assez pour que l'IA distingue les aliments, assez petit pour un envoi rapide.
 const LARGEUR_PHOTO = 1024;
 const LIBELLES_CONFIANCE = { faible: 'faible', moyenne: 'moyenne', elevee: 'élevée' };
+
+// Le JOURNAL couvre les 30 derniers jours (le serveur en accepte jusqu'à 90).
+const JOURS_JOURNAL = 30;
+const NOMS_MOIS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+// « Aujourd'hui », « Hier », sinon « Lundi 9 novembre ».
+function libelleJour(jourISO, aujourdhui) {
+  if (jourISO === aujourdhui) return "Aujourd'hui";
+  if (jourISO === decalerJour(aujourdhui, -1)) return 'Hier';
+  const date = new Date(`${jourISO}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return jourISO;
+  const nom = jourDeLaDate(date);
+  return `${nom.charAt(0).toUpperCase()}${nom.slice(1)} ${date.getDate()} ${NOMS_MOIS[date.getMonth()]}`;
+}
+
+// Le petit badge d'une journée du journal, selon son objectif de calories.
+const ETATS_JOUR = {
+  objectif: { texte: 'Objectif tenu', couleur: colors.vert },
+  sous: { texte: "Sous l'objectif", couleur: colors.accent },
+  dessus: { texte: 'Au-dessus', couleur: colors.rouge },
+};
 
 function nombreSaisi(texte) {
   const n = parseFloat(String(texte).replace(',', '.'));
@@ -69,8 +94,16 @@ function LigneMacro({ macro, valeur, objectif }) {
   );
 }
 
-export default function CarteNutrition({ moi, actif = true }) {
+// `onRemonter` : fait défiler l'écran tout en haut — toucher un jour du
+// journal (en bas) affiche ce jour dans la carte du haut, qu'il faut donc voir.
+export default function CarteNutrition({ moi, actif = true, onRemonter }) {
   const [journal, setJournal] = useState(null); // { repas, totaux, objectifs }
+  // Le jour AFFICHÉ (12/11/2026) : aujourd'hui par défaut, mais on peut
+  // revenir sur un jour passé pour le relire, ajouter un repas oublié ou en
+  // retirer un. Jamais dans le futur.
+  const aujourdhui = enISO(new Date());
+  const [jour, setJour] = useState(aujourdhui);
+  const [historique, setHistorique] = useState(null); // réponse de /nutrition/historique
   const [analyseEnCours, setAnalyseEnCours] = useState(false);
   const [brouillon, setBrouillon] = useState(null);
   const [message, setMessage] = useState(null); // { texte, erreur }
@@ -85,21 +118,38 @@ export default function CarteNutrition({ moi, actif = true }) {
   const [saisieManuelle, setSaisieManuelle] = useState(null);
 
   // Le « jour » est celui du TÉLÉPHONE (date locale), comme le calendrier.
-  const jour = enISO(new Date());
-
-  async function charger() {
-    try {
-      setJournal(await api.journalNutrition(moi.id, jour));
-    } catch (erreur) {
-      setMessage({ texte: `Journal non chargé : ${erreur.message}`, erreur: true });
-    }
+  // Le jour affiché ET le journal des 30 derniers jours, chargés ensemble :
+  // ajouter ou retirer un repas change les deux. `allSettled` : si l'un des
+  // deux échoue, l'autre s'affiche quand même (leçon du 16/09/2026).
+  async function charger(jourVoulu = jour) {
+    const [duJour, journalDesJours] = await Promise.allSettled([
+      api.journalNutrition(moi.id, jourVoulu),
+      api.historiqueNutrition(moi.id, aujourdhui, JOURS_JOURNAL),
+    ]);
+    if (duJour.status === 'fulfilled') setJournal(duJour.value);
+    if (journalDesJours.status === 'fulfilled') setHistorique(journalDesJours.value);
+    const echec = [duJour, journalDesJours].find((r) => r.status === 'rejected');
+    if (echec) setMessage({ texte: `Journal non chargé : ${echec.reason?.message}`, erreur: true });
   }
 
   // Rechargé à chaque retour sur l'onglet — même leçon que le bug du 16/09
   // (un premier chargement raté ne doit jamais rester raté).
   useEffect(() => {
-    if (actif) charger();
+    if (actif) charger(jour);
   }, [actif, moi.id, jour]);
+
+  // Changer de jour : on oublie ce qui était en cours sur l'ancien (brouillon,
+  // saisie, suppression armée), sinon un repas commencé pour lundi partirait
+  // sur mardi.
+  function allerAuJour(nouveau) {
+    if (!nouveau || nouveau > aujourdhui) return;
+    setJournal(null);
+    setBrouillon(null);
+    setSaisieManuelle(null);
+    setASupprimer(null);
+    setMessage(null);
+    setJour(nouveau);
+  }
 
   async function analyser(depuisGalerie) {
     setMessage(null);
@@ -223,10 +273,34 @@ export default function CarteNutrition({ moi, actif = true }) {
   const objectifs = journal?.objectifs || {};
   const reste = libelleReste(totaux.kcal, objectifs.kcal, 'kcal');
   const totauxBrouillon = brouillon ? totauxAliments(brouillon.aliments) : null;
+  const moyennes = moyennesNutrition(historique?.jours);
 
   return (
+    <>
     <View style={styles.carte}>
-      <TexteIcone nom="couverts" taille={15} couleur={colors.or} style={styles.titre}>Nutrition — aujourd'hui</TexteIcone>
+      {/* Plus de titre « Nutrition » ici : l'en-tête de l'écran le porte déjà
+          juste au-dessus. C'est le JOUR qui titre la carte. */}
+      {/* ---- Le jour affiché : < jour > (12/11/2026). On ne va jamais dans
+          le futur : la flèche de droite s'éteint sur aujourd'hui. ---- */}
+      <View style={styles.navJour}>
+        <TouchableOpacity style={styles.flecheJour} onPress={() => allerAuJour(decalerJour(jour, -1))}
+          accessibilityLabel="Jour précédent">
+          <Icone nom="chevron-gauche" taille={18} couleur={colors.or} />
+        </TouchableOpacity>
+        <View style={styles.centreJour}>
+          <Text style={styles.libelleJour}>{libelleJour(jour, aujourdhui)}</Text>
+          {jour !== aujourdhui ? (
+            <TouchableOpacity onPress={() => allerAuJour(aujourdhui)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.retourAujourdhui}>Revenir à aujourd'hui</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <TouchableOpacity style={[styles.flecheJour, jour >= aujourdhui && styles.flecheEteinte]}
+          disabled={jour >= aujourdhui} onPress={() => allerAuJour(decalerJour(jour, 1))}
+          accessibilityLabel="Jour suivant">
+          <Icone nom="chevron-droit" taille={18} couleur={jour >= aujourdhui ? colors.texteGris : colors.or} />
+        </TouchableOpacity>
+      </View>
 
       {/* ---- Bilan du jour : les quatre macros ---- */}
       {MACROS.map((m) => (
@@ -238,7 +312,7 @@ export default function CarteNutrition({ moi, actif = true }) {
 
       {!editionObjectifs ? (
         <TouchableOpacity onPress={ouvrirObjectifs}>
-          <TexteIcone nom="cible" taille={13} ecart={6} style={styles.lien}>{MACROS.some((m) => objectifs[m.cle]) ? 'Modifier mon objectif du jour' : 'Fixer mon objectif du jour'}</TexteIcone>
+          <TexteIcone nom="cible" taille={13} ecart={6} style={styles.lien}>{MACROS.some((m) => objectifs[m.cle]) ? 'Modifier mes objectifs' : 'Fixer mes objectifs (calories, protéines, glucides, lipides)'}</TexteIcone>
         </TouchableOpacity>
       ) : (
         <View style={styles.bloc}>
@@ -322,25 +396,44 @@ export default function CarteNutrition({ moi, actif = true }) {
       {/* ---- Saisie à la main (quand on connaît déjà les calories) ---- */}
       {saisieManuelle && (
         <View style={styles.bloc}>
-          <TextInput style={styles.champ} value={saisieManuelle.nom} placeholder="Nom (ex. Barre protéinée)"
+          {/* Chaque champ porte son LIBELLÉ, comme les objectifs : un
+              placeholder disparaît dès qu'on tape (12/11/2026). */}
+          <Text style={styles.titreSaisie}>
+            {jour === aujourdhui ? 'Ajouter un repas' : `Ajouter un repas — ${libelleJour(jour, aujourdhui).toLowerCase()}`}
+          </Text>
+          <Text style={[styles.libelleChamp, styles.libelleHaut]}>NOM</Text>
+          <TextInput style={[styles.champ, styles.champSousLibelle]} value={saisieManuelle.nom} placeholder="ex. Barre protéinée"
             placeholderTextColor={colors.texteGris}
             onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, nom: t }))} />
           <View style={styles.ligne}>
-            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.kcal} keyboardType="numeric"
-              placeholder="kcal" placeholderTextColor={colors.texteGris}
-              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, kcal: t }))} />
-            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.proteines} keyboardType="numeric"
-              placeholder="protéines g" placeholderTextColor={colors.texteGris}
-              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, proteines: t }))} />
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>CALORIES (KCAL)</Text>
+              <TextInput style={[styles.champ, styles.champSousLibelle]} value={saisieManuelle.kcal} keyboardType="numeric"
+                placeholder="ex. 220" placeholderTextColor={colors.texteGris}
+                onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, kcal: t }))} />
+            </View>
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>PROTÉINES (G)</Text>
+              <TextInput style={[styles.champ, styles.champSousLibelle]} value={saisieManuelle.proteines} keyboardType="numeric"
+                placeholder="ex. 20" placeholderTextColor={colors.texteGris}
+                onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, proteines: t }))} />
+            </View>
           </View>
           <View style={styles.ligne}>
-            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.glucides} keyboardType="numeric"
-              placeholder="glucides g" placeholderTextColor={colors.texteGris}
-              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, glucides: t }))} />
-            <TextInput style={[styles.champ, styles.champMoyen]} value={saisieManuelle.lipides} keyboardType="numeric"
-              placeholder="lipides g" placeholderTextColor={colors.texteGris}
-              onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, lipides: t }))} />
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>GLUCIDES (G)</Text>
+              <TextInput style={[styles.champ, styles.champSousLibelle]} value={saisieManuelle.glucides} keyboardType="numeric"
+                placeholder="ex. 25" placeholderTextColor={colors.texteGris}
+                onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, glucides: t }))} />
+            </View>
+            <View style={styles.champAvecLibelle}>
+              <Text style={styles.libelleChamp}>LIPIDES (G)</Text>
+              <TextInput style={[styles.champ, styles.champSousLibelle]} value={saisieManuelle.lipides} keyboardType="numeric"
+                placeholder="ex. 7" placeholderTextColor={colors.texteGris}
+                onChangeText={(t) => setSaisieManuelle((s) => ({ ...s, lipides: t }))} />
+            </View>
           </View>
+          <Text style={styles.indice}>Seuls le nom et les calories sont obligatoires.</Text>
           <View style={styles.ligne}>
             <TouchableOpacity style={styles.boutonOr} onPress={enregistrerManuel} disabled={envoiEnCours}>
               <Text style={styles.boutonOrTexte}>Ajouter</Text>
@@ -426,9 +519,63 @@ export default function CarteNutrition({ moi, actif = true }) {
         </View>
       ))}
       {journal && journal.repas.length === 0 && !brouillon && (
-        <Text style={styles.indice}>Aucun repas noté aujourd'hui.</Text>
+        <Text style={styles.indice}>
+          {jour === aujourdhui ? "Aucun repas noté aujourd'hui." : 'Aucun repas noté ce jour-là.'}
+        </Text>
       )}
     </View>
+
+    {/* ---- LE JOURNAL (12/11/2026, demande de Hafiz : « il faut un log pour
+        la nutrition ») : les 30 derniers jours notés, du plus récent au plus
+        ancien, avec la moyenne. Toucher un jour l'affiche dans la carte du
+        haut, où l'on peut ajouter ou retirer des repas. ---- */}
+    <View style={styles.carte}>
+      <TexteIcone nom="historique" taille={15} couleur={colors.or} style={styles.titre}>Journal</TexteIcone>
+      <Text style={styles.indiceSansMarge}>Les {JOURS_JOURNAL} derniers jours où tu as noté tes repas. Touche un jour pour le revoir.</Text>
+      {moyennes ? (
+        <View style={styles.moyenne}>
+          <Text style={styles.libelleChamp}>
+            MOYENNE SUR {moyennes.nbJours} JOUR{moyennes.nbJours > 1 ? 'S' : ''} NOTÉ{moyennes.nbJours > 1 ? 'S' : ''}
+          </Text>
+          <Text style={styles.valeurMacro}>
+            <Text style={styles.chiffreMacro}>{moyennes.kcal}</Text> kcal
+            {' '}· P {moyennes.proteines_g} g · G {moyennes.glucides_g} g · L {moyennes.lipides_g} g
+          </Text>
+        </View>
+      ) : null}
+      {(historique?.jours || []).map((j) => {
+        const etat = ETATS_JOUR[etatDuJour(j.kcal, objectifs.kcal)];
+        const choisi = j.date === jour;
+        return (
+          <TouchableOpacity key={j.date} style={[styles.jourJournal, choisi && styles.jourChoisi]}
+            onPress={() => { allerAuJour(j.date); if (onRemonter) onRemonter(); }}>
+            <View style={styles.enteteMacro}>
+              <Text style={styles.dateJournal}>{libelleJour(j.date, aujourdhui)}</Text>
+              <Text style={styles.indiceSansMarge}>{j.nb_repas} repas</Text>
+            </View>
+            <View style={[styles.enteteMacro, { marginTop: 4 }]}>
+              <Text style={[styles.valeurMacro, { flex: 1 }]}>
+                <Text style={styles.chiffreMacro}>{j.kcal}</Text>
+                {objectifs.kcal ? ` / ${objectifs.kcal}` : ''} kcal
+              </Text>
+              {etat ? (
+                <View style={[styles.badgeEtat, { borderColor: etat.couleur }]}>
+                  <Text style={[styles.texteEtat, { color: etat.couleur }]}>{etat.texte}</Text>
+                </View>
+              ) : null}
+            </View>
+            {objectifs.kcal ? <Barre valeur={j.kcal} objectif={objectifs.kcal} couleur={colors.or} /> : null}
+            <Text style={styles.indice}>
+              P {Math.round(j.proteines_g)} g · G {Math.round(j.glucides_g)} g · L {Math.round(j.lipides_g)} g
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+      {historique && historique.jours.length === 0 ? (
+        <Text style={styles.indice}>Aucun repas noté sur les {JOURS_JOURNAL} derniers jours.</Text>
+      ) : null}
+    </View>
+    </>
   );
 }
 
@@ -449,6 +596,33 @@ const styles = StyleSheet.create({
   valeurMacro: { color: colors.texteGris, fontSize: 13 },
   chiffreMacro: { color: colors.texte, fontWeight: '800', fontSize: 15 },
   champAvecLibelle: { flex: 1 },
+  libelleHaut: { marginTop: 10 },
+  champSousLibelle: { marginTop: 0 },
+  titreSaisie: { color: colors.texte, fontWeight: '800', fontSize: 14 },
+  // Le jour affiché (12/11/2026) : flèches de 44 px, comme le calendrier.
+  navJour: {
+    flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 4,
+    backgroundColor: colors.carteClaire, borderRadius: 12, padding: 4,
+  },
+  flecheJour: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  flecheEteinte: { opacity: 0.35 },
+  centreJour: { flex: 1, alignItems: 'center' },
+  libelleJour: { color: colors.texte, fontSize: 15, fontWeight: '800' },
+  retourAujourdhui: { color: colors.or, fontSize: 12, fontWeight: '700', marginTop: 2 },
+  // Le journal des jours passés.
+  moyenne: {
+    marginTop: espacement.s, padding: espacement.s, borderRadius: 10,
+    backgroundColor: colors.carteClaire,
+  },
+  jourJournal: {
+    marginTop: espacement.s, padding: espacement.s, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.bordure, minHeight: 44,
+  },
+  jourChoisi: { borderColor: colors.or },
+  dateJournal: { flex: 1, color: colors.texte, fontWeight: '800', fontSize: 14 },
+  indiceSansMarge: { color: colors.texteGris, fontSize: 12 },
+  badgeEtat: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  texteEtat: { fontSize: 11, fontWeight: '800' },
   libelleChamp: {
     color: colors.texteGris, fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4,
   },

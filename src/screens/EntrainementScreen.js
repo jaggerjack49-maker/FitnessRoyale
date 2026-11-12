@@ -9,7 +9,7 @@
 // Mode hors-ligne : programmes et séances vivent d'abord en état local
 // (fonctionne sans serveur) ; si connecté, chaque création est synchronisée
 // au serveur en tâche de fond (comme le reste de l'app).
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
@@ -832,6 +832,14 @@ export default function EntrainementScreen({
   const placeSuivi = usePlaceDefilement('suivi');
   const placeHistorique = usePlaceDefilement('historique');
   const placeNutrition = usePlaceDefilement('nutrition');
+  // Le journal nutrition (en bas) remonte l'écran quand on touche un jour,
+  // pour voir ce jour dans la carte du haut (12/11/2026). La ref du hook est
+  // stable, donc cette combinaison l'est aussi.
+  const defilementNutrition = useRef(null);
+  const refNutrition = useCallback((noeud) => {
+    defilementNutrition.current = noeud;
+    placeNutrition.ref(noeud);
+  }, []);
   const placeBiblio = usePlaceDefilement('bibliotheque');
   const [programmes, setProgrammes] = useState([]);
   const [entrainements, setEntrainements] = useState([]);
@@ -4606,17 +4614,19 @@ export default function EntrainementScreen({
       <ScrollView
         key="nutrition"
         {...placeNutrition}
+        ref={refNutrition}
         style={styles.conteneur}
         contentContainerStyle={{ padding: espacement.m }}
       >
         <EnteteSousEcran
           titre="Nutrition"
-          sousTitre="Ton journal alimentaire du jour."
+          sousTitre="Ce que tu manges, jour par jour."
           onRetour={() => setVue('accueil')}
         />
         {/* ---- Nutrition : journal alimentaire + analyse des repas en photo
             (18/09/2026, voir src/components/CarteNutrition.js). ---- */}
-        <CarteNutrition moi={moi} actif={actif} />
+        <CarteNutrition moi={moi} actif={actif}
+          onRemonter={() => defilementNutrition.current?.scrollTo({ y: 0, animated: true })} />
       </ScrollView>
     );
   }

@@ -2,7 +2,7 @@
 // sur des cas choisis, et rend le résultat en JSON pour test_nutrition_front.py.
 import {
   ajusterPortion, alimentsAEnvoyer, brouillonDepuisAnalyse, libelleReste, progression,
-  totauxAliments,
+  totauxAliments, decalerJour, moyennesNutrition, etatDuJour,
 } from '../../../src/logic/nutrition.js';
 
 const cas = [];
@@ -56,5 +56,35 @@ verifier('données abîmées sans plantage', () => [
   alimentsAEnvoyer(null).length,
   progression('x', 'y'),
 ], [0, 0, 0, null, 0, 0, 0]);
+
+// ---- Le journal nutrition (12/11/2026) ----
+verifier('décaler un jour : hier, demain', () => [decalerJour('2026-11-12', -1), decalerJour('2026-11-12', 1)],
+  ['2026-11-11', '2026-11-13']);
+verifier('décaler à travers un mois et une année', () => [
+  decalerJour('2026-03-01', -1), decalerJour('2024-03-01', -1), decalerJour('2026-01-01', -1), decalerJour('2026-12-31', 1),
+], ['2026-02-28', '2024-02-29', '2025-12-31', '2027-01-01']);
+verifier("décaler à travers le changement d'heure", () => [
+  decalerJour('2026-03-30', -1), decalerJour('2026-10-25', 1), decalerJour('2026-11-12', -29),
+], ['2026-03-29', '2026-10-26', '2026-10-14']);
+verifier('décaler : dates illisibles', () => [
+  decalerJour(null, 1), decalerJour('12/11/2026', 1), decalerJour('2026-11-12', 'x'),
+], [null, null, null]);
+
+verifier('moyenne des jours NOTÉS seulement', () => moyennesNutrition([
+  { date: '2026-11-12', nb_repas: 3, kcal: 2400, proteines_g: 150, glucides_g: 250, lipides_g: 80 },
+  { date: '2026-11-11', nb_repas: 2, kcal: 1800, proteines_g: 110, glucides_g: 200, lipides_g: 61 },
+  { date: '2026-11-10', nb_repas: 0, kcal: 0, proteines_g: 0, glucides_g: 0, lipides_g: 0 },
+]), { nbJours: 2, kcal: 2100, proteines_g: 130, glucides_g: 225, lipides_g: 71 });
+verifier('moyenne : aucun jour noté = null', () => [moyennesNutrition([]), moyennesNutrition(null)], [null, null]);
+verifier('moyenne : lignes abîmées ignorées', () => moyennesNutrition([
+  null, 'x', { nb_repas: 1, kcal: 'abc', proteines_g: -5 }, { nb_repas: 1, kcal: 1000 },
+]), { nbJours: 2, kcal: 500, proteines_g: 0, glucides_g: 0, lipides_g: 0 });
+
+verifier("état du jour par rapport à l'objectif (±10 %)", () => [
+  etatDuJour(2400, 2400), etatDuJour(2170, 2400), etatDuJour(2150, 2400),
+  etatDuJour(2640, 2400), etatDuJour(2650, 2400),
+], ['objectif', 'objectif', 'sous', 'objectif', 'dessus']);
+verifier('état du jour : sans objectif = null', () => [etatDuJour(2000, null), etatDuJour(2000, 0), etatDuJour('x', 'y')],
+  [null, null, null]);
 
 process.stdout.write(JSON.stringify(cas));

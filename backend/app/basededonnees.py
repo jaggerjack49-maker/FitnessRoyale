@@ -772,6 +772,36 @@ def repas_du_jour(joueur_id: int, jour: str) -> list:
         ]
 
 
+def bilans_nutrition(joueur_id: int, depuis: str, jusqu_au: str) -> list:
+    """Le JOURNAL NUTRITION (12/11/2026) : une ligne par jour NOTÉ entre deux
+    dates incluses, du plus récent au plus ancien — {date, nb_repas, kcal,
+    proteines_g, glucides_g, lipides_g}.
+
+    UNE SEULE requête (GROUP BY), quel que soit le nombre de jours ou de repas :
+    vers Neon, chaque requête est un aller-retour réseau (voir « LENTEUR
+    POSTGRES », 25/08/2026). Les dates sont des textes 'AAAA-MM-JJ', donc
+    comparables telles quelles."""
+    with connexion() as conn:
+        lignes = conn.execute(
+            "SELECT date, COUNT(*) AS nb_repas, SUM(kcal) AS kcal, "
+            "SUM(proteines) AS proteines, SUM(glucides) AS glucides, SUM(lipides) AS lipides "
+            "FROM repas WHERE joueur_id = ? AND date >= ? AND date <= ? "
+            "GROUP BY date ORDER BY date DESC",
+            (joueur_id, depuis, jusqu_au),
+        ).fetchall()
+    return [
+        {
+            "date": l["date"],
+            "nb_repas": int(l["nb_repas"]),
+            "kcal": int(round(float(l["kcal"] or 0))),
+            "proteines_g": round(float(l["proteines"] or 0), 1),
+            "glucides_g": round(float(l["glucides"] or 0), 1),
+            "lipides_g": round(float(l["lipides"] or 0), 1),
+        }
+        for l in lignes
+    ]
+
+
 def supprimer_repas(repas_id: int) -> None:
     with connexion() as conn:
         conn.execute("DELETE FROM repas WHERE id = ?", (repas_id,))

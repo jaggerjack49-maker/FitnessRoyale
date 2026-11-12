@@ -765,6 +765,13 @@ export async function journalNutrition(joueurId, jour) {
   return get(`/joueurs/${joueurId}/repas?date=${encodeURIComponent(jour)}`);
 }
 
+// Le JOURNAL NUTRITION (12/11/2026) : les totaux des `jours` derniers jours
+// jusqu'à `jusquAu` (le jour LOCAL du téléphone), seulement les jours notés.
+// { depuis, jusqu_au, jours: [{date, nb_repas, kcal, proteines_g, glucides_g, lipides_g}], objectifs }
+export async function historiqueNutrition(joueurId, jusquAu, jours = 30) {
+  return get(`/joueurs/${joueurId}/nutrition/historique?jours=${jours}&jusqu_au=${encodeURIComponent(jusquAu)}`);
+}
+
 export async function supprimerRepas(repasId) {
   return appel(`/repas/${repasId}`, { method: 'DELETE' });
 }

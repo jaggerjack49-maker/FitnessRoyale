@@ -10,7 +10,7 @@ Documentation interactive automatique : http://localhost:8000/docs
 
 import base64
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -1872,6 +1872,28 @@ def journal_du_jour(joueur_id: int, date: str | None = None,
             "glucides_g": round(sum(r["glucides"] for r in repas), 1),
             "lipides_g": round(sum(r["lipides"] for r in repas), 1),
         },
+        "objectifs": db.objectifs_nutrition(joueur_id),
+    }
+
+
+# Le JOURNAL NUTRITION (12/11/2026, demande de Hafiz : « il faut un log pour la
+# nutrition ») : les totaux des derniers jours notés. `jusqu_au` est le jour
+# LOCAL de l'app (comme `date` ci-dessus) ; un jour sans repas n'a pas de ligne.
+JOURS_HISTORIQUE_MAX = 90
+
+
+@app.get("/joueurs/{joueur_id}/nutrition/historique")
+def historique_nutrition(joueur_id: int, jours: int = 30, jusqu_au: str | None = None,
+                         courant: dict = Depends(auth.utilisateur_courant)):
+    auth.verifier_proprietaire(courant, joueur_id)
+    if jours < 1 or jours > JOURS_HISTORIQUE_MAX:
+        raise HTTPException(400, f"Le journal couvre de 1 à {JOURS_HISTORIQUE_MAX} jours.")
+    fin = _jour_valide(jusqu_au)
+    debut = (date.fromisoformat(fin) - timedelta(days=jours - 1)).isoformat()
+    return {
+        "depuis": debut,
+        "jusqu_au": fin,
+        "jours": db.bilans_nutrition(joueur_id, debut, fin),
         "objectifs": db.objectifs_nutrition(joueur_id),
     }
 
