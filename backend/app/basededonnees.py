@@ -28,6 +28,7 @@ est disponible. Le mode SQLite, lui, reste couvert par toute la suite de tests.
 """
 
 import json
+from datetime import datetime
 import os
 import sqlite3
 import threading
@@ -221,6 +222,20 @@ def connexion():
         # sortant du bloc, puis rend la connexion à la réserve.
         with _obtenir_reserve().connection() as conn_brute:
             yield _ConnexionAdaptee(conn_brute, moteur)
+
+
+@contextmanager
+def _conn_ou_neuve(conn=None):
+    """La connexion déjà ouverte qu'on me passe, sinon une neuve (13/11/2026).
+
+    Sert à RÉUTILISER une seule connexion pour plusieurs lectures d'affilée
+    (`donnees_entrainement`) : chaque emprunt à la réserve coûte un
+    aller-retour de vérification vers la base distante."""
+    if conn is not None:
+        yield conn
+    else:
+        with connexion() as neuve:
+            yield neuve
 
 
 def base_repond() -> bool:
@@ -732,6 +747,164 @@ def initialiser():
             )
         """)
 
+        # ---- Bilan des duels (13/11/2026) : victoires et défaites RÉELLES.
+        # Un duel EN DIRECT (un seul téléphone, pass-and-play) n'existait que
+        # dans la mémoire de l'app : il disparaissait au rafraîchissement
+        # suivant, ses points avec. On le garde ici. `rounds` = liste JSON
+        # [{exercice, charge, choisiPar, mesReps, sesReps}], du point de vue
+        # du joueur qui a enregistré le duel.
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS duels_direct (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                joueur_id  INTEGER NOT NULL REFERENCES joueurs(id) ON DELETE CASCADE,
+                adversaire TEXT NOT NULL,
+                gagne      INTEGER NOT NULL,
+                recompense INTEGER NOT NULL DEFAULT 0,
+                rounds     TEXT NOT NULL,
+                cree_le    TEXT NOT NULL
+            )
+        """)
+        # Un duel EN LIGNE n'avait pas de date : impossible de le ranger avec
+        # les duels en direct dans un seul historique. Les duels d'avant
+        # gardent NULL (ils passent en fin de liste).
+        if not _colonne_existe(conn, "duels", "cree_le"):
+            conn.execute("ALTER TABLE duels ADD COLUMN cree_le TEXT")
+
+
+# ----- Bilan et historique des duels (13/11/2026) -----
+
+def enregistrer_duel_direct(joueur_id: int, adversaire: str, gagne: bool,
+                            recompense: int, rounds: list, cree_le: str) -> int:
+    """Range un duel en direct terminé et crédite ses points s'il est gagné —
+    en UNE transaction : pas de victoire sans ses points, ni l'inverse."""
+    with connexion() as conn:
+        curseur = conn.execute(
+            "INSERT INTO duels_direct (joueur_id, adversaire, gagne, recompense, rounds, cree_le) "
+            "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+            (joueur_id, adversaire, 1 if gagne else 0, recompense,
+             json.dumps(rounds, ensure_ascii=False), cree_le),
+        )
+        if gagne and recompense:
+            conn.execute("UPDATE joueurs SET points = points + ? WHERE id = ?",
+                         (recompense, joueur_id))
+        return curseur.lastrowid
+
+
+def stats_duels(joueur_id: int, conn=None) -> dict:
+    """Victoires et défaites : duels EN LIGNE terminés + duels EN DIRECT.
+
+    Recalculé à chaque lecture, comme l'XP : aucun compteur à tenir à jour,
+    donc rien qui puisse se désynchroniser. Un duel en ligne pas encore fini
+    ne compte ni pour l'un ni pour l'autre. DEUX requêtes, une connexion."""
+    with _conn_ou_neuve(conn) as c:
+        en_ligne = c.execute(
+            "SELECT "
+            "  COALESCE(SUM(CASE WHEN gagnant_id = ? THEN 1 ELSE 0 END), 0) AS victoires, "
+            "  COALESCE(SUM(CASE WHEN gagnant_id <> ? THEN 1 ELSE 0 END), 0) AS defaites "
+            "FROM duels WHERE statut = 'termine' AND gagnant_id IS NOT NULL "
+            "AND (challenger_id = ? OR adversaire_id = ?)",
+            (joueur_id, joueur_id, joueur_id, joueur_id),
+        ).fetchone()
+        en_direct = c.execute(
+            "SELECT "
+            "  COALESCE(SUM(CASE WHEN gagne = 1 THEN 1 ELSE 0 END), 0) AS victoires, "
+            "  COALESCE(SUM(CASE WHEN gagne = 0 THEN 1 ELSE 0 END), 0) AS defaites "
+            "FROM duels_direct WHERE joueur_id = ?",
+            (joueur_id,),
+        ).fetchone()
+    return {
+        "victoires": int(en_ligne["victoires"]) + int(en_direct["victoires"]),
+        "defaites": int(en_ligne["defaites"]) + int(en_direct["defaites"]),
+    }
+
+
+_CHOIX_VU_PAR = {
+    # (qui a choisi l'exercice, de quel côté je suis) → libellé de CarteDuel
+    ("challenger", "challenger"): "moi", ("adversaire", "challenger"): "lui",
+    ("challenger", "adversaire"): "lui", ("adversaire", "adversaire"): "moi",
+}
+
+
+def historique_duels(joueur_id: int, limite: int = 30) -> list:
+    """Mes duels, en ligne ET en direct, du plus récent au plus ancien, dans
+    la forme qu'affiche l'app (`CarteDuel`) : {id, type, adversaire, statut
+    ('gagné' | 'perdu' | 'en cours'), recompense, quand, rounds:[{exercice,
+    charge, choisiPar ('moi'|'lui'|'ia'), mesReps, sesReps}]}.
+
+    Un duel en ligne est raconté DE MON CÔTÉ : « mes reps » sont celles du
+    challenger si je l'ai créé, de l'adversaire sinon. Seuls les rounds
+    réellement joués (les deux scores connus) sont gardés. Un duel en attente
+    d'adversaire n'est pas encore un duel : il n'y figure pas.
+
+    QUATRE requêtes sur UNE connexion, quel que soit le nombre de duels (le
+    motif N+1 a déjà vidé l'écran Entraînement le 23/09/2026)."""
+    duels = []
+    with connexion() as conn:
+        lignes = [dict(r) for r in conn.execute(
+            "SELECT d.*, jc.pseudo AS pseudo_challenger, ja.pseudo AS pseudo_adversaire "
+            "FROM duels d "
+            "JOIN joueurs jc ON jc.id = d.challenger_id "
+            "LEFT JOIN joueurs ja ON ja.id = d.adversaire_id "
+            "WHERE (d.challenger_id = ? OR d.adversaire_id = ?) AND d.statut <> 'en_attente' "
+            "ORDER BY d.id DESC LIMIT ?",
+            (joueur_id, joueur_id, limite),
+        )]
+        rounds_par_duel = {}
+        if lignes:
+            ids = [l["id"] for l in lignes]
+            for r in conn.execute(
+                "SELECT duel_id, numero, choisi_par, exercice, charge, reps_challenger, "
+                f"reps_adversaire FROM duel_rounds WHERE duel_id IN ({_marques(len(ids))}) "
+                "ORDER BY numero",
+                tuple(ids),
+            ):
+                rounds_par_duel.setdefault(r["duel_id"], []).append(dict(r))
+        for l in lignes:
+            cote = "challenger" if l["challenger_id"] == joueur_id else "adversaire"
+            autre = "adversaire" if cote == "challenger" else "challenger"
+            rounds = []
+            for r in rounds_par_duel.get(l["id"], []):
+                if r["reps_challenger"] is None or r["reps_adversaire"] is None:
+                    continue
+                rounds.append({
+                    "exercice": r["exercice"],
+                    "charge": r["charge"],
+                    "choisiPar": "ia" if r["choisi_par"] == "ia"
+                                 else _CHOIX_VU_PAR[(r["choisi_par"], cote)],
+                    "mesReps": r[f"reps_{cote}"],
+                    "sesReps": r[f"reps_{autre}"],
+                })
+            if l["statut"] == "termine":
+                statut = "gagné" if l["gagnant_id"] == joueur_id else "perdu"
+            else:
+                statut = "en cours"
+            duels.append({
+                "id": f"ligne-{l['id']}",
+                "type": "en_ligne",
+                "adversaire": l[f"pseudo_{autre}"] or "?",
+                "statut": statut,
+                "recompense": l["recompense"],
+                "quand": l.get("cree_le"),
+                "rounds": rounds,
+            })
+        for l in conn.execute(
+            "SELECT * FROM duels_direct WHERE joueur_id = ? ORDER BY id DESC LIMIT ?",
+            (joueur_id, limite),
+        ):
+            duels.append({
+                "id": f"direct-{l['id']}",
+                "type": "direct",
+                "adversaire": l["adversaire"],
+                "statut": "gagné" if l["gagne"] else "perdu",
+                "recompense": l["recompense"],
+                "quand": l["cree_le"],
+                "rounds": json.loads(l["rounds"]) if l["rounds"] else [],
+            })
+    # Du plus récent au plus ancien ; un duel en ligne d'avant la date
+    # (quand = None) passe à la fin.
+    duels.sort(key=lambda d: d["quand"] or "", reverse=True)
+    return duels[:limite]
+
 
 # ----- Nutrition : journal des repas + objectif du jour (18/09/2026) -----
 
@@ -935,13 +1108,13 @@ def definir_progression_exercice(joueur_id: int, exercice: str, modes: list) -> 
 
 # ----- LE TABLEAU DE PROGRESSION : les cases corrigées à la main -----
 
-def cibles_semaine_du_joueur(joueur_id: int) -> list:
+def cibles_semaine_du_joueur(joueur_id: int, conn=None) -> list:
     """Toutes mes cases corrigées, d'un coup — UNE SEULE requête.
 
     Le tableau en a besoin en entier dès son ouverture : les demander case par
     case rejouerait le motif N+1 qui a fait disparaître l'onglet Entraînement
     le 23/09/2026."""
-    with connexion() as conn:
+    with _conn_ou_neuve(conn) as conn:
         return [dict(l) for l in conn.execute(
             "SELECT programme_id, exercice, semaine, series, reps, poids, origine "
             "FROM cibles_semaine WHERE joueur_id = ?",
@@ -1381,8 +1554,8 @@ def creer_duel_en_attente(challenger_id: int, recompense: int, code: str) -> int
     existe déjà (contrainte UNIQUE) — à l'appelant de réessayer avec un autre code."""
     with connexion() as conn:
         curseur = conn.execute(
-            "INSERT INTO duels (challenger_id, recompense, code) VALUES (?, ?, ?) RETURNING id",
-            (challenger_id, recompense, code),
+            "INSERT INTO duels (challenger_id, recompense, code, cree_le) VALUES (?, ?, ?, ?) RETURNING id",
+            (challenger_id, recompense, code, datetime.now().isoformat(timespec="milliseconds")),
         )
         duel_id = curseur.lastrowid
         for numero, choisi_par in [(1, "challenger"), (2, "adversaire"), (3, "ia")]:
@@ -1742,11 +1915,11 @@ def lire_programme(programme_id: int) -> dict | None:
         return _programmes_par_ids(conn, [programme_id]).get(programme_id)
 
 
-def programmes_du_joueur(joueur_id: int) -> list:
+def programmes_du_joueur(joueur_id: int, conn=None) -> list:
     """Les programmes du joueur, les plus récents d'abord.
 
     TROIS requêtes sur UNE connexion, quel que soit le nombre de programmes."""
-    with connexion() as conn:
+    with _conn_ou_neuve(conn) as conn:
         ids = [
             r["id"] for r in conn.execute(
                 "SELECT id FROM programmes WHERE joueur_id = ? ORDER BY id DESC", (joueur_id,)
@@ -1852,10 +2025,10 @@ def lire_cycle(cycle_id: int) -> dict | None:
     return cycle
 
 
-def cycles_du_joueur(joueur_id: int) -> list:
+def cycles_du_joueur(joueur_id: int, conn=None) -> list:
     """Les cycles du joueur avec leurs séances — QUATRE requêtes sur UNE
     connexion, quel que soit le nombre de cycles et de séances (23/09/2026)."""
-    with connexion() as conn:
+    with _conn_ou_neuve(conn) as conn:
         cycles = [dict(r) for r in conn.execute(
             "SELECT * FROM cycles WHERE joueur_id = ? ORDER BY id DESC", (joueur_id,)
         )]
@@ -1978,8 +2151,8 @@ def nb_duels_gagnes(joueur_id: int) -> int:
 
 # ----- Volume : objectifs de séries par groupe musculaire -----
 
-def objectifs_series_du_joueur(joueur_id: int) -> list:
-    with connexion() as conn:
+def objectifs_series_du_joueur(joueur_id: int, conn=None) -> list:
+    with _conn_ou_neuve(conn) as conn:
         return [
             dict(ligne)
             for ligne in conn.execute(
@@ -2002,8 +2175,8 @@ def remplacer_objectifs_series(joueur_id: int, objectifs: list) -> None:
             )
 
 
-def groupes_exercices_du_joueur(joueur_id: int) -> list:
-    with connexion() as conn:
+def groupes_exercices_du_joueur(joueur_id: int, conn=None) -> list:
+    with _conn_ou_neuve(conn) as conn:
         return [
             dict(ligne)
             for ligne in conn.execute(
@@ -2071,9 +2244,9 @@ def deplanifier(planning_id: int) -> None:
         conn.execute("DELETE FROM planning WHERE id = ?", (planning_id,))
 
 
-def planning_du_joueur(joueur_id: int) -> list:
+def planning_du_joueur(joueur_id: int, conn=None) -> list:
     """Toutes les planifications par date du joueur, par date croissante."""
-    with connexion() as conn:
+    with _conn_ou_neuve(conn) as conn:
         return [
             dict(ligne)
             for ligne in conn.execute(
@@ -2230,7 +2403,7 @@ def enregistrer_entrainement_complet(joueur_id: int, programme_id: int | None, j
         return _lire_entrainement(conn, entrainement_id)
 
 
-def entrainements_du_joueur(joueur_id: int) -> list:
+def entrainements_du_joueur(joueur_id: int, conn=None) -> list:
     """Les séances loggées du joueur, les plus récentes d'abord.
 
     ⚠️ C'ÉTAIT LE BUG DU 23/09/2026 (« je n'ai plus mes séances ni mon
@@ -2246,7 +2419,7 @@ def entrainements_du_joueur(joueur_id: int) -> list:
     `lire_tous_les_joueurs` — et la même recette le règle : un nombre FIXE de
     requêtes, recollées en mémoire.
     DEUX requêtes, une seule connexion, quel que soit le nombre de séances."""
-    with connexion() as conn:
+    with _conn_ou_neuve(conn) as conn:
         seances = [dict(r) for r in conn.execute(
             "SELECT * FROM entrainements WHERE joueur_id = ? ORDER BY date DESC, id DESC",
             (joueur_id,),
@@ -2350,3 +2523,26 @@ def enregistrer_vote_perf(joueur_id: int, exercice: str, votant_id: int, valide:
             "VALUES (?, ?, ?, ?)",
             (joueur_id, exercice, votant_id, 1 if valide else 0),
         )
+
+
+# ----- L'écran Entraînement en UN appel (13/11/2026) -----
+
+def donnees_entrainement(joueur_id: int) -> dict:
+    """Tout ce que l'onglet Entraînement affiche, sur UNE SEULE connexion.
+
+    Avant, l'app envoyait 7 demandes en parallèle : 7 requêtes HTTP, 7
+    vérifications de session, 7 emprunts de connexion — sur un serveur
+    gratuit qui n'a qu'un dixième de processeur et une réserve de 4
+    connexions, les demandes faisaient la queue. Ici : une demande, une
+    session vérifiée, une connexion, ~13 requêtes en tout, quel que soit le
+    volume (chaque lecture garde son nombre fixe de requêtes)."""
+    with connexion() as conn:
+        return {
+            "programmes": programmes_du_joueur(joueur_id, conn),
+            "entrainements": entrainements_du_joueur(joueur_id, conn),
+            "planning": planning_du_joueur(joueur_id, conn),
+            "cycles": cycles_du_joueur(joueur_id, conn),
+            "objectifs_series": objectifs_series_du_joueur(joueur_id, conn),
+            "groupes_exercices": groupes_exercices_du_joueur(joueur_id, conn),
+            "cibles_semaine": cibles_semaine_du_joueur(joueur_id, conn),
+        }

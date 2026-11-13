@@ -235,9 +235,9 @@ function AppInterne() {
   // (null tant qu'on ne l'a pas lu). Il n'y a plus de simulation locale : sans
   // serveur, personne ne peut vérifier qu'un défi est réussi.
   const [etatDefis, setEtatDefis] = useState(null);
-  // L'historique des duels EN DIRECT (pass-and-play, un seul téléphone) joués
-  // depuis le lancement de l'app. Il commence vide : les duels de
-  // démonstration ont disparu avec le fichier mockData.js, supprimé.
+  // L'historique de MES DUELS, en ligne ET en direct, tel que le SERVEUR le
+  // connaît (13/11/2026). Avant, il ne contenait que les duels en direct joués
+  // depuis le lancement de l'app, qui disparaissaient à la fermeture.
   const [mesDuels, setMesDuels] = useState([]);
 
   // ----- Comptes & branchement backend -----
@@ -265,6 +265,7 @@ function AppInterne() {
     setMesDuels([]);
     setMesSeances([]);
     chargerSeances(joueur.id);
+    chargerDuels(joueur.id);
     verifierDefis(joueur.id);
   }
 
@@ -384,6 +385,17 @@ function AppInterne() {
     }
   }
 
+  // L'historique des duels (en ligne + en direct), relu sur le serveur.
+  async function chargerDuels(joueurId) {
+    const id = joueurId || (moiServeur && moiServeur.id);
+    if (!id) return;
+    try {
+      setMesDuels(await api.historiqueDuels(id));
+    } catch {
+      // Coupure passagère : on garde la liste affichée.
+    }
+  }
+
   // Appelée quand une séance vient d'être loggée depuis l'onglet Entraînement.
   // ⚠️ C'EST LE SERVEUR QUI ENREGISTRE LA SÉANCE, au moment où il reçoit
   // l'entraînement (voir backend/app/main.py) : ici on ne fait qu'afficher le
@@ -429,12 +441,16 @@ function AppInterne() {
     if (!moiServeur) return;
     try {
       const joueur = await api.monProfil();
+      // `moiServeur` porte aussi le BILAN des duels (victoires/défaites) :
+      // sans cette ligne, le Profil le montrait périmé jusqu'au tick suivant.
+      setMoiServeur(joueur);
       setMesPerfs(joueur.performances);
       setMesPoints(joueur.points || 0);
       setMesTitres(joueur.titres || []);
     } catch {
       // Pas grave : les points resteront juste affichés avec un léger retard.
     }
+    chargerDuels(); // un duel en ligne vient peut-être de se terminer
   }
 
   // Ajoute une perf : affichée tout de suite, puis envoyée au serveur.
@@ -459,10 +475,21 @@ function AppInterne() {
     }
   }
 
-  // Enregistrer un duel en direct terminé : il rejoint l'historique, victoire → points.
-  function terminerDuelDirect(duel) {
-    setMesDuels((duelsActuels) => [duel, ...duelsActuels]);
-    if (duel.statut === 'gagné') setMesPoints((pts) => pts + duel.recompense);
+  // Enregistrer un duel en direct terminé (13/11/2026). AVANT, il n'existait
+  // que dans la mémoire de l'app : ses points étaient ajoutés à l'écran puis
+  // EFFACÉS au rafraîchissement suivant (10 s plus tard), et le duel
+  // disparaissait à la fermeture de l'app. Le serveur le garde désormais,
+  // recalcule le vainqueur et crédite lui-même les points.
+  // RENVOIE null si c'est enregistré, sinon le message à afficher.
+  async function terminerDuelDirect(duel) {
+    try {
+      await api.enregistrerDuelDirect(moiServeur.id, duel.adversaire, duel.rounds);
+    } catch (erreur) {
+      if (erreur instanceof api.ErreurAPI) return erreur.message;
+      return `la connexion a échoué (${erreur.message || 'raison inconnue'})`;
+    }
+    await rafraichirMonProfil(); // points + bilan + historique
+    return null;
   }
 
   // LE DÉPARTAGE PAR L'IA A DISPARU AVEC LES FAUX DUELS : il ne servait qu'aux
@@ -472,8 +499,9 @@ function AppInterne() {
   // ligne est arbitré par le serveur.
 
   // « moi » = mon compte serveur, avec mes perfs À JOUR.
-  // serieJours/stats/affilieSalle ne sont pas encore suivis côté serveur :
-  // valeurs neutres, pour que les écrans ne plantent pas.
+  // `stats` (victoires/défaites) vient du serveur depuis le 13/11/2026 ; la
+  // valeur neutre ne sert que le temps du tout premier chargement.
+  // serieJours/affilieSalle ne sont pas encore suivis côté serveur.
   const moi = {
     serieJours: 0,
     stats: { victoires: 0, defaites: 0 },

@@ -560,6 +560,22 @@ export async function renommerExercicePartout(joueurId, ancien, nouveau) {
 // répondre 403 au chat.
 // Le poids de corps (13/11/2026) : il décide de la catégorie de poids au
 // classement, et n'était jusque-là modifiable nulle part.
+// ----- Duels : bilan et historique (13/11/2026) -----
+
+// Mes duels EN LIGNE et EN DIRECT, du plus récent au plus ancien, déjà dans
+// la forme qu'affiche CarteDuel.
+export async function historiqueDuels(joueurId) {
+  return get(`/joueurs/${joueurId}/historique-duels`);
+}
+
+// Garde un duel EN DIRECT terminé. Le serveur recalcule le vainqueur à partir
+// des rounds et crédite lui-même les points.
+export async function enregistrerDuelDirect(joueurId, adversaire, rounds) {
+  return appel(`/joueurs/${joueurId}/duels-direct`, {
+    method: 'POST', body: JSON.stringify({ adversaire, rounds }),
+  });
+}
+
 export async function changerPoids(joueurId, poids) {
   return appel(`/joueurs/${joueurId}/poids`, {
     method: 'PUT', body: JSON.stringify({ poids }),
@@ -745,6 +761,14 @@ export async function creerEntrainement(joueurId, programmeId, dateJour, series,
 
 export async function entrainementsDuJoueur(joueurId) {
   return get(`/joueurs/${joueurId}/entrainements`);
+}
+
+// TOUT L'ONGLET ENTRAÎNEMENT EN UNE DEMANDE (13/11/2026) : programmes,
+// séances, calendrier, cycles, objectifs de séries, groupes corrigés et cases
+// du tableau. Remplace les 7 demandes envoyées en parallèle, qui faisaient la
+// queue sur le serveur gratuit.
+export async function donneesEntrainement(joueurId) {
+  return get(`/joueurs/${joueurId}/donnees-entrainement`);
 }
 
 export async function dernieresSeriesPourExercice(joueurId, exercice, avant) {

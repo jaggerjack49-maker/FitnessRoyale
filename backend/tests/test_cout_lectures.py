@@ -125,6 +125,36 @@ class TestCoutLectures(unittest.TestCase):
         self.assertEqual(peu, beaucoup)
         self.assertEqual(beaucoup, 1)
 
+    # ---- L'écran Entraînement en UN appel (13/11/2026) ----
+    def test_tout_l_ecran_entrainement_sur_UNE_seule_connexion(self):
+        """Avant : 7 demandes, donc 7 emprunts. Une seule suffit, quel que
+        soit le volume."""
+        peu, _ = emprunts_pour(db.donnees_entrainement, self.petit)
+        beaucoup, donnees = emprunts_pour(db.donnees_entrainement, self.gros)
+        self.assertEqual(len(donnees["entrainements"]), 40)
+        self.assertEqual(peu, 1)
+        self.assertEqual(beaucoup, 1)
+
+    def test_le_lot_dit_exactement_la_meme_chose_que_les_lectures_separees(self):
+        donnees = db.donnees_entrainement(self.gros)
+        self.assertEqual(donnees["programmes"], db.programmes_du_joueur(self.gros))
+        self.assertEqual(donnees["entrainements"], db.entrainements_du_joueur(self.gros))
+        self.assertEqual(donnees["planning"], db.planning_du_joueur(self.gros))
+        self.assertEqual(donnees["cycles"], db.cycles_du_joueur(self.gros))
+        self.assertEqual(donnees["objectifs_series"], db.objectifs_series_du_joueur(self.gros))
+        self.assertEqual(donnees["groupes_exercices"], db.groupes_exercices_du_joueur(self.gros))
+        self.assertEqual(donnees["cibles_semaine"], db.cibles_semaine_du_joueur(self.gros))
+
+    def test_l_historique_des_duels_coute_pareil_avec_1_ou_15_duels(self):
+        for joueur, nombre in ((self.petit, 1), (self.gros, 15)):
+            for i in range(nombre):
+                db.enregistrer_duel_direct(joueur, f"Rival {i}", i % 2 == 0, 150,
+                                           [], f"2026-11-0{1 + i % 9}T10:00:00.000")
+        peu, _ = emprunts_pour(db.historique_duels, self.petit)
+        beaucoup, liste = emprunts_pour(db.historique_duels, self.gros)
+        self.assertEqual(len(liste), 15)
+        self.assertEqual((peu, beaucoup), (1, 1))
+
     # ---- …et les données restent COMPLÈTES (le lot ne perd rien) ----
     def test_les_seances_gardent_toutes_leurs_series(self):
         seances = db.entrainements_du_joueur(self.gros)

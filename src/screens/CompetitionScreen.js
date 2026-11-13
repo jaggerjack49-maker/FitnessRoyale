@@ -291,7 +291,11 @@ export default function CompetitionScreen({
         {onglet === 'defis' && duelDirectActif && (
           <DuelDirect
             moi={moi}
-            onTerminer={(duel) => { terminerDuelDirect(duel); setDuelDirectActif(false); }}
+            onTerminer={async (duel) => {
+              const erreur = await terminerDuelDirect(duel);
+              if (!erreur) setDuelDirectActif(false);
+              return erreur;
+            }}
             onAnnuler={() => setDuelDirectActif(false)}
           />
         )}
@@ -343,10 +347,9 @@ export default function CompetitionScreen({
                 reussi={defi.reussi}
               />
             ))}
-            {/* L'historique des duels EN DIRECT joués depuis le lancement de
-                l'app (les duels de démonstration ont disparu le 26/09/2026 avec
-                le mode hors-ligne). Celui des duels EN LIGNE, que le serveur
-                garde pourtant, n'est pas encore affiché — voir « À faire ». */}
+            {/* L'historique de MES DUELS, en ligne ET en direct, relu sur le
+                serveur (13/11/2026). Un duel en ligne est raconté de mon côté :
+                « mes reps » sont toujours les miennes. */}
             {duels.length > 0 && (
               <Text style={styles.libelleSection}>MES DUELS — PREMIER À 2 VICTOIRES</Text>
             )}

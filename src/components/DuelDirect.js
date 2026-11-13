@@ -86,15 +86,23 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
     }
   }
 
-  function enregistrer() {
+  // Le duel part au serveur (13/11/2026) : on ATTEND sa réponse avant de
+  // fermer l'écran. S'il refuse ou ne répond pas, on reste ici avec le
+  // message — sinon le duel serait perdu sans qu'on le sache.
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  async function enregistrer() {
+    if (envoiEnCours) return;
+    setEnvoiEnCours(true);
+    setMessage('');
     const statut = victoires.moi >= 2 ? 'gagné' : 'perdu';
-    onTerminer({
-      id: Date.now(),
+    const erreur = await onTerminer({
       adversaire: adversaire.trim(),
       recompense: RECOMPENSE,
       statut,
       rounds,
     });
+    setEnvoiEnCours(false);
+    if (erreur) setMessage(`Duel NON enregistré : ${erreur}. Réessaie.`);
   }
 
   // ----- Étape 1 : configuration -----
@@ -154,9 +162,16 @@ export default function DuelDirect({ moi, onTerminer, onAnnuler }) {
         <Text style={styles.explication}>
           {gagne ? `+${RECOMPENSE} points pour toi !` : 'Pas de points cette fois — entraîne-toi et prends ta revanche !'}
         </Text>
-        <TouchableOpacity style={styles.boutonPrincipal} onPress={enregistrer}>
-          <Text style={styles.boutonPrincipalTexte}>Enregistrer le duel</Text>
+        <TouchableOpacity
+          style={[styles.boutonPrincipal, envoiEnCours && { opacity: 0.6 }]}
+          onPress={enregistrer}
+          disabled={envoiEnCours}
+        >
+          <Text style={styles.boutonPrincipalTexte}>
+            {envoiEnCours ? 'Enregistrement…' : 'Enregistrer le duel'}
+          </Text>
         </TouchableOpacity>
+        {message !== '' && <Text style={styles.messageErreur}>{message}</Text>}
       </View>
     );
   }
@@ -315,6 +330,7 @@ const styles = StyleSheet.create({
     borderColor: da.bordureOrDouce,
   },
   boutonSecondaireTexte: { color: colors.or, fontWeight: '800' },
+  messageErreur: { color: colors.rouge, fontWeight: '700', marginTop: espacement.s, textAlign: 'center' },
   message: { color: colors.or, fontWeight: '700', marginTop: espacement.s, textAlign: 'center' },
   lienAnnuler: { color: colors.texteGris, textAlign: 'center', marginTop: espacement.m, fontSize: 13 },
 });

@@ -1336,8 +1336,15 @@ export default function EntrainementScreen({
   //   verrait si tout avait été effacé.
   // Désormais : on recharge à CHAQUE retour sur l'onglet (comme avant le 14/09),
   // on réessaie tout seul après un échec, et l'état est dit EN HAUT de l'écran.
+  const idCharge = useRef(null);
   useEffect(() => {
     if (!actif) return;
+    // Un AUTRE compte : ses données n'ont jamais été chargées, le rechargement
+    // ne peut pas être discret (on afficherait celles du compte précédent).
+    if (idCharge.current !== moi.id) {
+      dejaCharge.current = false;
+      idCharge.current = moi.id;
+    }
     tentativesChargement.current = 0;
     chargerTout();
   }, [actif, moi.id]);
@@ -1425,28 +1432,35 @@ export default function EntrainementScreen({
   }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
       champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, debutChrono, repos, idLocal]);
 
+  // RECHARGEMENT DISCRET (13/11/2026, « l'écran Entraînement prend du temps
+  // à se charger ») : une fois les données reçues UNE fois, revenir sur
+  // l'onglet ne remet plus l'écran en « Chargement… » — on garde ce qui est
+  // affiché et on le met à jour en arrière-plan. Le bandeau ne sert qu'au
+  // tout premier chargement, ou s'il a échoué (le bug du 16/09 reste couvert).
+  const dejaCharge = useRef(false);
+
   async function chargerTout() {
     if (chargementEnCours.current) return; // un chargement tourne déjà
     chargementEnCours.current = true;
+    const discret = dejaCharge.current;
     setChargement(true);
-    setEtatChargement('en_cours');
+    if (!discret) setEtatChargement('en_cours');
     let toutReussi = false;
     try {
-      // `allSettled` et non `all` : si UNE des six demandes échoue, on garde
-      // quand même les autres. Avant, une seule demande en retard (les
-      // objectifs de séries, par exemple) faisait jeter les séances ET les
-      // programmes pourtant bien reçus.
-      const resultats = await Promise.allSettled([
-        api.programmesDuJoueur(moi.id),
-        api.entrainementsDuJoueur(moi.id),
-        api.planningDuJoueur(moi.id),
-        api.cyclesDuJoueur(moi.id),
-        api.objectifsSeries(moi.id),
-        api.groupesExercices(moi.id),
-        api.ciblesSemaine(moi.id),
-      ]);
-      toutReussi = resultats.every((r) => r.status === 'fulfilled');
-      const [p, e, pl, c, obj, grp, cib] = resultats.map((r) => (r.status === 'fulfilled' ? r.value : null));
+      // UNE SEULE DEMANDE (13/11/2026) au lieu de 7 en parallèle : sur le
+      // serveur gratuit (un dixième de processeur, 4 connexions à la base),
+      // les 7 demandes faisaient la queue — chacune avec sa vérification de
+      // session et son emprunt de connexion. Le serveur lit désormais tout
+      // sur une seule connexion (`db.donnees_entrainement`).
+      const d = await api.donneesEntrainement(moi.id);
+      toutReussi = true;
+      const p = d.programmes;
+      const e = d.entrainements;
+      const pl = d.planning;
+      const c = d.cycles;
+      const obj = d.objectifs_series;
+      const grp = d.groupes_exercices;
+      const cib = d.cibles_semaine;
       if (p) setProgrammes(p);
       if (e) {
         // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
@@ -1483,7 +1497,10 @@ export default function EntrainementScreen({
       chargementEnCours.current = false;
       setChargement(false);
     }
-    setEtatChargement(toutReussi ? 'ok' : 'echec');
+    if (toutReussi) dejaCharge.current = true;
+    // Un rechargement DISCRET qui échoue ne cache pas les données affichées :
+    // elles restent justes, on réessaiera au prochain retour sur l'onglet.
+    if (!(discret && !toutReussi)) setEtatChargement(toutReussi ? 'ok' : 'echec');
     // On remet au serveur les séances qu'il n'a jamais reçues (sans effet
     // s'il ne répond toujours pas : elles restent dans la file).
     viderLaFileDAttente();

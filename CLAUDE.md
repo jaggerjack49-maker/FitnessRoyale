@@ -5746,6 +5746,91 @@ joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on res
   le résumé passent à « 78,5 kg · catégorie -80 kg ». Aucun débordement, bouton de 46 px, zéro
   erreur console.
 
+## Bilan des duels réel + écran Entraînement en une demande — 13/11/2026
+
+Deux demandes de Hafiz : « on passe à ce qui affiche toujours 0 » (point 2 de la
+révision du 12/11/2026) et « l'écran Entraînement prend un certain temps pour se
+charger ».
+
+### Victoires / défaites : enfin comptées
+
+- Le « BILAN COMPÉTITION » du Profil affichait TOUJOURS 0 / 0 / « — » : App.js
+  posait `stats: {victoires: 0, defaites: 0}` en dur, rien ne comptait côté
+  serveur. `/auth/moi` porte maintenant `stats`, recalculé à chaque lecture
+  (`db.stats_duels`, deux requêtes, aucun compteur — même parti pris que l'XP) :
+  duels EN LIGNE terminés (gagnant = moi → victoire, sinon défaite ; un duel pas
+  fini ne compte pas) + duels EN DIRECT.
+- ⚠️ LE DUEL EN DIRECT ÉTAIT UN FANTÔME : il n'existait que dans l'état React
+  (`mesDuels`). Ses « +150 points » étaient ajoutés à l'écran puis EFFACÉS au
+  rafraîchissement suivant (10 s plus tard, `rechargerDepuisServeur` relit les
+  points du serveur), et le duel disparaissait à la fermeture de l'app.
+  Nouvelle table `duels_direct` (joueur, adversaire en texte libre, gagne,
+  recompense, rounds JSON, cree_le) et `POST /joueurs/{id}/duels-direct` :
+  - le VAINQUEUR est recalculé par le serveur à partir des rounds (premier à 2
+    rounds gagnés) ; un duel sans vainqueur → 422. L'app n'envoie que
+    l'adversaire et les rounds ;
+  - la récompense est fixée côté serveur (`RECOMPENSE_DUEL_DIRECT = 150`, la
+    valeur qu'annonce l'écran) et créditée dans la même transaction ;
+  - ⚠️ LIMITE ASSUMÉE : un duel en direct reste DÉCLARATIF (un seul téléphone,
+    l'adversaire n'a pas de compte). On peut donc s'inventer des victoires et
+    des points — les points ne servent qu'au départage, comme avant. Les duels
+    en direct ne donnent PAS d'XP (`nb_duels_gagnes` ne compte que les duels en
+    ligne, inchangé).
+- L'écran du duel ATTEND la réponse du serveur avant de se fermer ; en cas
+  d'échec il reste ouvert avec « Duel NON enregistré : … Réessaie. ».
+- **Historique** (`GET /joueurs/{id}/historique-duels`, `db.historique_duels`) :
+  mes duels en ligne ET en direct, du plus récent au plus ancien, déjà dans la
+  forme de `CarteDuel`. Un duel en ligne est raconté DE MON CÔTÉ (mes reps,
+  « choisi par toi / par lui »), seuls les rounds joués sont gardés, un duel en
+  attente d'adversaire n'y figure pas. QUATRE requêtes sur UNE connexion quel
+  que soit le nombre de duels. Colonne `cree_le` ajoutée à `duels` (migration
+  additive) pour ranger les deux sortes ensemble ; les duels en ligne d'avant
+  n'ont pas de date et passent en fin de liste.
+- App.js : `mesDuels` vient du serveur (`chargerDuels`, à la connexion et à
+  chaque `rafraichirMonProfil`, qui met aussi à jour `moiServeur` pour que le
+  bilan suive sans attendre le tick des 10 s).
+- La série de jours (`serieJours`) n'est toujours pas calculée : elle n'est plus
+  affichée nulle part depuis le retrait du badge (10/11/2026).
+
+### L'écran Entraînement en UNE demande
+
+- MESURÉ sur le serveur en ligne : `/sante` (sans base) ~1 s, `/sante-base`
+  ~1,5-2,5 s, `/joueurs` ~2 s, à chaud. Le serveur gratuit n'a qu'un dixième de
+  processeur et 4 connexions à la base ; l'onglet envoyait SEPT demandes en
+  parallèle, chacune avec sa vérification de session et son emprunt de
+  connexion vérifié — elles faisaient la queue.
+- `GET /joueurs/{id}/donnees-entrainement` (`db.donnees_entrainement`) renvoie
+  les sept listes d'un coup, lues sur UNE connexion (`_conn_ou_neuve` : les
+  sept fonctions de lecture acceptent désormais une connexion déjà ouverte).
+  Les sept routes séparées RESTENT : l'APK déjà installé les appelle encore.
+- RECHARGEMENT DISCRET : une fois les données reçues, revenir sur l'onglet ne
+  remet plus l'écran en « Chargement… » ; il se met à jour en arrière-plan, et
+  un échec à ce moment-là ne cache pas les données affichées. Le bandeau ne sert
+  plus qu'au premier chargement (ou à un premier chargement raté — le bug du
+  16/09/2026 reste couvert). Changer de compte refait un chargement visible.
+- ⚠️ LE PLUS GROS DU TEMPS RESTE LE RÉVEIL : à 14 h 09 (UTC) le serveur a mis
+  35 s à répondre — le robot de réveil GitHub n'avait encore fait aucun passage
+  planifié, seulement le lancement manuel de Hafiz à 13 h 35.
+
+### Vérifié
+
+Tests : `test_api_bilan_duels.py` (11 cas : compte neuf, duel en ligne compté
+pour les deux joueurs, duel pas fini ignoré, duel direct gagné avec ses points,
+perdu sans points, vainqueur recalculé, valeurs absurdes, propriété,
+historique des deux sortes raconté de chaque côté, duel en attente absent,
+historique privé) + 3 cas dans `test_cout_lectures.py` (l'écran Entraînement
+sur UNE connexion, le lot identique aux lectures séparées, l'historique des
+duels à coût fixe). **5 mutations vues échouer.** Suite complète : **413 tests,
+tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : duel en direct gagné 2-0
+contre « Karim » → « Enregistrer le duel » → l'historique l'affiche, le Profil
+passe à 1 victoire · 0 défaite · 100 %, points 140 → 290 et TOUJOURS 290 après
+le rafraîchissement des 10 s ; l'onglet Entraînement ne fait plus qu'UNE
+demande (`/donnees-entrainement`), et y revenir ne réaffiche pas le bandeau de
+chargement. Zéro erreur console.
+⚠️ Le bilan et le rechargement discret demandent un NOUVEL APK ; le serveur doit
+être déployé avant (nouvelles routes).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5758,7 +5843,7 @@ joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on res
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (399 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (413 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -5774,18 +5859,15 @@ joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on res
 - Mode Royale (multijoueur, un seul en tête)
 - Vrai temps réel pour les duels ET le chat de clan (push serveur / WebSocket) — actuellement polling
   toutes les 3 secondes, ça marche mais c'est moins réactif qu'un vrai push
-- Suivre `serieJours` et `stats` (victoires/défaites) pour de vrais comptes côté serveur
-  (actuellement seulement dans mockData.js, valeurs par défaut à 0 pour un vrai compte — noter
-  que les VRAIES victoires/défaites de duels en ligne ne sont pas encore comptées dans ces stats)
+- Suivre `serieJours` côté serveur (non affiché depuis le retrait du badge, 10/11/2026). Les
+  victoires/défaites sont comptées depuis le 13/11/2026 (voir « Bilan des duels réel »)
 - Vrai système de "salle partenaire" CERTIFIÉE pour la vérification "salle" — depuis le
   09/08/2026, n'IMPORTE QUEL autre joueur peut valider via le code partenaire (voir "Validation
   sans vidéo"), ce n'est pas encore un vrai compte "salle" affilié/vérifié par le Club SP. Reste
   aussi l'auto-application pour le joueur `affilieSalle` lui-même (voir "Comptes sécurisés")
-- Historique des duels en ligne dans l'app (actuellement, `DuelEnLigne` ne montre que le duel
-  en cours — le serveur garde tout via `GET /joueurs/{id}/duels`, non affiché pour l'instant).
-  ⚠️ `duels_du_joueur` (`basededonnees.py`) emprunte encore UNE CONNEXION PAR DUEL — le motif
-  qui a fait disparaître l'écran Entraînement le 23/09/2026. Sans conséquence tant que l'app
-  n'appelle pas cet endpoint, mais à regrouper AVANT d'afficher cet historique.
+- ⚠️ `duels_du_joueur` (`basededonnees.py`, route `GET /joueurs/{id}/duels`) emprunte encore UNE
+  CONNEXION PAR DUEL. L'app ne l'appelle pas : l'historique affiché passe par
+  `historique_duels` (13/11/2026), à coût fixe. À regrouper si un jour quelqu'un l'appelle.
 - Vraies illustrations d'avatar (physique/équipement qui évolue) — actuellement juste
   couleur/anneau/emblème, voir "Avatar évolutif"
 - Reprendre une séance interrompue SANS serveur : impossible depuis le 26/09/2026 (on reste à

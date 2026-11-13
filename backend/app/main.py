@@ -156,6 +156,26 @@ class MesReps(BaseModel):
     reps: int = Field(ge=0, le=500)
 
 
+class RoundDuelDirect(BaseModel):
+    """Un round d'un duel EN DIRECT, vu par le joueur qui l'enregistre."""
+    exercice: str = Field(min_length=1, max_length=80)
+    charge: float = Field(gt=0, le=1000)
+    choisiPar: str = Field(pattern="^(moi|lui|ia)$")
+    mesReps: int = Field(ge=0, le=500)
+    sesReps: int = Field(ge=0, le=500)
+
+
+class DuelDirectTermine(BaseModel):
+    adversaire: str = Field(min_length=1, max_length=40)
+    rounds: list[RoundDuelDirect] = Field(min_length=2, max_length=3)
+
+
+# Les points d'un duel en direct gagné : fixés ICI, jamais par l'app (le
+# téléphone pourrait sinon s'attribuer n'importe quelle récompense). Même
+# valeur que ce qu'annonce l'écran du duel (`RECOMPENSE` de DuelDirect.js).
+RECOMPENSE_DUEL_DIRECT = 150
+
+
 class NouvelleSeance(BaseModel):
     minutes: int = Field(gt=0, lt=600)
     date: str | None = None  # 'AAAA-MM-JJ' — par défaut : aujourd'hui
@@ -404,6 +424,9 @@ def moi(courant: dict = Depends(auth.utilisateur_courant)):
     """Le profil du joueur connecté (à partir du token) — utilisé au démarrage de l'app."""
     courant["ligue"] = ligue_joueur(courant)
     courant["xp"] = regles_xp.xp_totale(courant["id"])
+    # Le BILAN COMPÉTITION du Profil (13/11/2026) : il affichait toujours
+    # 0 victoire / 0 défaite, faute d'être calculé côté serveur.
+    courant["stats"] = db.stats_duels(courant["id"])
     return courant
 
 
@@ -633,6 +656,37 @@ def duels_du_joueur(joueur_id: int, courant: dict = Depends(auth.utilisateur_cou
     if db.lire_joueur(joueur_id) is None:
         raise HTTPException(404, "Joueur introuvable.")
     return db.duels_du_joueur(joueur_id)
+
+
+@app.get("/joueurs/{joueur_id}/historique-duels")
+def historique_duels(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Mes duels EN LIGNE et EN DIRECT, du plus récent au plus ancien, prêts à
+    afficher (voir `db.historique_duels`)."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    return db.historique_duels(joueur_id)
+
+
+@app.post("/joueurs/{joueur_id}/duels-direct", status_code=201)
+def enregistrer_duel_direct(joueur_id: int, duel: DuelDirectTermine,
+                            courant: dict = Depends(auth.utilisateur_courant)):
+    """Garde un duel EN DIRECT terminé (13/11/2026).
+
+    Le vainqueur est RECALCULÉ ici à partir des rounds (premier à 2 rounds
+    gagnés), jamais pris tel quel : le score affiché et le bilan ne peuvent
+    donc pas se contredire. Un duel qui n'a pas de vainqueur est refusé."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    mes_rounds = sum(1 for r in duel.rounds if r.mesReps > r.sesReps)
+    ses_rounds = sum(1 for r in duel.rounds if r.sesReps > r.mesReps)
+    if mes_rounds < 2 and ses_rounds < 2:
+        raise HTTPException(422, "Ce duel n'est pas terminé : personne n'a gagné 2 rounds.")
+    gagne = mes_rounds >= 2
+    db.enregistrer_duel_direct(
+        joueur_id, duel.adversaire.strip(), gagne,
+        RECOMPENSE_DUEL_DIRECT if gagne else 0,
+        [r.model_dump() for r in duel.rounds],
+        datetime.now().isoformat(timespec="milliseconds"),
+    )
+    return {"gagne": gagne, "stats": db.stats_duels(joueur_id)}
 
 
 @app.post("/duels/{duel_id}/rounds/{numero}/choisir-exercice")
@@ -1747,6 +1801,14 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
         entrainement.cle_locale,
         entrainement.duree_minutes,
     )
+
+
+@app.get("/joueurs/{joueur_id}/donnees-entrainement")
+def donnees_entrainement(joueur_id: int, courant: dict = Depends(auth.utilisateur_courant)):
+    """Tout l'onglet Entraînement en UNE demande (13/11/2026) — au lieu de 7.
+    Les 7 routes séparées restent : l'APK déjà installé les appelle encore."""
+    auth.verifier_proprietaire(courant, joueur_id)
+    return db.donnees_entrainement(joueur_id)
 
 
 @app.get("/joueurs/{joueur_id}/entrainements")
