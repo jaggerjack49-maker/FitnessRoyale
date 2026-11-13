@@ -22,7 +22,7 @@ import * as api from '../api';
 import * as reglages from '../reglages';
 import { REPOS_PROPOSES } from '../logic/reglages';
 import { dureeLisible } from '../logic/repos';
-import { categoriePoids, ligueJoueur } from '../logic/classement';
+import { categoriePoids, ligueJoueur, lirePoidsSaisi } from '../logic/classement';
 import { joursSemaine, abreviationsJours } from '../data/programmesStandards';
 import { Icone, TexteIcone, LibelleIcone } from './Icones';
 import AvatarJoueur from './AvatarJoueur';
@@ -119,9 +119,18 @@ function FormulaireRappel({
   );
 }
 
-export default function Parametres({ moi, salle, onFermer, seDeconnecter, allerA }) {
+// Un poids affiché à la française : « 78,5 ».
+function poidsLisible(poids) {
+  return String(poids).replace('.', ',');
+}
+
+export default function Parametres({ moi, salle, onFermer, seDeconnecter, allerA, onCompteChange }) {
   // ---- Compte : sécurité (logique identique à celle qui vivait au Profil) ----
-  const [ouverte, setOuverte] = useState(null); // 'mdp' | 'code' | null
+  const [ouverte, setOuverte] = useState(null); // 'poids' | 'mdp' | 'code' | null
+  // ---- Compte : le poids de corps (13/11/2026) ----
+  const [poidsSaisi, setPoidsSaisi] = useState('');
+  const [messagePoids, setMessagePoids] = useState(null); // { texte, erreur }
+  const [poidsEnCours, setPoidsEnCours] = useState(false);
   const [ancienMdp, setAncienMdp] = useState('');
   const [nouveauMdp, setNouveauMdp] = useState('');
   const [messageSecurite, setMessageSecurite] = useState(null); // { texte, erreur }
@@ -145,7 +154,31 @@ export default function Parametres({ moi, salle, onFermer, seDeconnecter, allerA
 
   function basculer(cle) {
     setMessageSecurite(null);
+    setMessagePoids(null);
+    // Le champ du poids s'ouvre PRÉ-REMPLI avec le poids actuel : on corrige
+    // un chiffre, on ne retape pas tout.
+    if (cle === 'poids') setPoidsSaisi(poidsLisible(moi.poids));
     setOuverte((o) => (o === cle ? null : cle));
+  }
+
+  async function enregistrerPoids() {
+    setMessagePoids(null);
+    const poids = lirePoidsSaisi(poidsSaisi);
+    if (poids === null) {
+      setMessagePoids({ texte: 'Entre un poids en kg, entre 30 et 300 (ex. 78,5).', erreur: true });
+      return;
+    }
+    setPoidsEnCours(true);
+    try {
+      await api.changerPoids(moi.id, poids);
+      // Recharge le profil ET le classement : la catégorie de poids suit.
+      if (onCompteChange) await onCompteChange();
+      setMessagePoids({ texte: `Poids enregistré : ${poidsLisible(poids)} kg.`, erreur: false });
+    } catch (e) {
+      setMessagePoids({ texte: `Poids NON enregistré (${e.message || 'erreur inconnue'}).`, erreur: true });
+    } finally {
+      setPoidsEnCours(false);
+    }
   }
 
   async function validerChangementMdp() {
@@ -181,6 +214,9 @@ export default function Parametres({ moi, salle, onFermer, seDeconnecter, allerA
   }
 
   const categorie = categoriePoids(moi.poids);
+  // Ce que deviendrait la catégorie avec le poids en train d'être tapé.
+  const poidsLu = lirePoidsSaisi(poidsSaisi);
+  const nouvelleCategorie = poidsLu !== null ? categoriePoids(poidsLu) : null;
   const messageSec = messageSecurite ? (
     <Text style={[styles.message, messageSecurite.erreur && { color: colors.rouge }]}>
       {messageSecurite.texte}
@@ -205,11 +241,48 @@ export default function Parametres({ moi, salle, onFermer, seDeconnecter, allerA
             <View style={{ flex: 1 }}>
               <Text style={styles.pseudo}>{moi.pseudo}</Text>
               <Text style={styles.aideLigne}>
-                {moi.sexe === 'femme' ? 'Femme' : 'Homme'} · {String(moi.poids).replace('.', ',')} kg
+                {moi.sexe === 'femme' ? 'Femme' : 'Homme'} · {poidsLisible(moi.poids)} kg
                 {categorie ? ` · catégorie ${categorie}` : ''}
               </Text>
             </View>
           </View>
+
+          <LigneDepliable
+            icone="balance"
+            titre="Mon poids de corps"
+            aide={`${poidsLisible(moi.poids)} kg · catégorie ${categorie} au classement`}
+            ouverte={ouverte === 'poids'}
+            onBasculer={() => basculer('poids')}
+          >
+            <Text style={styles.libelleChamp}>POIDS (KG)</Text>
+            <TextInput
+              style={styles.champ}
+              value={poidsSaisi}
+              onChangeText={(t) => { setPoidsSaisi(t); setMessagePoids(null); }}
+              placeholder="ex. 78,5"
+              placeholderTextColor={colors.texteGris}
+              keyboardType="decimal-pad"
+              maxLength={6}
+            />
+            {nouvelleCategorie && nouvelleCategorie !== categorie ? (
+              <Text style={styles.aideLigne}>
+                Tu passeras de la catégorie {categorie} à la catégorie{' '}
+                <Text style={{ color: colors.or, fontWeight: '800' }}>{nouvelleCategorie}</Text>.
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.bouton, poidsEnCours && { opacity: 0.6 }]}
+              onPress={enregistrerPoids}
+              disabled={poidsEnCours}
+            >
+              <Text style={styles.boutonTexte}>{poidsEnCours ? 'ENREGISTREMENT…' : 'ENREGISTRER MON POIDS'}</Text>
+            </TouchableOpacity>
+            {messagePoids ? (
+              <Text style={[styles.message, messagePoids.erreur && { color: colors.rouge }]}>
+                {messagePoids.texte}
+              </Text>
+            ) : null}
+          </LigneDepliable>
 
           {allerA ? (
             <TouchableOpacity
@@ -447,6 +520,9 @@ const styles = StyleSheet.create({
   titreLigne: { color: colors.texte, fontSize: 14, fontWeight: '800' },
   aideLigne: { color: colors.texteGris, fontSize: 12, lineHeight: 17, marginTop: 2 },
   explication: { color: colors.texteDoux, fontSize: 13, lineHeight: 19, marginBottom: espacement.s },
+  libelleChamp: {
+    color: colors.texteGris, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4,
+  },
   champ: {
     backgroundColor: da.surfaceAlt, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14,
     color: colors.texte, fontSize: 14, borderWidth: 1, borderColor: colors.bordure, marginTop: espacement.s,

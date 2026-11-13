@@ -392,6 +392,7 @@ export default function ProfilScreen({
         onFermer={() => setParametresOuverts(false)}
         seDeconnecter={seDeconnecter}
         allerA={allerA}
+        onCompteChange={rafraichir}
       />
     )}
     </View>

@@ -1761,6 +1761,12 @@ def supprimer_programme(programme_id: int) -> None:
         conn.execute("DELETE FROM programmes WHERE id = ?", (programme_id,))
 
 
+def changer_poids(joueur_id: int, poids: float) -> None:
+    """Change le poids de corps d'un joueur (donc sa catégorie de poids)."""
+    with connexion() as conn:
+        conn.execute("UPDATE joueurs SET poids = ? WHERE id = ?", (poids, joueur_id))
+
+
 def changer_salle(joueur_id: int, salle: str | None) -> None:
     """Change la salle de gym d'un joueur.
 

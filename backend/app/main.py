@@ -254,6 +254,11 @@ class RenommageExercice(BaseModel):
     nouveau: str = Field(min_length=1, max_length=100)
 
 
+class PoidsJoueur(BaseModel):
+    # Mêmes bornes qu'à l'inscription (`Inscription.poids`).
+    poids: float = Field(gt=30, lt=300)
+
+
 class SalleJoueur(BaseModel):
     # Chaîne vide autorisée = « je quitte ma salle » (stockée NULL).
     salle: str = Field(default="", max_length=100)
@@ -1382,6 +1387,20 @@ def changer_salle(joueur_id: int, donnees: SalleJoueur,
     auth.verifier_proprietaire(courant, joueur_id)
     salle = nom_salle_affiche(donnees.salle)
     db.changer_salle(joueur_id, salle or None)
+    return db.lire_joueur(joueur_id)
+
+
+@app.put("/joueurs/{joueur_id}/poids")
+def changer_poids(joueur_id: int, donnees: PoidsJoueur,
+                  courant: dict = Depends(auth.utilisateur_courant)):
+    """Change MON poids de corps (13/11/2026).
+
+    Jusque-là il était fixé à l'inscription, pour toujours — or c'est lui qui
+    range le joueur dans sa CATÉGORIE DE POIDS au classement. Arrondi au
+    dixième : une balance n'en dit pas plus.
+    """
+    auth.verifier_proprietaire(courant, joueur_id)
+    db.changer_poids(joueur_id, round(donnees.poids, 1))
     return db.lire_joueur(joueur_id)
 
 

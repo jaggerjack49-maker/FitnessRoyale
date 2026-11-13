@@ -96,6 +96,19 @@ export function categoriePoids(poids) {
   return '+90 kg';
 }
 
+// Lit un poids de corps TAPÉ à la main (Paramètres, 13/11/2026). Accepte la
+// virgule française (« 78,5 »), arrondit au dixième comme le serveur, et
+// renvoie null pour tout ce qui n'est pas un poids plausible. Mêmes bornes que
+// le serveur (strictement entre 30 et 300 kg) : l'écran refuse AVANT d'envoyer,
+// avec un message clair, au lieu d'attendre un refus du serveur.
+export function lirePoidsSaisi(texte) {
+  if (typeof texte !== 'string' && typeof texte !== 'number') return null;
+  const propre = String(texte).trim().replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(propre)) return null;
+  const poids = Math.round(Number(propre) * 10) / 10;
+  return poids > 30 && poids < 300 ? poids : null;
+}
+
 // Regroupe les joueurs par catégorie de poids, chacune classée par palier moyen.
 // Renvoie une liste [{ categorie, joueurs: [...] }] dans l'ordre des catégories.
 export function classerParCategories(joueurs) {

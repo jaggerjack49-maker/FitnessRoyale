@@ -558,6 +558,14 @@ export async function renommerExercicePartout(joueurId, ancien, nouveau) {
 // vraiment enregistrée côté serveur : le chat de clan et le classement des
 // membres s'appuient dessus, une valeur qui ne vivrait que dans l'app ferait
 // répondre 403 au chat.
+// Le poids de corps (13/11/2026) : il décide de la catégorie de poids au
+// classement, et n'était jusque-là modifiable nulle part.
+export async function changerPoids(joueurId, poids) {
+  return appel(`/joueurs/${joueurId}/poids`, {
+    method: 'PUT', body: JSON.stringify({ poids }),
+  });
+}
+
 export async function changerSalle(joueurId, salle) {
   return appel(`/joueurs/${joueurId}/salle`, {
     method: 'PUT', body: JSON.stringify({ salle: salle || '' }),

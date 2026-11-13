@@ -5711,6 +5711,37 @@ chaque mise en veille, ce qui effaçait les vidéos de preuve en attente de vote
     baisse beaucoup (plus de mise en veille), il ne disparaît pas — le vrai correctif reste un
     stockage externe (voir « Hébergement gratuit : Render + Neon »).
 
+## Le poids de corps se modifie — 13/11/2026
+
+Point 1c de la révision complète du 12/11/2026 : le poids était fixé à l'INSCRIPTION, pour
+toujours — aucun écran ni aucune route ne permettait de le changer. Or c'est lui qui range le
+joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on restait en -80 kg.
+
+- Serveur : `PUT /joueurs/{id}/poids` (`PoidsJoueur`, mêmes bornes qu'à l'inscription :
+  strictement entre 30 et 300 kg), propriétaire uniquement, arrondi au dixième ;
+  `db.changer_poids`. Renvoie le joueur, comme `PUT /salle`.
+- App : Paramètres → Compte → « Mon poids de corps » (icône balance, ligne dépliable comme la
+  sécurité). Le champ s'ouvre PRÉ-REMPLI avec le poids actuel, accepte la virgule (« 78,5 »),
+  et annonce le changement de catégorie AVANT d'enregistrer (« Tu passeras de la catégorie
+  -90 kg à la catégorie -80 kg »). Après l'enregistrement, `onCompteChange` (= `rafraichir`
+  d'App.js, passé par le Profil) recharge le profil ET le classement : la catégorie suit tout de
+  suite, sans attendre le rafraîchissement des 10 s.
+- `lirePoidsSaisi` (`src/logic/classement.js`) lit la saisie avec les MÊMES règles que le
+  serveur (bornes, arrondi) : l'écran refuse avant d'envoyer, avec un message clair.
+- PAS d'historique des pesées pour l'instant : on remplace le poids, on ne le journalise pas
+  (le suivi avec courbe est le point 6 de la révision, à faire séparément).
+- À SAVOIR (pré-existant, pas touché) : `categoriePoids` range 80,0 kg exactement en « -90 kg »
+  (`poids < 80` pour « -80 kg »). L'usage en compétition voudrait plutôt « jusqu'à 80 kg
+  inclus » — à trancher avec Hafiz ; le changer toucherait aussi `logique.py` (parité testée).
+- Tests : `test_api_poids.py` (6 cas : changé et relu, catégorie du classement qui suit, arrondi,
+  valeurs absurdes, poids d'un autre 403, sans connexion 401) + `test_poids.py` /
+  `harnais/harnais_poids.mjs` (13 cas). 4 mutations vues échouer (bornes, virgule,
+  propriétaire, arrondi).
+- Vérifié dans le navigateur (390 px, serveur LOCAL) : « lourd » refusé avec le message ;
+  « 78,5 » → aperçu « -90 kg à -80 kg », enregistré (78,5 côté serveur), la ligne d'identité et
+  le résumé passent à « 78,5 kg · catégorie -80 kg ». Aucun débordement, bouton de 46 px, zéro
+  erreur console.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5723,7 +5754,7 @@ chaque mise en veille, ce qui effaçait les vidéos de preuve en attente de vote
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (391 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (398 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
