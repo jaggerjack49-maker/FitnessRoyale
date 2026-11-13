@@ -5831,6 +5831,59 @@ chargement. Zéro erreur console.
 ⚠️ Le bilan et le rechargement discret demandent un NOUVEL APK ; le serveur doit
 être déployé avant (nouvelles routes).
 
+## L'onglet Entraînement découpé en fichiers — 13/11/2026
+
+Proposé à la révision du 12/11/2026 (« l'écran Entraînement fait 5 580 lignes
+dans un seul fichier »), demandé par Hafiz le 13/11. RIEN NE CHANGE À L'ÉCRAN :
+le code est RECOPIÉ TEL QUEL, seul son emplacement change.
+
+### Le nouveau rangement
+
+- `src/screens/EntrainementScreen.js` (≈2 370 lignes, contre 5 600) : l'état,
+  les effets et toutes les actions (charger, enregistrer, démarrer…), puis le
+  choix de la vue à afficher.
+- `src/screens/entrainement/` :
+  - `vueAccueil`, `vueSeance`, `vueProgrammes`, `vueSuivi`, `vueProgres`,
+    `vueNouveauProgramme`, `vueBibliotheque`, `vueDetailSeance` — une vue par
+    fichier (le tableau et la nutrition, quelques lignes chacun, restent dans
+    l'écran principal) ;
+  - `outils.js` (dates, calendrier, `typeDeSeance`…), `composantsSeance.js`
+    (chrono, confirmation en deux temps, séance faite…), `EditeurSeance.js`,
+    `sousEcran.js` (en-tête des sous-écrans, lignes de raccourci) et
+    `styles.js` (les styles partagés).
+
+### ⚠️ Comment une vue reçoit ses données — À SAVOIR AVANT D'Y TOUCHER
+
+- Une vue est une FONCTION DE RENDU, pas un composant : l'écran l'appelle
+  directement (`return vueSeance(ctx);`). L'arbre affiché est donc exactement
+  celui d'avant, et aucun état n'est remis à zéro.
+- CONSÉQUENCE : **jamais de hook (useState, useEffect…) dans une vue.** Elle
+  est appelée sous condition ; un hook y changerait l'ordre des hooks d'un
+  rendu à l'autre. Un état nouveau se déclare dans EntrainementScreen.js.
+- Chaque vue commence par `const { … } = ctx;` et ne lit QUE ça. L'écran
+  fabrique DEUX paquets : `ctx` (avant les calculs de l'accueil, pour la séance,
+  le nouveau programme et le détail d'une séance) puis `ctxAccueil` (= `ctx` +
+  le bandeau d'état, les séances du jour, les rattrapages… calculés entre les
+  deux). Une vue nouvelle ou un nom nouveau lu par une vue → l'ajouter AUSSI au
+  paquet qui lui est passé.
+- Le découpage a été fait par un script qui s'appuie sur l'analyse de portée de
+  Babel (les noms lus par chaque vue, les imports nécessaires, l'absence de
+  réaffectation d'une variable de l'écran depuis une vue) — jamais à la main.
+
+### Vérifié
+
+- `backend/tests/test_vues_entrainement.py` + `harnais/verifier_vues_entrainement.cjs` :
+  aucun nom introuvable dans les 14 fichiers, aucun hook dans une vue, chaque
+  nom lu par une vue présent dans son paquet. Vu ÉCHOUER sur un `useState`
+  ajouté dans vueSeance.js, un nom retiré de `ctxAccueil` et un import supprimé
+  dans vueProgres.js.
+- Navigateur (390 px, serveur LOCAL, `SondeTest`) : accueil, Mes programmes
+  (programme déroulé, éditeur ouvert), tableau de progression, bibliothèque
+  (Pectoraux), nouveau programme, suivi, nutrition, progrès, détail d'une séance
+  passée, et une séance libre avec une série notée (Dips 20 kg × 10, RIR 2) et
+  le minuteur de repos — tout s'affiche et répond comme avant, aucune erreur de
+  code en console. Suite complète : **414 tests, tous OK.**
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5843,7 +5896,7 @@ chargement. Zéro erreur console.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (413 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (414 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
