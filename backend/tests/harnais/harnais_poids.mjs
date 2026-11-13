@@ -19,6 +19,8 @@ const cas = [
   ['données abîmées', () => [lirePoidsSaisi(null), lirePoidsSaisi(undefined), lirePoidsSaisi({}),
     lirePoidsSaisi(NaN)], [null, null, null, null]],
   ['la catégorie suit le poids lu', () => categoriePoids(lirePoidsSaisi('89,9')), '-90 kg'],
+  ['limite incluse : 80 kg pile reste en -80', () => categoriePoids(lirePoidsSaisi('80')), '-80 kg'],
+  ['limite incluse : 80,1 kg passe en -90', () => categoriePoids(lirePoidsSaisi('80,1')), '-90 kg'],
 ];
 
 const resultats = cas.map(([nom, calcul, attendu]) => {

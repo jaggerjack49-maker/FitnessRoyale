@@ -56,6 +56,14 @@ class TestPaliers(unittest.TestCase):
         self.assertEqual(categorie_poids(59.9), "-60 kg")
         self.assertEqual(categorie_poids(96), "+90 kg")
 
+    def test_la_limite_de_categorie_est_incluse(self):
+        """Comme en compétition : « -80 kg » = jusqu'à 80 kg INCLUS (13/11/2026)."""
+        for limite, categorie in ((60, "-60 kg"), (70, "-70 kg"), (80, "-80 kg"), (90, "-90 kg")):
+            self.assertEqual(categorie_poids(limite), categorie, limite)
+        self.assertEqual(categorie_poids(60.1), "-70 kg")
+        self.assertEqual(categorie_poids(80.1), "-90 kg")
+        self.assertEqual(categorie_poids(90.1), "+90 kg")
+
 
 class TestClassements(unittest.TestCase):
     def setUp(self):

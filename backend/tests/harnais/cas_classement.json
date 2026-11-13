@@ -70,6 +70,19 @@
     "exercices": []
   },
 
+  "limites_de_categorie_incluses": {
+    "_pourquoi": "13/11/2026 : comme en compétition, « -80 kg » veut dire jusqu'à 80 kg INCLUS. Avant, 80,0 kg tombait en -90 kg.",
+    "joueurs": [
+      { "pseudo": "Pile60", "sexe": "homme", "poids": 60, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Pile70", "sexe": "femme", "poids": 70, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Pile80", "sexe": "homme", "poids": 80, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Juste80", "sexe": "homme", "poids": 80.1, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Pile90", "sexe": "homme", "poids": 90, "points": 0, "salle": null, "performances": {} },
+      { "pseudo": "Juste90", "sexe": "homme", "poids": 90.1, "points": 0, "salle": null, "performances": {} }
+    ],
+    "exercices": []
+  },
+
   "salles_ecrites_differemment": {
     "_pourquoi": "Correctif du 04/09/2026 : la casse et les espaces ne doivent plus créer des clans distincts.",
     "joueurs": [

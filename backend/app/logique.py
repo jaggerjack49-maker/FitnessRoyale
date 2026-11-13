@@ -60,14 +60,19 @@ def ligue_joueur(joueur: dict) -> str:
 
 
 def categorie_poids(poids: float) -> str:
-    """Catégorie de poids pour le classement relatif."""
-    if poids < 60:
+    """Catégorie de poids pour le classement relatif.
+
+    La limite est INCLUSE, comme en compétition (13/11/2026) : « -80 kg » veut
+    dire « jusqu'à 80 kg inclus ». Portage identique de categoriePoids()
+    (src/logic/classement.js).
+    """
+    if poids <= 60:
         return "-60 kg"
-    if poids < 70:
+    if poids <= 70:
         return "-70 kg"
-    if poids < 80:
+    if poids <= 80:
         return "-80 kg"
-    if poids < 90:
+    if poids <= 90:
         return "-90 kg"
     return "+90 kg"
 

@@ -5730,9 +5730,13 @@ joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on res
   serveur (bornes, arrondi) : l'écran refuse avant d'envoyer, avec un message clair.
 - PAS d'historique des pesées pour l'instant : on remplace le poids, on ne le journalise pas
   (le suivi avec courbe est le point 6 de la révision, à faire séparément).
-- À SAVOIR (pré-existant, pas touché) : `categoriePoids` range 80,0 kg exactement en « -90 kg »
-  (`poids < 80` pour « -80 kg »). L'usage en compétition voudrait plutôt « jusqu'à 80 kg
-  inclus » — à trancher avec Hafiz ; le changer toucherait aussi `logique.py` (parité testée).
+- LIMITES DE CATÉGORIE INCLUSES (même jour, accord de Hafiz) : « -80 kg » veut dire « jusqu'à
+  80 kg INCLUS », comme en compétition. Avant, 80,0 kg exactement tombait en « -90 kg »
+  (`poids < 80`). `categoriePoids` (classement.js) et `categorie_poids` (logique.py) passent
+  tous deux à `<=` ; un cas de parité `limites_de_categorie_incluses` (60, 70, 80, 80,1, 90,
+  90,1 kg) et `test_la_limite_de_categorie_est_incluse` le verrouillent. Mutation vue échouer
+  d'un côté comme de l'autre. ⚠️ Un joueur pesant pile 60, 70, 80 ou 90 kg change donc de
+  catégorie au classement (il descend d'une catégorie).
 - Tests : `test_api_poids.py` (6 cas : changé et relu, catégorie du classement qui suit, arrondi,
   valeurs absurdes, poids d'un autre 403, sans connexion 401) + `test_poids.py` /
   `harnais/harnais_poids.mjs` (13 cas). 4 mutations vues échouer (bornes, virgule,
@@ -5754,7 +5758,7 @@ joueur dans sa CATÉGORIE DE POIDS au classement : passé de 78 à 82 kg, on res
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (398 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (399 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

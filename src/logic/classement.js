@@ -88,11 +88,15 @@ export function classer(joueurs, mode) {
 // catégories lourdes ouvrent le classement, comme en sport de force.
 export const ordreCategories = ['+90 kg', '-90 kg', '-80 kg', '-70 kg', '-60 kg'];
 
+// La LIMITE EST INCLUSE, comme en compétition (13/11/2026, demande de
+// Hafiz) : « -80 kg » veut dire « jusqu'à 80 kg inclus ». Avant, 80,0 kg
+// exactement tombait en « -90 kg ». Portage identique : categorie_poids()
+// dans backend/app/logique.py (parité vérifiée par test_parite_front_back.py).
 export function categoriePoids(poids) {
-  if (poids < 60) return '-60 kg';
-  if (poids < 70) return '-70 kg';
-  if (poids < 80) return '-80 kg';
-  if (poids < 90) return '-90 kg';
+  if (poids <= 60) return '-60 kg';
+  if (poids <= 70) return '-70 kg';
+  if (poids <= 80) return '-80 kg';
+  if (poids <= 90) return '-90 kg';
   return '+90 kg';
 }
 
