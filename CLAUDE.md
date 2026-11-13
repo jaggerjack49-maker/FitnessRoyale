@@ -5677,6 +5677,40 @@ console.
 was an error parsing the body ») — pas un bug du serveur : le même repas envoyé en vrai UTF-8
 (Python) passe. Poser les données de test avec Python, pas curl.
 
+## Réveil gratuit du serveur (GitHub Actions) — 13/11/2026
+
+Point 1b de la révision complète du 12/11/2026 : le serveur Render gratuit S'ENDORT après
+15 min sans requête. Mesuré ce jour-là : **44 s** pour le réveiller. Et son disque est vidé à
+chaque mise en veille, ce qui effaçait les vidéos de preuve en attente de vote.
+
+- `.github/workflows/reveil-serveur.yml` : un robot GitHub Actions appelle
+  `https://fitnessroyale.onrender.com/sante` toutes les 5 minutes (`3-58/5 * * * *`, décalé des
+  heures rondes où GitHub saute des passages). Aussi déclenchable à la main (onglet Actions →
+  « Réveil du serveur » → Run workflow).
+- GRATUIT, SANS COMPTE À CRÉER : le dépôt est PUBLIC (vérifié : l'API GitHub répond sans
+  connexion), et GitHub Actions est illimité pour un dépôt public. ⚠️ Si le dépôt passe un jour
+  en PRIVÉ, ce robot consommerait ~8 600 minutes/mois, bien au-delà des 2 000 gratuites — il
+  faudrait alors passer à un service externe (cron-job.org, UptimeRobot).
+- ⚠️ `/sante` ET PAS `/sante-base`, exprès : `/sante` ne touche pas la base. Render reste
+  éveillé, mais Neon peut continuer à s'endormir quand personne n'utilise l'app — une base tenue
+  éveillée 24 h/24 dépasserait le quota de calcul gratuit de Neon. Son réveil ne coûte que 1 à
+  4 s (et la réserve de connexions vérifie déjà chaque connexion avant de la prêter, voir le bug
+  du 23/09/2026).
+- Le robot ne fait JAMAIS échouer son exécution (il affiche seulement le code de réponse) : un
+  échec enverrait un e-mail toutes les 5 minutes pendant une panne.
+- Heures Render : un service éveillé en permanence consomme ~744 h sur les 750 h gratuites par
+  mois. ⚠️ Un DEUXIÈME service web Render ferait dépasser ce quota (le Static Site du site web
+  n'en consomme pas).
+- LIMITES CONNUES :
+  - GitHub peut retarder ou sauter des passages planifiés en période de charge : un réveil
+    lent reste possible de temps en temps. L'écran « Connexion en cours… » de l'app reste donc
+    en place.
+  - GitHub DÉSACTIVE un workflow planifié après 60 jours sans activité sur un dépôt public. Un
+    simple commit le maintient ; sinon, le réactiver dans l'onglet Actions.
+  - Les vidéos en attente restent perdues à chaque REDÉPLOIEMENT (chaque `git push`). Le risque
+    baisse beaucoup (plus de mise en veille), il ne disparaît pas — le vrai correctif reste un
+    stockage externe (voir « Hébergement gratuit : Render + Neon »).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

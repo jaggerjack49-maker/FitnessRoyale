@@ -1,0 +1,44 @@
+# Réveil du serveur (13/11/2026)
+#
+# Render (offre gratuite) ENDORT le serveur après 15 minutes sans aucune
+# requête, et le premier appel qui le réveille attend jusqu'à ~1 minute
+# (44 s mesurées le 12/11/2026). Pire : le disque est vidé à chaque mise en
+# veille, donc une vidéo de preuve en attente de vote disparaît.
+#
+# Ce petit robot GitHub appelle le serveur toutes les 5 minutes pour qu'il ne
+# s'endorme jamais. Gratuit : le dépôt est public, et GitHub Actions est sans
+# limite pour un dépôt public.
+#
+# ⚠️ ON APPELLE /sante, PAS /sante-base — exprès :
+#   /sante répond sans toucher à la base de données. Le serveur Render reste
+#   éveillé, mais la base Neon, elle, peut continuer à s'endormir quand
+#   personne n'utilise l'app. Ça protège le quota de calcul GRATUIT de Neon
+#   (une base tenue éveillée 24 h/24 le dépasserait). Son réveil à elle ne
+#   coûte que 1 à 4 secondes, contre ~1 minute pour celui de Render.
+
+name: Réveil du serveur
+
+on:
+  schedule:
+    # Toutes les 5 minutes, décalé de 3 minutes : GitHub est très chargé pile
+    # aux heures rondes et y saute parfois des passages. Le minimum autorisé
+    # par GitHub est 5 minutes ; en dessous de 15 on garde de la marge si un
+    # passage est en retard ou sauté.
+    - cron: "3-58/5 * * * *"
+  # Permet aussi de le lancer à la main depuis l'onglet « Actions » de GitHub.
+  workflow_dispatch:
+
+jobs:
+  reveil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Appeler le serveur
+        run: |
+          # --max-time 90 : si le serveur dormait quand même, son réveil peut
+          # prendre ~1 minute. On affiche le code de réponse dans le journal,
+          # mais on ne fait JAMAIS échouer le robot : un échec enverrait un
+          # e-mail toutes les 5 minutes tant que le serveur est en panne.
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+            https://fitnessroyale.onrender.com/sante || echo "aucune réponse")
+          echo "Réponse du serveur : $code"
