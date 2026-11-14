@@ -29,6 +29,7 @@ from . import nutrition
 from .baremes import BAREMES, NOMS_LIGUES
 from .logique import (
     classer_global,
+    valeur_max_exercice,
     classer_par_categories,
     classer_salles,
     cle_salle,
@@ -342,6 +343,15 @@ class SerieLoggee(BaseModel):
     rir: int | None = Field(default=None, ge=0, le=10)
 
 
+class CorrectionEntrainement(BaseModel):
+    """Corriger une séance DÉJÀ ENREGISTRÉE (14/11/2026) : la liste complète de
+    ses séries (elle remplace l'ancienne) et sa durée. Pour retirer toutes les
+    séries, on supprime la séance (DELETE) — d'où au moins une série ici."""
+    series: list[SerieLoggee] = Field(min_length=1, max_length=200)
+    # None = durée inconnue : la séance du jour reprend l'estimation.
+    duree_minutes: int | None = Field(default=None, ge=1, le=300)
+
+
 class NouvelEntrainement(BaseModel):
     programme_id: int | None = None
     date: str | None = None  # 'AAAA-MM-JJ' — par défaut : aujourd'hui
@@ -511,6 +521,12 @@ def ajouter_performance(joueur_id: int, perf: NouvellePerformance,
         raise HTTPException(404, "Joueur introuvable.")
     if perf.exercice not in BAREMES[joueur["sexe"]]:
         raise HTTPException(400, f"Exercice inconnu : {perf.exercice}")
+    plafond = valeur_max_exercice(joueur["sexe"], perf.exercice)
+    if perf.valeur > plafond:
+        unite = BAREMES[joueur["sexe"]][perf.exercice]["unite"]
+        raise HTTPException(
+            400, f"Valeur trop haute pour « {perf.exercice} » : {plafond:g} {unite} au maximum. "
+                 "Vérifie qu'il n'y a pas un zéro de trop.")
     db.enregistrer_performance(joueur_id, perf.exercice, perf.valeur, "declare")
     return {
         "exercice": perf.exercice,
@@ -1681,6 +1697,23 @@ def ajouter_seance_au_cycle(cycle_id: int, seance: SeanceCycle,
     return db.lire_cycle(cycle_id)
 
 
+@app.put("/cycles/{cycle_id}/nom")
+def renommer_cycle(cycle_id: int, donnees: NomProgramme,
+                   courant: dict = Depends(auth.utilisateur_courant)):
+    """Renomme un programme complet (14/11/2026) — il fallait jusqu'ici le
+    supprimer et le recréer. Le nom est nettoyé de ses espaces autour ; un nom
+    fait uniquement d'espaces est refusé."""
+    cycle = db.lire_cycle(cycle_id)
+    if cycle is None:
+        raise HTTPException(404, "Programme introuvable.")
+    auth.verifier_proprietaire(courant, cycle["joueur_id"])
+    nom = donnees.nom.strip()
+    if not nom:
+        raise HTTPException(422, "Le nom du programme ne peut pas être vide.")
+    db.renommer_cycle(cycle_id, nom)
+    return db.lire_cycle(cycle_id)
+
+
 @app.delete("/cycles/{cycle_id}")
 def supprimer_cycle(cycle_id: int, courant: dict = Depends(auth.utilisateur_courant)):
     """Supprime le cycle ET ses séances (elles n'existent que pour lui)."""
@@ -1801,6 +1834,53 @@ def creer_entrainement(joueur_id: int, entrainement: NouvelEntrainement,
         entrainement.cle_locale,
         entrainement.duree_minutes,
     )
+
+
+def _minutes_de(entrainement: dict) -> int:
+    """Ce qu'une séance apporte à la séance du jour : sa durée mesurée, sinon
+    l'estimation — la MÊME règle qu'à l'enregistrement (`creer_entrainement`)."""
+    return entrainement.get("duree_minutes") or regles_seances.duree_estimee(
+        len(entrainement.get("series") or []))
+
+
+def _entrainement_a_moi(entrainement_id: int, courant: dict) -> dict:
+    entrainement = db.lire_entrainement(entrainement_id)
+    if entrainement is None:
+        raise HTTPException(404, "Séance introuvable.")
+    auth.verifier_proprietaire(courant, entrainement["joueur_id"])
+    return entrainement
+
+
+@app.put("/entrainements/{entrainement_id}")
+def corriger_entrainement(entrainement_id: int, correction: CorrectionEntrainement,
+                          courant: dict = Depends(auth.utilisateur_courant)):
+    """Corrige une séance DÉJÀ ENREGISTRÉE (14/11/2026) : une charge mal tapée,
+    une série en trop, une durée oubliée. La date et le programme ne changent
+    pas. Les séries sont RENUMÉROTÉES par exercice, dans l'ordre reçu, pour
+    qu'une série retirée ne laisse pas un trou (« Série 1, Série 3 »).
+    La séance du jour (compteur du Profil, défis) suit la nouvelle durée.
+    Un défi DÉJÀ validé le reste : ses points ne sont pas repris."""
+    actuel = _entrainement_a_moi(entrainement_id, courant)
+    numeros = {}
+    series = []
+    for s in correction.series:
+        serie = s.model_dump()
+        numeros[serie["exercice"]] = numeros.get(serie["exercice"], 0) + 1
+        serie["numero_serie"] = numeros[serie["exercice"]]
+        series.append(serie)
+    nouvelles_minutes = _minutes_de({"duree_minutes": correction.duree_minutes, "series": series})
+    return db.corriger_entrainement(entrainement_id, series, correction.duree_minutes,
+                                    nouvelles_minutes - _minutes_de(actuel))
+
+
+@app.delete("/entrainements/{entrainement_id}")
+def supprimer_entrainement(entrainement_id: int,
+                           courant: dict = Depends(auth.utilisateur_courant)):
+    """Supprime une séance DÉJÀ ENREGISTRÉE (14/11/2026) — une séance notée par
+    erreur, ou en double. Ses minutes sont retirées de la séance du jour."""
+    actuel = _entrainement_a_moi(entrainement_id, courant)
+    db.supprimer_entrainement(entrainement_id, _minutes_de(actuel))
+    return {"supprime": True}
 
 
 @app.get("/joueurs/{joueur_id}/donnees-entrainement")

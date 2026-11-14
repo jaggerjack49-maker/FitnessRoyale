@@ -38,6 +38,7 @@ export function vueProgrammes(ctx) {
     setProgrammeTrouve, setSeanceDeroulee, setSuppressionAConfirmer,
     setVue, sortirDuProgramme, suppressionAConfirmer, supprimerCycle,
     supprimerProgramme, viderJourSemaine,
+    cycleEnRenommage, setCycleEnRenommage, renommerCycleProgramme,
   } = ctx;
 
 
@@ -92,7 +93,39 @@ export function vueProgrammes(ctx) {
               la même ligne, il était comprimé à une largeur nulle et se
               repliait sur des dizaines de lignes invisibles (d'où les grands
               vides de la capture), pendant que la croix débordait à droite. */}
-          <TexteIcone nom="programme" taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{cycle.nom}</TexteIcone>
+          {cycleEnRenommage && cycleEnRenommage.id === cycle.id ? (
+            // RENOMMER (14/11/2026) : le champ prend la place du nom, pré-rempli.
+            // Les séances (« Push », « Pull »…) gardent leur nom.
+            <View>
+              <Text style={styles.libelle}>Nouveau nom du programme</Text>
+              <TextInput
+                style={styles.champ}
+                value={cycleEnRenommage.nom}
+                onChangeText={(t) => setCycleEnRenommage({ id: cycle.id, nom: t })}
+                onSubmitEditing={() => renommerCycleProgramme(cycle, cycleEnRenommage.nom)}
+                maxLength={100}
+                autoFocus
+                placeholderTextColor={colors.texteGris}
+              />
+              {cycleEnRenommage.erreur ? (
+                <Text style={styles.erreurSaisie}>{cycleEnRenommage.erreur}</Text>
+              ) : null}
+              <View style={styles.ligneActionsProgramme}>
+                <TouchableOpacity
+                  style={styles.boutonModifier}
+                  onPress={() => renommerCycleProgramme(cycle, cycleEnRenommage.nom)}
+                >
+                  <LibelleIcone nom="valide" taille={13} ecart={5} style={styles.boutonModifierTexte}>Enregistrer</LibelleIcone>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.boutonAnnulerRenommage} onPress={() => setCycleEnRenommage(null)}>
+                  <Text style={styles.boutonAnnulerRenommageTexte}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TexteIcone nom="programme" taille={14} couleur={colors.or} style={styles.nomProgrammeTexte}>{cycle.nom}</TexteIcone>
+          )}
+          {!(cycleEnRenommage && cycleEnRenommage.id === cycle.id) && (
           <View style={styles.ligneActionsProgramme}>
             <TouchableOpacity
               style={styles.boutonModifier}
@@ -109,6 +142,12 @@ export function vueProgrammes(ctx) {
                 { type: 'cycle', id: cycle.id, ...cycle })}
             >
               <LibelleIcone nom="tableau" taille={13} ecart={5} style={styles.boutonModifierTexte}>Tableau</LibelleIcone>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.boutonModifier}
+              onPress={() => setCycleEnRenommage({ id: cycle.id, nom: cycle.nom })}
+            >
+              <LibelleIcone nom="crayon" taille={13} ecart={5} style={styles.boutonModifierTexte}>Renommer</LibelleIcone>
             </TouchableOpacity>
             {/* Publier : réservé à l'admin (le serveur renvoie 403 sinon).
                 C'est ainsi qu'on alimente le catalogue — pas de formulaire
@@ -135,6 +174,7 @@ export function vueProgrammes(ctx) {
               <Icone nom="croix" taille={15} couleur={colors.rouge} />
             </TouchableOpacity>
           </View>
+          )}
           <ConfirmationSuppression
             actif={suppressionAConfirmer === 'cycle-' + cycle.id}
             question={`Supprimer « ${cycle.nom} » et ses ${cycle.seances.length} séances ?`}

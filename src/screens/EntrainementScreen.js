@@ -39,6 +39,7 @@ import {
   rattrapagesVisibles, masquesAGarder,
 } from '../logic/rattrapage';
 import { objectifDepuisSeries, dureeReelleMinutes, lireRirSaisi } from '../logic/seanceLibre';
+import { brouillonDepuisSeance, correctionDepuisBrouillon } from '../logic/correctionSeance';
 import { reposDe } from '../logic/repos';
 import { ligneVide, exercicesDepuisLignes, deplacerLigne, detecterRenommages } from '../logic/lignesProgramme';
 import { aujourdhui } from './entrainement/outils';
@@ -113,7 +114,7 @@ import { vueAccueil } from './entrainement/vueAccueil';
 // par un paramètre `idStockage` pour couvrir ce cas ; il a disparu avec le
 // mode hors-ligne.
 export default function EntrainementScreen({
-  moi, ajouterSeanceLocale, actif = true,
+  moi, ajouterSeanceLocale, rechargerSeances, actif = true,
 }) {
   const idLocal = moi.id;
   // Les vues de cet onglet. Depuis la refonte du 26/10/2026, l'accueil n'est
@@ -194,6 +195,9 @@ export default function EntrainementScreen({
   // Suppression en DEUX temps : la croix arme la question, un second geste
   // confirme. Contient la clé de l'élément visé ('cycle-3', 'prog-7'…).
   const [suppressionAConfirmer, setSuppressionAConfirmer] = useState(null);
+  // Renommer un programme COMPLET (14/11/2026) : { id, nom } du programme dont
+  // le champ de nom est ouvert dans « Mes programmes », sinon null.
+  const [cycleEnRenommage, setCycleEnRenommage] = useState(null);
 
   // ---- Volume : objectif de séries par groupe musculaire (« body part ») ----
   // objectifs = { Pectoraux: 12, ... } ; correctionsGroupes = { 'Mon exo': 'Dos' }
@@ -553,6 +557,20 @@ export default function EntrainementScreen({
 
   // ---- Détail d'une séance passée (historique) ----
   const [entrainementSelectionne, setEntrainementSelectionne] = useState(null);
+  // CORRIGER UNE SÉANCE DÉJÀ ENREGISTRÉE (14/11/2026) : le brouillon édité dans
+  // le détail d'une séance passée (null = lecture seule), l'envoi en cours, le
+  // message d'erreur, et la question « supprimer cette séance ? ».
+  const [correctionSeance, setCorrectionSeance] = useState(null);
+  const [correctionEnCours, setCorrectionEnCours] = useState(false);
+  const [erreurCorrection, setErreurCorrection] = useState(null);
+  const [suppressionSeance, setSuppressionSeance] = useState(false);
+  // Ouvrir une AUTRE séance de l'historique repart de sa lecture seule : un
+  // brouillon laissé ouvert ne doit jamais s'appliquer à la mauvaise séance.
+  useEffect(() => {
+    setCorrectionSeance(null);
+    setErreurCorrection(null);
+    setSuppressionSeance(false);
+  }, [entrainementSelectionne?.id]);
 
   // ---- La séance survit à tout (07/09/2026) ----
   // `seanceRestauree` : a-t-on FINI de relire la séance interrompue ?
@@ -607,6 +625,8 @@ export default function EntrainementScreen({
       return true;
     }
     if (vue === 'historiqueDetail') {
+      // Une correction ouverte se ferme d'abord (sans rien enregistrer).
+      if (correctionSeance) { fermerCorrection(); return true; }
       // Le détail d'une séance s'ouvre DEPUIS l'historique : on y revient,
       // pas à l'accueil.
       setEntrainementSelectionne(null);
@@ -1449,6 +1469,91 @@ export default function EntrainementScreen({
     return `Cette séance est utilisée sur ${morceaux.join(' et ')} : tes modifications s'y appliqueront partout.`;
   }
 
+  // Renomme un programme COMPLET (14/11/2026). Mise à jour à l'écran tout de
+  // suite ; si l'envoi échoue, on le dit et on resynchronise (comme supprimer).
+  // ----- Corriger / supprimer une séance DÉJÀ ENREGISTRÉE (14/11/2026) -----
+  function ouvrirCorrection() {
+    setCorrectionSeance(brouillonDepuisSeance(entrainementSelectionne));
+    setErreurCorrection(null);
+    setSuppressionSeance(false);
+  }
+
+  function fermerCorrection() {
+    setCorrectionSeance(null);
+    setErreurCorrection(null);
+  }
+
+  // index -1 = la durée (un seul champ, hors des séries).
+  function majLigneCorrection(index, champ, texte) {
+    setCorrectionSeance((b) => (index < 0 ? { ...b, [champ]: texte } : {
+      ...b, series: b.series.map((l, i) => (i === index ? { ...l, [champ]: texte } : l)),
+    }));
+  }
+
+  function retirerLigneCorrection(index) {
+    setCorrectionSeance((b) => ({ ...b, series: b.series.filter((_, i) => i !== index) }));
+  }
+
+  async function enregistrerCorrection() {
+    const correction = correctionDepuisBrouillon(correctionSeance);
+    if (correction.erreur) { setErreurCorrection(correction.erreur); return; }
+    setCorrectionEnCours(true);
+    setErreurCorrection(null);
+    try {
+      const corrigee = await api.corrigerEntrainement(
+        entrainementSelectionne.id, correction.series, correction.duree_minutes,
+      );
+      setEntrainements((liste) => liste.map((e) => (e.id === corrigee.id ? corrigee : e)));
+      setEntrainementSelectionne(corrigee);
+      setCorrectionSeance(null);
+      await rechargerSeances?.();
+    } catch (err) {
+      setErreurCorrection(`Correction NON enregistrée (${err.message}). Rien n'a changé, tu peux réessayer.`);
+    } finally {
+      setCorrectionEnCours(false);
+    }
+  }
+
+  async function supprimerSeanceEnregistree() {
+    const seance = entrainementSelectionne;
+    setCorrectionEnCours(true);
+    setErreurCorrection(null);
+    try {
+      await api.supprimerEntrainement(seance.id);
+      setEntrainements((liste) => liste.filter((e) => e.id !== seance.id));
+      setSuppressionSeance(false);
+      setCorrectionSeance(null);
+      setEntrainementSelectionne(null);
+      setVue('historique');
+      await rechargerSeances?.();
+    } catch (err) {
+      setSuppressionSeance(false);
+      setErreurCorrection(`La séance n'a pas pu être supprimée (${err.message}). Elle est toujours là.`);
+    } finally {
+      setCorrectionEnCours(false);
+    }
+  }
+
+  async function renommerCycleProgramme(cycle, nom) {
+    const propre = String(nom || '').trim();
+    if (!propre) {
+      // Le message s'affiche SOUS le champ (le message général de l'écran est
+      // tout en bas de « Mes programmes », hors de vue) ; le champ reste ouvert.
+      setCycleEnRenommage((c) => ({ ...c, erreur: 'Le nom du programme ne peut pas être vide.' }));
+      return;
+    }
+    setCycleEnRenommage(null);
+    if (propre === cycle.nom) return;
+    setErreur(null);
+    setCycles((c) => c.map((cy) => (cy.id === cycle.id ? { ...cy, nom: propre } : cy)));
+    try {
+      await api.renommerCycle(cycle.id, propre);
+    } catch (err) {
+      setErreur(`« ${cycle.nom} » n'a pas pu être renommé (${err.message}).`);
+      await chargerTout();
+    }
+  }
+
   async function supprimerCycle(cycle) {
     const idsSeances = cycle.seances.map((s) => s.id);
     setCycles((c) => c.filter((cy) => cy.id !== cycle.id));
@@ -2054,6 +2159,10 @@ export default function EntrainementScreen({
     setEntrainementSelectionne, setExerciceARetirer, setExercicesSession,
     setJourEnEdition, setNomProgramme, setNouvelExerciceLibre, setRepos,
     setSerieEnEdition, setVue, supprimerSerie, terminerSeance,
+    correctionSeance, correctionEnCours, erreurCorrection, suppressionSeance,
+    setSuppressionSeance, ouvrirCorrection, fermerCorrection, majLigneCorrection,
+    retirerLigneCorrection, enregistrerCorrection, supprimerSeanceEnregistree,
+    setCorrectionSeance,
   };
 
   if (vue === 'historiqueDetail' && entrainementSelectionne) return vueDetailSeance(ctx);
@@ -2327,6 +2436,7 @@ export default function EntrainementScreen({
     setRenommages, setSeanceDeroulee, setSemainesModele,
     setSuppressionAConfirmer, setTousExercicesCourbe, setVolumeOuvert,
     sortirDuProgramme, suppressionAConfirmer, supprimerCycle,
+    cycleEnRenommage, setCycleEnRenommage, renommerCycleProgramme,
     supprimerProgramme, totalSeriesSemaine, tousExercicesCourbe,
     viderJourSemaine, volumeOuvert,
   };

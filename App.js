@@ -401,6 +401,14 @@ function AppInterne() {
   // l'entraînement (voir backend/app/main.py) : ici on ne fait qu'afficher le
   // résultat tout de suite, puis on relit la vérité du serveur. Envoyer la
   // séance une deuxième fois depuis l'app la compterait en double.
+  // Relit les séances du serveur, sans rien supposer (14/11/2026) : après la
+  // correction ou la suppression d'une séance déjà enregistrée, le compteur du
+  // Profil doit suivre. Les défis déjà validés le restent.
+  async function rechargerSeances() {
+    if (!moiServeur) return;
+    await chargerSeances(moiServeur.id);
+  }
+
   async function ajouterSeanceLocale(minutes, jour) {
     if (!moiServeur) return;
     const date = jour || enISO(new Date());
@@ -575,6 +583,7 @@ function AppInterne() {
           <EntrainementScreen
             moi={moi}
             ajouterSeanceLocale={ajouterSeanceLocale}
+            rechargerSeances={rechargerSeances}
             actif={actif}
           />
         );

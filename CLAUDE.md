@@ -2034,7 +2034,8 @@ découlent), `seancesAvec`, `recordPersonnel`, `tousLesRecords`,
 
 ### Signalés, NON corrigés (décision à prendre)
 
-1. **Une perf à 1 000 000 000 kg est acceptée** (`valeur` n'a pas de plafond).
+1. ✅ CORRIGÉ LE 14/11/2026 (plafond = 3 × le palier le plus haut, voir « Plafond des perfs… »).
+   **Une perf à 1 000 000 000 kg est acceptée** (`valeur` n'a pas de plafond).
    Non exploitable pour tricher — « la polyvalence récompensée » plafonne
    l'effet d'un seul exercice, la ligue reste « Aucune » — mais ça pollue
    l'affichage. PISTE : un maximum par exercice, ex. 3× le palier le plus haut.
@@ -5884,6 +5885,103 @@ le code est RECOPIÉ TEL QUEL, seul son emplacement change.
   le minuteur de repos — tout s'affiche et répond comme avant, aucune erreur de
   code en console. Suite complète : **414 tests, tous OK.**
 
+## Plafond des perfs, séance enregistrée corrigeable, programme renommable — 14/11/2026
+
+Trois demandes de Hafiz, prises dans la liste « ce qui reste » :
+« fais la limite sur les valeurs de perfs, corriger une séance déjà enregistrée,
+renommer un programme complet ».
+
+### 1. Une perf ne peut plus dépasser 3 fois le palier le plus haut
+
+Point 1 des « Signalés, NON corrigés » de l'audit du 06/09/2026 : 1 000 000 000 kg
+au développé couché était accepté.
+- RÈGLE : `valeur_max_exercice` (`backend/app/logique.py`) = `valeurMaxExercice`
+  (`src/logic/classement.js`) = dernier palier du barème × `FACTEUR_PLAFOND` (3).
+  Ex. homme développé couché : 145 × 3 = 435 kg ; femme traction prise large :
+  15 × 3 = 45 reps. Assez large pour les plus forts, assez serré pour attraper
+  un zéro de trop.
+- Serveur : `POST /joueurs/{id}/performances` répond 400 au-delà (« Valeur trop
+  haute… Vérifie qu'il n'y a pas un zéro de trop. »). Le mode test n'est pas
+  concerné (il écrit des valeurs de paliers).
+- Écran Perfs : l'aperçu de palier affiche « VALEUR TROP HAUTE — 435 kg au
+  maximum, un zéro de trop ? » PENDANT la frappe, et le bouton refuse AVANT
+  d'envoyer — la saisie reste à l'écran.
+- PARITÉ : `test_parite_front_back.py` compare les plafonds des deux côtés pour
+  CHAQUE exercice des deux barèmes (le harnais renvoie une clé `plafonds` à part
+  des cas). Vu échouer avec un facteur 4 côté app.
+- Tests : `test_api_plafond_perf.py` (4 cas : valeur absurde refusée et rien
+  d'enregistré, plafond pile accepté / un cran au-dessus refusé, vraie grosse
+  perf acceptée, plafond qui suit le barème du sexe). Vu échouer sans la
+  vérification serveur.
+
+### 2. Corriger ou supprimer une séance DÉJÀ ENREGISTRÉE
+
+Avant, une séance enregistrée était figée : une charge mal tapée (500 kg au lieu
+de 105) restait à vie dans l'historique, les records, les courbes et les
+suggestions de charge.
+- Serveur : `PUT /entrainements/{id}` (`CorrectionEntrainement` : la liste
+  COMPLÈTE des séries, qui remplace l'ancienne, + `duree_minutes` facultative)
+  et `DELETE /entrainements/{id}`. Propriétaire uniquement (403/401), 404 si
+  la séance n'existe pas. La DATE et le PROGRAMME ne changent pas.
+  - Les séries sont RENUMÉROTÉES par exercice dans l'ordre reçu : une série
+    retirée ne laisse pas de trou (« Série 1, Série 3 »).
+  - LA SÉANCE DU JOUR SUIT (compteur du Profil, défis) : elle additionne les
+    minutes de tous les entraînements de la journée, donc on lui retire
+    l'ancienne contribution et on ajoute la nouvelle (`_minutes_de` dans
+    main.py : la durée mesurée, sinon l'estimation — la MÊME règle qu'à
+    l'enregistrement). Supprimer le dernier entraînement d'un jour efface la
+    séance de ce jour (`_ajuster_seance_du_jour`, basededonnees.py).
+  - ⚠️ Un défi DÉJÀ validé le reste : ses points ne sont pas repris.
+  - Tout en UNE transaction ; les séries sont effacées explicitement (on ne
+    compte pas sur la cascade, que SQLite n'applique que si les clés étrangères
+    sont activées).
+- Écran : Entraînement → Progrès → une séance de l'historique → deux boutons,
+  « Corriger la séance » (or) et « Supprimer » (rouge, confirmation en deux
+  temps). La correction remplace l'affichage : une ligne par série
+  (RÉPÉTITIONS / CHARGE (KG) / RIR + croix pour la retirer), puis la DURÉE
+  (vide = estimée). Un refus dit QUELLE ligne pose problème
+  (« Squat — série 2 : le RIR doit être… »), sous les champs. Le retour Android
+  ferme d'abord la correction ; ouvrir une autre séance repart de la lecture
+  seule (un brouillon ne peut pas s'appliquer à la mauvaise séance).
+  Après l'enregistrement, App.js relit les séances (`rechargerSeances`, nouveau
+  prop) pour que le compteur du Profil suive.
+- La conversion séance ↔ brouillon (`src/logic/correctionSeance.js`) est testée
+  par `test_correction_seance.py` + `harnais/harnais_correction_seance.mjs`
+  (22 cas : aller-retour sans perte, virgule, numéros recalculés, chaque saisie
+  invalide refusée, données abîmées).
+- Tests serveur : `test_api_corriger_seance.py` (10 cas). **5 mutations vues
+  échouer** (pas de renumérotation, séance du jour qui ne suit pas la
+  correction, ni la suppression, propriété non vérifiée, séance du jour jamais
+  effacée).
+
+### 3. Renommer un programme COMPLET
+
+Il fallait le supprimer et le recréer. `PUT /cycles/{id}/nom` (même modèle
+`NomProgramme` que pour une séance ; espaces autour retirés, nom vide → 422,
+propriétaire uniquement) — `db.renommer_cycle`. Les SÉANCES gardent leur nom
+(« Push » reste « Push ») : c'est le nom du programme qui les groupe qui change.
+- Écran : bouton « Renommer » (crayon) sur la carte du programme dans « Mes
+  programmes » ; le champ prend la place du nom, pré-rempli, avec Enregistrer /
+  Annuler. Un nom vide est refusé SOUS le champ (le message général de l'écran
+  est tout en bas, hors de vue — trouvé en vérifiant). Mise à jour à l'écran
+  tout de suite ; un échec d'envoi est dit et l'écran se resynchronise.
+- Tests : `test_api_renommer_cycle.py` (5 cas). Vu échouer sans la vérification
+  de propriété.
+
+### Vérifié
+
+Suite complète : **435 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : « Test repos » renommé en
+« PPL Hiver 2026 » (espaces retirés en base, séance « Jambes » intacte), nom vide
+refusé sous le champ ; séance du 11/11 corrigée (102,5 kg × 6, RIR 0, durée
+45 min — RIR 12 refusé avec « Squat — série 2 » juste sous les champs), la séance
+du jour passe de 2 à 45 min ; une série retirée sur la séance du 10/11 →
+numéros recalculés ; séance supprimée → disparue, le 10/11 passe de 72 à 52 min,
+retour à l'historique ; perf 1450 kg au développé couché → « VALEUR TROP HAUTE /
+435 kg au maximum » pendant la frappe, refusée, saisie gardée, ancienne perf
+intacte. Aucun débordement, cibles ≥ 40 px, zéro erreur console.
+⚠️ Demande un NOUVEL APK (et le serveur déployé avant : nouvelles routes).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -5896,7 +5994,7 @@ le code est RECOPIÉ TEL QUEL, seul son emplacement change.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (414 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (435 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)
@@ -5928,18 +6026,15 @@ le code est RECOPIÉ TEL QUEL, seul son emplacement change.
   locale — mais on ne peut pas continuer à s'entraîner tant que le serveur ne répond pas. À
   traiter par un chemin explicite si le besoin se présente, jamais par le retour d'un mode
   hors-ligne complet (voir « Le mode hors-ligne est supprimé »)
-- Saisir ou corriger À LA MAIN la durée d'une séance (historique) — depuis le 10/11/2026 la
-  durée RÉELLE est mesurée par le chrono et envoyée au serveur, mais les séances d'avant n'en ont
-  pas, et une durée non mesurable (séance reprise le lendemain) reste vide
-- Éditer/supprimer une série d'une séance DÉJÀ ENREGISTRÉE (pendant la séance, c'est fait
-  depuis le 04/09/2026 — voir « Le NOM d'un exercice est son identifiant »)
+- Changer la DATE ou le PROGRAMME d'une séance déjà enregistrée (ses séries et sa durée se
+  corrigent depuis le 14/11/2026, voir « Plafond des perfs, séance enregistrée corrigeable »)
 - Un programme « vidé » d'un jour (🗑 dans la semaine type) reste dans « Mes programmes » sans
   aucun jour — à supprimer à la main avec ✕ s'il n'est plus voulu (pas de ménage automatique)
 - Volume par groupe musculaire : seule la SEMAINE EN COURS est affichée (pas d'historique des
   semaines passées, pas de graphique d'évolution) — voir "Entraînement v2"
 - Écran de progression PAR EXERCICE (toutes les séances d'un mouvement + courbe) — proposé à
   Hafiz le 12/08/2026, non retenu pour l'instant (il a choisi suggestion + records + stagnation)
-- Renommer un CYCLE (le nom du programme complet) — il faut encore le supprimer et le recréer.
+- Renommer un CYCLE : fait le 14/11/2026 (« Renommer » dans « Mes programmes »).
   AJOUTER une séance à un cycle se fait depuis le 24/09/2026 (« ➕ Ajouter une séance »).
   Ajouter/retirer un JOUR se fait depuis le 07/09/2026 avec les puces de « Mes programmes »
   (voir « Entraînement v5 »), et ses séances restent éditables une par une

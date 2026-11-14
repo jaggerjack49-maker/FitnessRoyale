@@ -724,8 +724,26 @@ export async function cyclesDuJoueur(joueurId) {
   return get(`/joueurs/${joueurId}/cycles`);
 }
 
+// Corriger / supprimer une séance DÉJÀ ENREGISTRÉE (14/11/2026).
+export async function corrigerEntrainement(entrainementId, series, dureeMinutes) {
+  return appel(`/entrainements/${entrainementId}`, {
+    method: 'PUT', body: JSON.stringify({ series, duree_minutes: dureeMinutes }),
+  });
+}
+
+export async function supprimerEntrainement(entrainementId) {
+  return appelSuppression(`/entrainements/${entrainementId}`);
+}
+
 export async function supprimerCycle(cycleId) {
   return appelSuppression(`/cycles/${cycleId}`);
+}
+
+// Renomme un programme COMPLET (14/11/2026). Ses séances gardent leur nom.
+export async function renommerCycle(cycleId, nom) {
+  return appel(`/cycles/${cycleId}/nom`, {
+    method: 'PUT', body: JSON.stringify({ nom }),
+  });
 }
 
 // ----- Planning par date précise (calendrier interactif) -----

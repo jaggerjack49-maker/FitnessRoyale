@@ -1958,6 +1958,13 @@ def renommer_programme(programme_id: int, nom: str) -> None:
         conn.execute("UPDATE programmes SET nom = ? WHERE id = ?", (nom, programme_id))
 
 
+def renommer_cycle(cycle_id: int, nom: str) -> None:
+    """Renomme un programme COMPLET (14/11/2026). Ses séances gardent leur nom :
+    « Push » reste « Push », seul le nom du programme qui les groupe change."""
+    with connexion() as conn:
+        conn.execute("UPDATE cycles SET nom = ? WHERE id = ?", (nom, cycle_id))
+
+
 def remplacer_exercices_programme(programme_id: int, exercices: list) -> None:
     """Remplace TOUTE la liste d'exercices cibles d'un programme (édition des
     séries × reps depuis la semaine type). exercices = [{exercice,
@@ -2290,6 +2297,66 @@ def _lire_entrainement(conn, entrainement_id: int) -> dict | None:
         )
     ]
     return entrainement
+
+
+def _ajuster_seance_du_jour(conn, joueur_id: int, jour: str, ecart: int) -> None:
+    """Corrige les minutes de la séance du jour après la correction ou la
+    suppression d'un entraînement (14/11/2026).
+
+    La séance du jour ADDITIONNE les minutes de tous les entraînements de la
+    journée (voir `enregistrer_seance_du_jour`) : on lui retire donc l'ancienne
+    contribution et on lui ajoute la nouvelle (`ecart` = nouvelle − ancienne).
+    Si plus AUCUN entraînement n'existe ce jour-là et qu'il ne reste plus de
+    minutes, la séance du jour disparaît : ce jour n'a plus été entraîné."""
+    seance = conn.execute(
+        "SELECT id, minutes FROM seances WHERE joueur_id = ? AND date = ?",
+        (joueur_id, jour),
+    ).fetchone()
+    if seance is None:
+        return
+    minutes = max(0, seance["minutes"] + ecart)
+    reste = conn.execute(
+        "SELECT COUNT(*) AS n FROM entrainements WHERE joueur_id = ? AND date = ?",
+        (joueur_id, jour),
+    ).fetchone()["n"]
+    if reste == 0 and minutes == 0:
+        conn.execute("DELETE FROM seances WHERE id = ?", (seance["id"],))
+    else:
+        conn.execute("UPDATE seances SET minutes = ? WHERE id = ?", (minutes, seance["id"]))
+
+
+def corriger_entrainement(entrainement_id: int, series: list, duree_minutes: int | None,
+                          ecart_minutes: int) -> dict:
+    """Remplace les séries (et la durée) d'une séance DÉJÀ ENREGISTRÉE
+    (14/11/2026). Tout dans UNE transaction : séries, durée et séance du jour."""
+    with connexion() as conn:
+        actuel = _lire_entrainement(conn, entrainement_id)
+        conn.execute("DELETE FROM series_journal WHERE entrainement_id = ?", (entrainement_id,))
+        conn.execute(
+            "INSERT INTO series_journal (entrainement_id, exercice, numero_serie, reps, poids, "
+            "rir) VALUES " + ", ".join(["(?, ?, ?, ?, ?, ?)"] * len(series)),
+            tuple(v for s in series for v in (
+                entrainement_id, s["exercice"], s["numero_serie"], s["reps"], s["poids"],
+                s.get("rir"))),
+        )
+        conn.execute("UPDATE entrainements SET duree_minutes = ? WHERE id = ?",
+                     (duree_minutes, entrainement_id))
+        _ajuster_seance_du_jour(conn, actuel["joueur_id"], actuel["date"], ecart_minutes)
+        return _lire_entrainement(conn, entrainement_id)
+
+
+def supprimer_entrainement(entrainement_id: int, minutes_retirees: int) -> None:
+    """Supprime une séance DÉJÀ ENREGISTRÉE et ses séries (14/11/2026), et
+    retire ses minutes de la séance du jour — dans la même transaction.
+    Les séries sont effacées explicitement : on ne compte pas sur la cascade,
+    que SQLite n'applique que si les clés étrangères sont activées."""
+    with connexion() as conn:
+        actuel = _lire_entrainement(conn, entrainement_id)
+        if actuel is None:
+            return
+        conn.execute("DELETE FROM series_journal WHERE entrainement_id = ?", (entrainement_id,))
+        conn.execute("DELETE FROM entrainements WHERE id = ?", (entrainement_id,))
+        _ajuster_seance_du_jour(conn, actuel["joueur_id"], actuel["date"], -minutes_retirees)
 
 
 def lire_entrainement(entrainement_id: int) -> dict | None:

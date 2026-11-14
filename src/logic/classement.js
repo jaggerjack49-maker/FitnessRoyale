@@ -15,6 +15,18 @@ export function palierExercice(sexe, exercice, valeur) {
   return palier;
 }
 
+// PLAFOND D'UNE PERF (14/11/2026) : au-delà de 3 fois le palier le plus haut
+// du barème, la valeur est refusée (le serveur refuse aussi, avec la MÊME règle :
+// `valeur_max_exercice` dans backend/app/logique.py, comparée par
+// test_parite_front_back.py). Renvoie null pour un exercice inconnu.
+export const FACTEUR_PLAFOND = 3;
+
+export function valeurMaxExercice(sexe, exercice) {
+  const bareme = (baremes[sexe] || {})[exercice];
+  if (!bareme) return null;
+  return bareme.paliers[bareme.paliers.length - 1] * FACTEUR_PLAFOND;
+}
+
 // Performances vérifiées uniquement, sous forme de liste [exercice, perf].
 function perfsVerifiees(joueur) {
   // `|| {}` : un joueur SANS champ `performances` faisait planter tout l'écran

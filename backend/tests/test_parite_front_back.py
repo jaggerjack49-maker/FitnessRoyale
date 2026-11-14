@@ -34,7 +34,9 @@ from app.logique import (
     cle_salle,
     ligue_joueur,
     moyenne_paliers,
+    valeur_max_exercice,
 )
+from app.baremes import BAREMES
 
 HARNAIS = Path(__file__).parent / "harnais"
 CAS = HARNAIS / "cas_classement.json"
@@ -95,6 +97,9 @@ class TestPariteFrontBack(unittest.TestCase):
         cls.cas = json.loads(CAS.read_text(encoding="utf-8"))
         cls.js = resultat_javascript(CAS)
         cls.py = resultat_python(cls.cas)
+        # Les plafonds ne sont pas des cas : on les sort avant de comparer les cas.
+        cls.plafonds_js = cls.js.pop("plafonds")
+        cls.plafonds_inconnus_js = cls.js.pop("plafondsInconnus")
 
     def test_les_deux_implementations_traitent_les_memes_cas(self):
         self.assertEqual(sorted(self.js), sorted(self.py))
@@ -130,6 +135,18 @@ class TestPariteFrontBack(unittest.TestCase):
                              f"classement par salle différent sur « {nom} »")
             self.assertEqual(self.js[nom]["clesSalles"], self.py[nom]["clesSalles"],
                              f"clés de salle différentes sur « {nom} »")
+
+    def test_le_plafond_d_une_perf_est_le_meme(self):
+        """14/11/2026 : l'écran refuse une valeur trop haute AVANT de l'envoyer,
+        le serveur la refuse aussi — les deux doivent avoir la même limite, sinon
+        l'un accepterait ce que l'autre refuse."""
+        plafonds_py = {
+            sexe: {exo: valeur_max_exercice(sexe, exo) for exo in BAREMES[sexe]}
+            for sexe in BAREMES
+        }
+        self.assertEqual(self.plafonds_js, plafonds_py)
+        self.assertEqual(self.plafonds_inconnus_js, [None, None])
+        self.assertEqual(valeur_max_exercice("homme", "Pas un exercice"), None)
 
     def test_les_cas_couvrent_bien_les_regles_qui_comptent(self):
         """Garde-fou sur les cas eux-mêmes : un fichier de cas qui se viderait

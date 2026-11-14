@@ -28,6 +28,23 @@ def palier_exercice(sexe: str, exercice: str, valeur: float) -> int:
     return palier
 
 
+# PLAFOND D'UNE PERF (14/11/2026) : une valeur au-delà de 3 fois le palier le
+# plus haut du barème est refusée (avant, 1 000 000 000 kg était accepté — audit
+# du 06/09/2026). 3 fois laisse une marge très large aux plus forts, tout en
+# écartant une faute de frappe (un zéro de trop) ou une valeur absurde.
+# Portage IDENTIQUE de `valeurMaxExercice` (src/logic/classement.js), vérifié
+# par test_parite_front_back.py.
+FACTEUR_PLAFOND = 3
+
+
+def valeur_max_exercice(sexe: str, exercice: str) -> float | None:
+    """Valeur la plus haute acceptée sur un exercice (None si exercice inconnu)."""
+    bareme = BAREMES.get(sexe, {}).get(exercice)
+    if bareme is None:
+        return None
+    return bareme["paliers"][-1] * FACTEUR_PLAFOND
+
+
 def perfs_verifiees(joueur: dict) -> list:
     """Liste des perfs vérifiées d'un joueur : [(exercice, perf), ...]."""
     return [(exo, perf) for exo, perf in joueur["performances"].items() if est_verifiee(perf)]

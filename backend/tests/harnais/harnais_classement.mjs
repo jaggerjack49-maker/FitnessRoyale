@@ -9,6 +9,7 @@
 // Lancement (depuis n'importe où) :
 //   node --import ./resolveur-enregistre.mjs harnais_classement.mjs cas.json
 import { readFileSync } from 'node:fs';
+import { baremes } from '../../../src/data/clubSP.js';
 import {
   classer,
   classerParCategories,
@@ -17,6 +18,7 @@ import {
   ligueJoueur,
   moyennePaliers,
   cleSalle,
+  valeurMaxExercice,
 } from '../../../src/logic/classement.js';
 
 const cas = JSON.parse(readFileSync(process.argv[2], 'utf-8'));
@@ -47,5 +49,16 @@ for (const [nom, entree] of Object.entries(cas)) {
     clesSalles: joueurs.map((j) => cleSalle(j.salle)),
   };
 }
+
+// Le plafond d'une perf, pour chaque exercice des deux barèmes (14/11/2026).
+// Clé « plafonds » : hors des cas, comparée à part par le test Python.
+resultat.plafonds = {};
+for (const sexe of Object.keys(baremes)) {
+  resultat.plafonds[sexe] = {};
+  for (const exo of Object.keys(baremes[sexe])) {
+    resultat.plafonds[sexe][exo] = valeurMaxExercice(sexe, exo);
+  }
+}
+resultat.plafondsInconnus = [valeurMaxExercice('homme', 'Pas un exercice'), valeurMaxExercice('autre', 'Squat')];
 
 process.stdout.write(JSON.stringify(resultat, null, 2));

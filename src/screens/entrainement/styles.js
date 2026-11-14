@@ -206,6 +206,12 @@ export const styles = StyleSheet.create({
     paddingVertical: 13, paddingHorizontal: 14,
   },
   boutonModifierTexte: { color: colors.or, fontWeight: '800', fontSize: 12 },
+  // « Annuler » du renommage d'un programme : neutre, à côté de « Enregistrer » en or.
+  boutonAnnulerRenommage: {
+    borderWidth: 1, borderColor: colors.bordure, borderRadius: 8,
+    paddingVertical: 13, paddingHorizontal: 14,
+  },
+  boutonAnnulerRenommageTexte: { color: colors.texteGris, fontWeight: '700', fontSize: 12 },
   zoneDeroule: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   boutonSortir: {
     borderWidth: 1, borderColor: colors.texteGris, borderRadius: 8,

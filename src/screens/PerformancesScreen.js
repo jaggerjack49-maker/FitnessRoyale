@@ -23,7 +23,7 @@ import { colors, espacement } from '../theme';
 import { da, monospace } from '../designSystem';
 import { baremes, nomsLigues, couleursLigues } from '../data/clubSP';
 import { STATUTS, estVerifiee } from '../data/statuts';
-import { palierExercice } from '../logic/classement';
+import { palierExercice, valeurMaxExercice } from '../logic/classement';
 import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import * as api from '../api';
 
@@ -148,6 +148,15 @@ export default function PerformancesScreen({
     if (!bareme) return null;
     const nombre = parseFloat(String(valeur).replace(',', '.'));
     if (isNaN(nombre) || nombre <= 0) return null;
+    // Plafond (14/11/2026) : on prévient PENDANT la frappe, avant d'appuyer.
+    const plafond = valeurMaxExercice(moi.sexe, exerciceChoisi);
+    if (plafond !== null && nombre > plafond) {
+      return {
+        nom: 'VALEUR TROP HAUTE',
+        couleur: colors.rouge,
+        indice: `${arrondi(plafond)} ${bareme.unite === 'kg' ? 'kg' : 'reps'} au maximum — un zéro de trop ?`,
+      };
+    }
     const palier = palierExercice(moi.sexe, exerciceChoisi, nombre);
     const seuils = bareme.paliers;
     if (palier === 0) {
@@ -203,6 +212,13 @@ export default function PerformancesScreen({
     }
     if (isNaN(nombre) || nombre <= 0) {
       setMessageSaisie('Entre une valeur valide d\'abord.');
+      return;
+    }
+    // Même plafond que le serveur (`valeur_max_exercice`) : on refuse ici pour
+    // garder la saisie à l'écran au lieu de l'effacer puis d'afficher un refus.
+    const plafond = valeurMaxExercice(moi.sexe, exerciceChoisi);
+    if (plafond !== null && nombre > plafond) {
+      setMessageSaisie(`Valeur trop haute : ${arrondi(plafond)} ${bareme.unite === 'kg' ? 'kg' : 'reps'} au maximum sur cet exercice.`);
       return;
     }
     const exo = exerciceChoisi;
