@@ -153,6 +153,40 @@ export function groupeDeLExercice(nomExercice, corrections = {}) {
     || deviner_groupe(nomExercice);
 }
 
+// ----- UN EXERCICE DANS PLUSIEURS GROUPES (15/11/2026) -----
+// Demande de Hafiz : « un exercice peut être compté dans plus d'un groupe
+// musculaire » — un développé couché travaille les pectoraux ET les triceps.
+// Le GROUPE PRINCIPAL reste celui d'avant (correction > fiche > mots-clés) ;
+// `enPlus` = { 'Développé couché': ['Triceps', 'Épaules'] } ajoute des groupes
+// choisis À LA MAIN. Rien n'est ajouté automatiquement : le compteur de
+// quelqu'un qui n'a rien touché ne change pas d'un chiffre.
+// RÈGLE DE COMPTAGE : chaque série compte UNE FOIS ENTIÈRE dans chacun de ses
+// groupes (une série de développé couché = 1 série de pectoraux + 1 série de
+// triceps). Le total « séries cette semaine » de l'écran, lui, compte les
+// séries réellement faites — voir `totalSeriesFaites`.
+export function groupesDeLExercice(nomExercice, corrections = {}, enPlus = {}) {
+  const principal = groupeDeLExercice(nomExercice, corrections || {});
+  const extras = (enPlus && Array.isArray(enPlus[nomExercice])) ? enPlus[nomExercice] : [];
+  const liste = [];
+  [principal, ...extras].forEach((g) => {
+    if (g && groupesMusculaires.includes(g) && !liste.includes(g)) liste.push(g);
+  });
+  return liste;
+}
+
+// Coche / décoche un groupe EN PLUS (jamais le principal, qui compte déjà).
+// Renvoie la nouvelle liste, rangée dans l'ordre des groupes de l'app.
+export function basculerGroupeEnPlus(liste, groupe, principal) {
+  const actuelle = (Array.isArray(liste) ? liste : []).filter(
+    (g) => groupesMusculaires.includes(g) && g !== principal
+  );
+  if (!groupesMusculaires.includes(groupe) || groupe === principal) return actuelle;
+  const suivante = actuelle.includes(groupe)
+    ? actuelle.filter((g) => g !== groupe)
+    : [...actuelle, groupe];
+  return groupesMusculaires.filter((g) => suivante.includes(g));
+}
+
 // ----- Semaine en cours (lundi → dimanche), pour compter le volume -----
 
 // Le lundi de la semaine contenant `date` (objet Date), à midi (à l'abri des
@@ -166,7 +200,7 @@ export function lundiDeLaSemaine(date = new Date()) {
 // Compte les SÉRIES faites par groupe musculaire, sur les entraînements dont
 // la date tombe entre debutISO et finISO (inclus).
 // Renvoie { Pectoraux: 12, Dos: 8, ... } (groupes sans série absents).
-export function compterSeriesParGroupe(entrainements, corrections, debutISO, finISO) {
+export function compterSeriesParGroupe(entrainements, corrections, debutISO, finISO, enPlus = {}) {
   const total = {};
   // Garde-fous (audit du 06/09/2026) : une séance sans date ou sans `series`
   // faisait planter le comptage, donc tout l'onglet Entraînement.
@@ -175,9 +209,11 @@ export function compterSeriesParGroupe(entrainements, corrections, debutISO, fin
     if (entrainement.date < debutISO || entrainement.date > finISO) return;
     entrainement.series.forEach((serie) => {
       if (!serie) return;
-      const groupe = groupeDeLExercice(serie.exercice, corrections);
-      if (!groupe) return; // exercice non classé : compté nulle part
-      total[groupe] = (total[groupe] || 0) + 1;
+      // Une série compte dans CHACUN de ses groupes (15/11/2026). Exercice non
+      // classé : liste vide, compté nulle part (comme avant).
+      groupesDeLExercice(serie.exercice, corrections, enPlus).forEach((groupe) => {
+        total[groupe] = (total[groupe] || 0) + 1;
+      });
     });
   });
   return total;
@@ -188,7 +224,7 @@ export function compterSeriesParGroupe(entrainements, corrections, debutISO, fin
 // Sert à l'écran de correction : on doit pouvoir reclasser un exercice MAL
 // rangé, pas seulement un exercice non reconnu (sans ça, « unilateral raises »
 // classé à tort dans le Dos était impossible à corriger).
-export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finISO) {
+export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finISO, enPlus = {}) {
   const parNom = new Map();
   (entrainements || []).forEach((entrainement) => {
     if (!entrainement || !Array.isArray(entrainement.series)) return;
@@ -198,6 +234,8 @@ export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finIS
       parNom.set(serie.exercice, {
         exercice: serie.exercice,
         groupe: groupeDeLExercice(serie.exercice, corrections),
+        // Les groupes ajoutés à la main (sans le principal), pour l'écran.
+        groupesEnPlus: groupesDeLExercice(serie.exercice, corrections, enPlus).slice(1),
         corrige: !!corrections[serie.exercice],
       });
     });
@@ -222,7 +260,7 @@ export function exercicesDeLaPeriode(entrainements, corrections, debutISO, finIS
 // ⚠️ CONTRAIREMENT AU COMPTEUR, on ne se limite PAS à la semaine en cours :
 // la question posée est « qu'est-ce que j'ai fait en dernier sur ce groupe »,
 // et un groupe peu travaillé n'aurait rien à montrer sinon.
-export function dernieresSeriesDuGroupe(entrainements, corrections, groupe, limiteLignes = 8) {
+export function dernieresSeriesDuGroupe(entrainements, corrections, groupe, limiteLignes = 8, enPlus = {}) {
   // Mêmes garde-fous que le reste du fichier (audit du 06/09/2026) : une
   // séance sans `series` ou sans date ne doit jamais faire planter l'écran.
   const seances = (Array.isArray(entrainements) ? entrainements : [])
@@ -234,7 +272,7 @@ export function dernieresSeriesDuGroupe(entrainements, corrections, groupe, limi
     const parExercice = new Map();
     seance.series.forEach((serie) => {
       if (!serie) return;
-      if (groupeDeLExercice(serie.exercice, corrections) !== groupe) return;
+      if (!groupesDeLExercice(serie.exercice, corrections, enPlus).includes(groupe)) return;
       if (!parExercice.has(serie.exercice)) parExercice.set(serie.exercice, []);
       parExercice.get(serie.exercice).push({ reps: serie.reps, poids: serie.poids });
     });
@@ -244,4 +282,18 @@ export function dernieresSeriesDuGroupe(entrainements, corrections, groupe, limi
     }
   }
   return lignes;
+}
+
+// LE TOTAL DE LA SEMAINE (15/11/2026) : les séries RÉELLEMENT faites sur la
+// période. Avant, l'écran additionnait les compteurs des groupes — or depuis
+// qu'une série peut compter dans plusieurs groupes, cette somme compterait
+// deux fois un développé couché rangé en Pectoraux + Triceps.
+export function totalSeriesFaites(entrainements, debutISO, finISO) {
+  let total = 0;
+  (Array.isArray(entrainements) ? entrainements : []).forEach((e) => {
+    if (!e || !Array.isArray(e.series)) return;
+    if (e.date < debutISO || e.date > finISO) return;
+    total += e.series.filter((s) => s && s.exercice).length;
+  });
+  return total;
 }

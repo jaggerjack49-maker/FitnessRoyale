@@ -653,6 +653,12 @@ def initialiser():
                 UNIQUE (joueur_id, exercice)
             )
         """)
+        # UN EXERCICE DANS PLUSIEURS GROUPES (15/11/2026) : les groupes AJOUTÉS
+        # au principal, en JSON (« ["Triceps"] »). NULL = aucun. Le principal
+        # reste dans `groupe` : un ancien APK, qui ne lit que lui, continue de
+        # fonctionner comme avant.
+        if not _colonne_existe(conn, "groupes_exercices", "groupes_en_plus"):
+            conn.execute("ALTER TABLE groupes_exercices ADD COLUMN groupes_en_plus TEXT")
         # PLANNING par DATE PRÉCISE (calendrier interactif) : « le 2026-08-21,
         # je fais le programme X ». Complète les jours RÉCURRENTS d'un programme
         # (colonne jours ci-dessus) — les deux se cumulent à l'affichage.
@@ -2188,23 +2194,54 @@ def remplacer_objectifs_series(joueur_id: int, objectifs: list) -> None:
 
 def groupes_exercices_du_joueur(joueur_id: int, conn=None) -> list:
     with _conn_ou_neuve(conn) as conn:
-        return [
-            dict(ligne)
-            for ligne in conn.execute(
-                "SELECT exercice, groupe FROM groupes_exercices WHERE joueur_id = ?",
-                (joueur_id,),
-            )
-        ]
+        lignes = conn.execute(
+            "SELECT exercice, groupe, groupes_en_plus FROM groupes_exercices "
+            "WHERE joueur_id = ? ORDER BY id",
+            (joueur_id,),
+        ).fetchall()
+    resultat = []
+    for ligne in lignes:
+        try:
+            en_plus = json.loads(ligne["groupes_en_plus"]) if ligne["groupes_en_plus"] else []
+        except (TypeError, ValueError):
+            en_plus = []
+        resultat.append({
+            "exercice": ligne["exercice"], "groupe": ligne["groupe"],
+            "groupes_en_plus": en_plus if isinstance(en_plus, list) else [],
+        })
+    return resultat
 
 
-def definir_groupe_exercice(joueur_id: int, exercice: str, groupe: str) -> None:
-    """Associe (ou réassocie) un exercice à un groupe musculaire."""
+def definir_groupe_exercice(joueur_id: int, exercice: str, groupe: str,
+                            groupes_en_plus: list | None = None) -> list:
+    """Associe (ou réassocie) un exercice à son groupe PRINCIPAL et, si
+    `groupes_en_plus` est donné, à ses groupes EN PLUS (15/11/2026).
+    `groupes_en_plus` à None = on ne touche pas aux groupes en plus déjà posés
+    (c'est ce qu'envoie un ancien APK, qui ne les connaît pas). Le principal est
+    toujours retiré des groupes en plus : il compte déjà. Renvoie la liste
+    enregistrée."""
     with connexion() as conn:
+        if groupes_en_plus is None:
+            ligne = conn.execute(
+                "SELECT groupes_en_plus FROM groupes_exercices WHERE joueur_id = ? AND exercice = ?",
+                (joueur_id, exercice),
+            ).fetchone()
+            try:
+                groupes_en_plus = json.loads(ligne["groupes_en_plus"]) if ligne and ligne["groupes_en_plus"] else []
+            except (TypeError, ValueError):
+                groupes_en_plus = []
+        propres = []
+        for g in groupes_en_plus:
+            if g != groupe and g not in propres:
+                propres.append(g)
         conn.execute(
-            """INSERT INTO groupes_exercices (joueur_id, exercice, groupe) VALUES (?, ?, ?)
-               ON CONFLICT (joueur_id, exercice) DO UPDATE SET groupe = excluded.groupe""",
-            (joueur_id, exercice, groupe),
+            """INSERT INTO groupes_exercices (joueur_id, exercice, groupe, groupes_en_plus)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT (joueur_id, exercice) DO UPDATE SET groupe = excluded.groupe,
+                   groupes_en_plus = excluded.groupes_en_plus""",
+            (joueur_id, exercice, groupe, json.dumps(propres, ensure_ascii=False) if propres else None),
         )
+    return propres
 
 
 # ----- Planning par date précise (calendrier interactif) -----

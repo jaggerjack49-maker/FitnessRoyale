@@ -18,7 +18,7 @@ import * as api from '../api';
 import { programmesStandards, joursSemaine } from '../data/programmesStandards';
 import {
   groupesMusculaires, lundiDeLaSemaine, compterSeriesParGroupe,
-  exercicesDeLaPeriode,
+  exercicesDeLaPeriode, totalSeriesFaites, basculerGroupeEnPlus, groupeDeLExercice,
 } from '../data/groupesMusculaires';
 import { tousLesRecords } from '../logic/surchargeProgressive';
 import { jourDeLaSeance, seriesSansJour } from '../logic/dateSeance';
@@ -213,6 +213,8 @@ export default function EntrainementScreen({
   // objectifs = { Pectoraux: 12, ... } ; correctionsGroupes = { 'Mon exo': 'Dos' }
   const [objectifsSeries, setObjectifsSeries] = useState({});
   const [correctionsGroupes, setCorrectionsGroupes] = useState({});
+  // Les groupes AJOUTÉS au principal (15/11/2026) : { 'Développé couché': ['Triceps'] }.
+  const [groupesEnPlus, setGroupesEnPlus] = useState({});
   const [volumeOuvert, setVolumeOuvert] = useState(false);
   // Quel groupe musculaire montre ses dernières séries (null = aucun).
   const [groupeDeploye, setGroupeDeploye] = useState(null);
@@ -812,7 +814,12 @@ export default function EntrainementScreen({
     if (pl) setPlanning(pl);
     if (c) setCycles(c);
     if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
-    if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+    if (grp) {
+      setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+      setGroupesEnPlus(Object.fromEntries(grp
+        .filter((g) => Array.isArray(g.groupes_en_plus) && g.groupes_en_plus.length > 0)
+        .map((g) => [g.exercice, g.groupes_en_plus])));
+    }
     // Les cases corrigées à la main, rangées par la clé que lit le tableau :
     // « programme | exercice | semaine ».
     if (cib) {
@@ -1088,11 +1095,33 @@ export default function EntrainementScreen({
 
   // Classe manuellement un exercice que la détection automatique n'a pas su
   // rattacher à un groupe musculaire.
+  // Le panneau reste OUVERT après le choix du principal (15/11/2026) : on peut
+  // enchaîner sur les groupes en plus. Le nouveau principal sort des groupes
+  // en plus (il compte déjà).
   async function classerExercice(exercice, groupe) {
+    const enPlus = (groupesEnPlus[exercice] || []).filter((g) => g !== groupe);
     setCorrectionsGroupes((c) => ({ ...c, [exercice]: groupe }));
-    setExerciceAClasser(null);
+    setGroupesEnPlus((m) => ({ ...m, [exercice]: enPlus }));
     try {
-      await api.definirGroupeExercice(moi.id, exercice, groupe);
+      await api.definirGroupeExercice(moi.id, exercice, groupe, enPlus);
+    } catch (err) {
+      setErreur(
+        'Changement NON enregistré '
+        + `(${err.message || 'aucune réponse'}) — l'écran se remet à jour.`
+      );
+      await chargerTout();
+    }
+  }
+
+  // Ajoute / retire un groupe EN PLUS (15/11/2026). Le principal actuel
+  // (corrigé, ou deviné) est envoyé avec : le serveur range les deux ensemble.
+  async function basculerGroupeEnPlusExo(exercice, groupe) {
+    const principal = groupeDeLExercice(exercice, correctionsGroupes);
+    if (!principal) return; // il faut d'abord un groupe principal
+    const enPlus = basculerGroupeEnPlus(groupesEnPlus[exercice], groupe, principal);
+    setGroupesEnPlus((m) => ({ ...m, [exercice]: enPlus }));
+    try {
+      await api.definirGroupeExercice(moi.id, exercice, principal, enPlus);
     } catch (err) {
       setErreur(
         'Changement NON enregistré '
@@ -2186,7 +2215,7 @@ export default function EntrainementScreen({
   const debutSemaineISO = enISO(lundi);
   const finSemaineISO = enISO(dimanche);
   const seriesFaites = compterSeriesParGroupe(
-    entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO
+    entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO, groupesEnPlus
   );
   // Le MESSAGE du point hebdo porte les vrais chiffres de la semaine. Il est
   // reprogrammé dès que ce résumé CHANGE (chargement, séance enregistrée,
@@ -2355,7 +2384,7 @@ export default function EntrainementScreen({
   const idsSeancesDeCycles = cycles.flatMap((c) => c.seances.map((s) => s.id));
   const programmesSeuls = programmes.filter((p) => !idsSeancesDeCycles.includes(p.id));
   const exercicesSemaine = exercicesDeLaPeriode(
-    entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO
+    entrainements, correctionsGroupes, debutSemaineISO, finSemaineISO, groupesEnPlus
   );
   // Les groupes à afficher : ceux avec un objectif + ceux déjà travaillés.
   const nbNonClasses = exercicesSemaine.filter((e) => !e.groupe).length;
@@ -2366,9 +2395,9 @@ export default function EntrainementScreen({
   // séries au total, sur combien de séances, comptées depuis les séances
   // RÉELLEMENT faites. Affiché sans rien déplier — c'est le chiffre qu'on
   // vient chercher en premier.
-  const totalSeriesSemaine = groupesMusculaires.reduce(
-    (total, g) => total + (seriesFaites[g] || 0), 0
-  );
+  // Les séries RÉELLEMENT faites (15/11/2026) : additionner les groupes
+  // compterait deux fois une série rangée dans plusieurs groupes.
+  const totalSeriesSemaine = totalSeriesFaites(entrainements, debutSemaineISO, finSemaineISO);
   const seancesDeLaSemaine = entrainements.filter(
     (e) => e.date >= debutSemaineISO && e.date <= finSemaineISO
   ).length;
@@ -2600,6 +2629,7 @@ export default function EntrainementScreen({
     bandeauEtat, basculerDetailCycle, basculerJourProgramme,
     brouillonObjectifs, changerMois, chercherParCode, choixProgrammeOuvert,
     choixSeanceAFaire, classerExercice, codeSaisi, correctionsGroupes,
+    groupesEnPlus, basculerGroupeEnPlusExo,
     cycleEnService, cycleQuiRecoit, cycles, cyclesDeroules,
     cyclesPlacables, dateDuJour, datesManquees, debutSemaineISO,
     demanderSuppression, demarrerSeance, donneesIncertaines,

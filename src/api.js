@@ -708,9 +708,13 @@ export async function groupesExercices(joueurId) {
   return get(`/joueurs/${joueurId}/groupes-exercices`);
 }
 
-export async function definirGroupeExercice(joueurId, exercice, groupe) {
+// `groupesEnPlus` (15/11/2026) : les groupes AJOUTÉS au principal. Omis
+// (undefined) = le serveur garde ceux qui sont déjà posés.
+export async function definirGroupeExercice(joueurId, exercice, groupe, groupesEnPlus) {
+  const corps = groupesEnPlus === undefined
+    ? { groupe } : { groupe, groupes_en_plus: groupesEnPlus };
   return appel(`/joueurs/${joueurId}/groupes-exercices/${encodeURIComponent(exercice)}`, {
-    method: 'PUT', body: JSON.stringify({ groupe }),
+    method: 'PUT', body: JSON.stringify(corps),
   });
 }
 

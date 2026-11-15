@@ -24,6 +24,7 @@ export function vueSuivi(ctx) {
     placeSuivi, seancesDeLaSemaine, seriesFaites, setBrouillonObjectifs,
     setEditionObjectifs, setExerciceAClasser, setGroupeDeploye,
     setVolumeOuvert, setVue, totalSeriesSemaine, volumeOuvert,
+    groupesEnPlus, basculerGroupeEnPlusExo,
   } = ctx;
 
 
@@ -134,7 +135,7 @@ export function vueSuivi(ctx) {
                 </TouchableOpacity>
                 {deploye && (() => {
                   const lignes = dernieresSeriesDuGroupe(
-                    entrainements, correctionsGroupes, groupe
+                    entrainements, correctionsGroupes, groupe, 8, groupesEnPlus
                   );
                   if (lignes.length === 0) {
                     return (
@@ -228,9 +229,10 @@ export function vueSuivi(ctx) {
             <>
               <TexteIcone nom="etiquette" taille={13} hautAligne
                 style={[styles.indice, { marginTop: espacement.s }]}>
-                Où comptent mes exercices ? Touche-en un pour le changer de groupe.
+                Où comptent mes exercices ? Touche-en un pour choisir son groupe
+                — et, s'il en travaille plusieurs, les groupes en plus.
               </TexteIcone>
-              {exercicesSemaine.map(({ exercice, groupe, corrige }) => (
+              {exercicesSemaine.map(({ exercice, groupe, groupesEnPlus: enPlus = [], corrige }) => (
                 <View key={exercice}>
                   <TouchableOpacity
                     style={styles.ligneChoixProgramme}
@@ -242,7 +244,7 @@ export function vueSuivi(ctx) {
                     </TexteIcone>
                     {groupe ? (
                       <Text style={styles.groupeExercice}>
-                        {groupe}{corrige ? ' · modifié' : ''}
+                        {[groupe, ...enPlus].join(' + ')}{corrige ? ' · modifié' : ''}
                       </Text>
                     ) : (
                       <LibelleIcone nom="question" taille={12} ecart={4}
@@ -252,18 +254,53 @@ export function vueSuivi(ctx) {
                     )}
                   </TouchableOpacity>
                   {exerciceAClasser === exercice && (
-                    <View style={styles.lignePuces}>
-                      {groupesMusculaires.map((g) => (
-                        <TouchableOpacity
-                          key={g}
-                          style={[styles.puceJour, g === groupe && styles.puceJourActive]}
-                          onPress={() => classerExercice(exercice, g)}
-                        >
-                          <Text style={[styles.puceJourTexte, g === groupe && styles.puceJourTexteActif]}>
-                            {g}
+                    <View style={styles.panneauGroupes}>
+                      <Text style={styles.libelleChampSerie}>COMPTÉ DANS (GROUPE PRINCIPAL)</Text>
+                      <View style={styles.lignePuces}>
+                        {groupesMusculaires.map((g) => (
+                          <TouchableOpacity
+                            key={g}
+                            style={[styles.puceJour, g === groupe && styles.puceJourActive]}
+                            onPress={() => classerExercice(exercice, g)}
+                          >
+                            <Text style={[styles.puceJourTexte, g === groupe && styles.puceJourTexteActif]}>
+                              {g}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {/* PLUSIEURS GROUPES (15/11/2026) : chaque série compte
+                          aussi, en entier, dans les groupes cochés ici. */}
+                      {groupe ? (
+                        <>
+                          <Text style={[styles.libelleChampSerie, { marginTop: espacement.m }]}>
+                            AUSSI COMPTÉ DANS (FACULTATIF)
                           </Text>
-                        </TouchableOpacity>
-                      ))}
+                          <View style={styles.lignePuces}>
+                            {groupesMusculaires.filter((g) => g !== groupe).map((g) => {
+                              const coche = enPlus.includes(g);
+                              return (
+                                <TouchableOpacity
+                                  key={g}
+                                  style={[styles.puceJour, coche && styles.puceGroupeEnPlus]}
+                                  onPress={() => basculerGroupeEnPlusExo(exercice, g)}
+                                >
+                                  <Text style={[styles.puceJourTexte, coche && styles.puceGroupeEnPlusTexte]}>
+                                    {coche ? '+ ' : ''}{g}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                          <Text style={styles.indice}>
+                            Chaque série de cet exercice compte une fois entière dans
+                            chacun de ses groupes.
+                          </Text>
+                        </>
+                      ) : null}
+                      <TouchableOpacity onPress={() => setExerciceAClasser(null)} style={{ minHeight: 40, justifyContent: 'center' }}>
+                        <Text style={styles.lienAnnuler}>Fermer</Text>
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>

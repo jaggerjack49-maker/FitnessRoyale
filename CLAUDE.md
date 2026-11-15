@@ -6155,6 +6155,59 @@ réussit et efface le bandeau. Zéro erreur console.
 ⚠️ Sur le téléphone, il faut un NOUVEL APK : l'APK du 06/10 a encore la roue, les 7 demandes
 et pas de mémoire. Le site web en profite dès le déploiement.
 
+## Un exercice compté dans plusieurs groupes musculaires — 15/11/2026
+
+Demande de Hafiz : « ajoute la possibilité qu'un exercice puisse être compté dans plus d'un
+groupe musculaire » (un développé couché travaille pectoraux ET triceps).
+
+### La règle
+
+- Le GROUPE PRINCIPAL ne change pas : correction manuelle > fiche de la bibliothèque >
+  mots-clés (`groupeDeLExercice`). On lui AJOUTE des groupes choisis à la main
+  (`groupesDeLExercice(nom, corrections, enPlus)` : principal d'abord, puis les groupes en
+  plus, sans doublon, groupes inconnus ignorés).
+- **Chaque série compte UNE FOIS ENTIÈRE dans chacun de ses groupes** (1 série de développé
+  couché = 1 série de pectoraux + 1 série de triceps). Choix simple et lisible ; l'autre
+  convention courante (la moitié dans les groupes secondaires) n'a PAS été retenue — à revoir
+  si Hafiz la préfère.
+- RIEN N'EST AJOUTÉ AUTOMATIQUEMENT : sans groupe en plus, le comptage ne change pas d'un
+  chiffre (cas verrouillé par le harnais).
+- ⚠️ LE TOTAL DE LA SEMAINE (« N séries cette semaine ») additionnait les compteurs des
+  groupes : il aurait compté deux fois une série rangée dans deux groupes. Il compte désormais
+  les séries RÉELLEMENT faites (`totalSeriesFaites`). Effet de bord voulu : une série d'un
+  exercice « compté nulle part » entre maintenant dans ce total (elle était faite).
+- `compterSeriesParGroupe`, `exercicesDeLaPeriode` (nouveau champ `groupesEnPlus`) et
+  `dernieresSeriesDuGroupe` prennent un dernier paramètre `enPlus` (défaut `{}`).
+
+### Côté serveur
+
+- Colonne `groupes_en_plus` (JSON, NULL = aucun) sur `groupes_exercices`, migration additive.
+  Le principal reste dans `groupe` : un ANCIEN APK, qui ne lit que lui, fonctionne comme avant.
+- `PUT /joueurs/{id}/groupes-exercices/{exercice}` accepte `groupes_en_plus` (facultatif,
+  chaque groupe validé — 400 sinon). ABSENT = on garde ceux déjà posés : un ancien APK qui
+  reclasse le principal ne les efface pas. Le principal est toujours retiré de la liste (il
+  compte déjà). La liste revient dans `GET /groupes-exercices` et `/donnees-entrainement`.
+- Renommer un exercice emporte ses groupes en plus (la colonne vit sur la même ligne).
+
+### À l'écran (Entraînement → Suivi)
+
+Toucher un exercice ouvre DEUX rangées : « COMPTÉ DANS (GROUPE PRINCIPAL) » (un seul, comme
+avant) et « AUSSI COMPTÉ DANS (FACULTATIF) » (plusieurs, puces cochées en or avec « + »). Le
+panneau reste ouvert après le choix du principal (il se fermait), avec un lien « Fermer ».
+La ligne de l'exercice affiche « Pectoraux + Triceps ». Les groupes en plus ne se proposent
+qu'une fois un principal choisi.
+
+### Vérifié
+
+`test_groupes_multiples.py` + `harnais/harnais_groupes_multiples.mjs` (16 cas) et
+`test_api_groupes_multiples.py` (8 cas : relu + dans le lot, ancien APK qui n'efface pas,
+principal retiré, liste vide, groupe inconnu 400, propriétaire 403, renommage). **4 mutations
+vues échouer.** Suite complète : **446 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : « developpe couche » → « + Triceps » coché →
+ligne « Pectoraux + Triceps », Triceps passe à 4 séries, le total reste « 8 séries cette
+semaine », et le serveur a `groupes_en_plus: ["Triceps"]`.
+⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour la colonne).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6167,7 +6220,7 @@ et pas de mémoire. Le site web en profite dès le déploiement.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (437 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (446 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

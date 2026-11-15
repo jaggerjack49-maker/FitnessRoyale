@@ -326,6 +326,9 @@ class ObjectifsSeries(BaseModel):
 
 class GroupeExercice(BaseModel):
     groupe: str
+    # Les groupes EN PLUS du principal (15/11/2026). Absent = ne pas y toucher
+    # (un ancien APK n'envoie que `groupe`).
+    groupes_en_plus: list[str] | None = Field(default=None, max_length=11)
 
 
 class NouveauCycle(BaseModel):
@@ -1615,8 +1618,12 @@ def definir_groupe_exercice(joueur_id: int, exercice: str, donnees: GroupeExerci
     auth.verifier_proprietaire(courant, joueur_id)
     if donnees.groupe not in GROUPES_MUSCULAIRES:
         raise HTTPException(400, f"Groupe musculaire inconnu : {donnees.groupe}.")
-    db.definir_groupe_exercice(joueur_id, exercice, donnees.groupe)
-    return {"exercice": exercice, "groupe": donnees.groupe}
+    for g in donnees.groupes_en_plus or []:
+        if g not in GROUPES_MUSCULAIRES:
+            raise HTTPException(400, f"Groupe musculaire inconnu : {g}.")
+    en_plus = db.definir_groupe_exercice(joueur_id, exercice, donnees.groupe,
+                                         donnees.groupes_en_plus)
+    return {"exercice": exercice, "groupe": donnees.groupe, "groupes_en_plus": en_plus}
 
 
 # ----- Cycles : un programme COMPLET réparti sur la semaine -----

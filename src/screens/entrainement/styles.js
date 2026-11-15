@@ -206,6 +206,10 @@ export const styles = StyleSheet.create({
     paddingVertical: 13, paddingHorizontal: 14,
   },
   boutonModifierTexte: { color: colors.or, fontWeight: '800', fontSize: 12 },
+  // Le choix des groupes d'un exercice (15/11/2026) : principal + groupes en plus.
+  panneauGroupes: { paddingVertical: espacement.s },
+  puceGroupeEnPlus: { borderColor: colors.or, backgroundColor: da.orVoile },
+  puceGroupeEnPlusTexte: { color: colors.or, fontWeight: '800' },
   // « Mise à jour… » pendant qu'on affiche la mémoire de la visite précédente.
   miseAJourDiscrete: { color: colors.texteGris, fontSize: 12, marginBottom: espacement.s, alignSelf: 'flex-end' },
   // « Une séance est déjà en cours » (15/11/2026) : la question posée sous le
