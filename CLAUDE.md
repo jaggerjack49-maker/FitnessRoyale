@@ -6106,6 +6106,55 @@ automatique de 10 s ; « Code » sur la perf épinglée → code affiché. Aucun
 ⚠️ L'ordre Postgres lui-même ne se reproduit pas en local (SQLite) : c'est l'écran qui ne
 dépend plus de lui, et c'est ce qui est testé.
 
+## L'onglet Entraînement s'affiche sans attendre le réseau — 15/11/2026
+
+Retour de Hafiz après le lot du 13/11 : « l'écran Entraînement prend toujours du temps pour se
+charger ». Mesuré le jour même, serveur éveillé : chaque demande met 1,5 à 2,5 s — et même
+`/sante`, qui ne touche pas la base, en met 1,6. C'est le TRAJET RÉSEAU jusqu'au serveur, pas
+un calcul qu'on pourrait accélérer. Deux défauts côté app rendaient cette attente visible.
+
+### 1. La roue plein écran à CHAQUE retour sur l'onglet
+
+`if (chargement) return <ActivityIndicator/>` remplaçait l'écran ENTIER à chaque chargement —
+donc à chaque retour sur l'onglet (le « rechargement discret » du 13/11 ne cachait que le
+BANDEAU, pas cette roue), et même en pleine séance. Elle ne s'affiche plus qu'au tout premier
+chargement, quand il n'y a vraiment rien à montrer (`!dejaCharge.current`), et jamais sur la
+séance.
+
+### 2. La mémoire de la dernière visite (`src/cacheEntrainement.js`)
+
+- La dernière réponse de `GET /donnees-entrainement` est gardée dans AsyncStorage, PAR JOUEUR
+  (`fitnessRoyale.cacheEntrainement.<id>`). À l'ouverture de l'onglet, `chargerTout` l'affiche
+  TOUT DE SUITE (`appliquerDonnees`, extraite pour servir aux deux sources), puis la vraie
+  réponse la remplace.
+- ⚠️ CE N'EST PAS LE RETOUR DU MODE HORS-LIGNE (26/09/2026) : celui-ci montrait un profil de
+  DÉMONSTRATION. Ici ce sont les données du joueur, renvoyées par le serveur à sa dernière
+  visite — et l'écran le DIT : état `fraicheur` ('fraiche' / 'cache' / 'cache_echec'),
+  « Mise à jour… » discret pendant l'attente, et « Affiché : tes données de ta dernière
+  visite… l'app réessaie toute seule » si la mise à jour échoue.
+- Le « réessaie toute seule » est VRAI : une mise à jour ratée pendant l'affichage de la
+  mémoire relance l'essai automatique (5 s, 15 s, 30 s), via `echecsMiseAJour`. Le premier jet
+  ne le faisait pas — l'essai automatique ne partait qu'après un PREMIER chargement raté.
+- Une mémoire illisible, à moitié abîmée (une liste qui n'en est pas une) ou rangée sous un
+  autre compte n'est jamais affichée : on attend le serveur, comme avant.
+- Les séances terminées pas encore envoyées (la file) restent fusionnées, comme pour une
+  réponse du serveur.
+- Valeur interne 'fraiche' et non 'serveur' : le garde-fou « jamais le mot serveur à
+  l'écran » lit toutes les chaînes de l'app.
+
+### Vérifié
+
+`test_cache_entrainement.py` + `harnais/harnais_cache_entrainement.mjs` (8 cas) ;
+**2 mutations vues échouer** (propriétaire non vérifié, validation des listes retirée).
+Suite complète : **437 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL, `SondeTest`, réponse RETARDÉE de 4 s exprès) : sans mémoire,
+l'onglet attend ~4,5 s ; avec la mémoire, il est rempli en moins d'une seconde avec
+« Mise à jour… » jusqu'à la réponse ; revenir sur l'onglet n'affiche plus de roue ; réponse en
+échec → bandeau « tes données de ta dernière visite », puis nouvel essai automatique qui
+réussit et efface le bandeau. Zéro erreur console.
+⚠️ Sur le téléphone, il faut un NOUVEL APK : l'APK du 06/10 a encore la roue, les 7 demandes
+et pas de mémoire. Le site web en profite dès le déploiement.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6118,7 +6167,7 @@ dépend plus de lui, et c'est ce qui est testé.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (436 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (437 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

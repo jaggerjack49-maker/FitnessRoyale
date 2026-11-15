@@ -49,6 +49,7 @@ import { vueDetailSeance } from './entrainement/vueDetailSeance';
 import { vueNouveauProgramme } from './entrainement/vueNouveauProgramme';
 import { vueSeance } from './entrainement/vueSeance';
 import { BandeauSeanceEnCours, ConfirmationSuppression } from './entrainement/composantsSeance';
+import { lireCacheEntrainement, ecrireCacheEntrainement } from '../cacheEntrainement';
 import { vueProgrammes } from './entrainement/vueProgrammes';
 import { vueBibliotheque } from './entrainement/vueBibliotheque';
 import { vueSuivi } from './entrainement/vueSuivi';
@@ -153,6 +154,14 @@ export default function EntrainementScreen({
   // 'jamais' | 'en_cours' | 'ok' | 'echec'. Séparé de `erreur`, qui sert aussi
   // aux messages des autres actions (enregistrer, supprimer…).
   const [etatChargement, setEtatChargement] = useState('jamais');
+  // D'OÙ VIENNENT LES DONNÉES AFFICHÉES (15/11/2026, voir src/cacheEntrainement.js) :
+  // 'fraiche' = la réponse du serveur de CETTE visite ; 'cache' = celle de la
+  // visite précédente, gardée sur le téléphone, en attendant la mise à jour ;
+  // 'cache_echec' = la mise à jour n'a pas pu arriver. L'écran le DIT.
+  const [fraicheur, setFraicheur] = useState('fraiche');
+  // Chaque mise à jour ratée PENDANT qu'on affiche la mémoire relance un essai
+  // (le bandeau promet « l'app réessaie toute seule », il faut que ce soit vrai).
+  const [echecsMiseAJour, setEchecsMiseAJour] = useState(0);
   const tentativesChargement = useRef(0);
   const chargementEnCours = useRef(false);
 
@@ -693,7 +702,8 @@ export default function EntrainementScreen({
   // tant que l'onglet est à l'écran. Chaque échec relance cet effet (l'état
   // passe par 'en_cours' puis revient à 'echec').
   useEffect(() => {
-    if (etatChargement !== 'echec' || !actif) return undefined;
+    const miseAJourRatee = fraicheur === 'cache_echec' && echecsMiseAJour > 0;
+    if ((etatChargement !== 'echec' && !miseAJourRatee) || !actif) return undefined;
     const delais = [5000, 15000, 30000];
     const n = tentativesChargement.current;
     const minuterie = setTimeout(async () => {
@@ -707,7 +717,7 @@ export default function EntrainementScreen({
       chargerTout();
     }, delais[Math.min(n, delais.length - 1)]);
     return () => clearTimeout(minuterie);
-  }, [etatChargement, actif]);
+  }, [etatChargement, actif, echecsMiseAJour, fraicheur]);
 
   // Tant que le chargement n'a pas RÉUSSI, un écran vide ne prouve rien :
   // on ne dit pas « aucune séance » (voir le bug du 16/09 ci-dessus).
@@ -780,9 +790,53 @@ export default function EntrainementScreen({
   // tout premier chargement, ou s'il a échoué (le bug du 16/09 reste couvert).
   const dejaCharge = useRef(false);
 
+  // Range une réponse du serveur (ou celle gardée en mémoire) dans l'écran.
+  async function appliquerDonnees(d) {
+    const p = d.programmes;
+    const e = d.entrainements;
+    const pl = d.planning;
+    const c = d.cycles;
+    const obj = d.objectifs_series;
+    const grp = d.groupes_exercices;
+    const cib = d.cibles_semaine;
+    if (p) setProgrammes(p);
+    if (e) {
+      // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
+      // dont l'envoi a échoué) n'existent que sur ce téléphone. Écraser la
+      // liste par celle du serveur les effaçait — au moment PRÉCIS où l'on
+      // se reconnectait (correctif du 07/09/2026).
+      const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
+      setNbEnAttente(enAttente.length);
+      setEntrainements([...enAttente, ...e]);
+    }
+    if (pl) setPlanning(pl);
+    if (c) setCycles(c);
+    if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
+    if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
+    // Les cases corrigées à la main, rangées par la clé que lit le tableau :
+    // « programme | exercice | semaine ».
+    if (cib) {
+      setCiblesSemaine(Object.fromEntries(cib.map((c2) => [
+        `${c2.programme_id}|${c2.exercice}|${c2.semaine}`, c2,
+      ])));
+    }
+  }
+
   async function chargerTout() {
     if (chargementEnCours.current) return; // un chargement tourne déjà
     chargementEnCours.current = true;
+    // L'ÉCRAN S'OUVRE SUR LA DERNIÈRE RÉPONSE GARDÉE (15/11/2026) : pas
+    // d'attente du réseau à la première ouverture de l'onglet. La vraie
+    // réponse la remplace quelques secondes plus tard.
+    if (!dejaCharge.current) {
+      const memoire = await lireCacheEntrainement(moi.id);
+      if (memoire && !dejaCharge.current) {
+        await appliquerDonnees(memoire.donnees);
+        dejaCharge.current = true;
+        setFraicheur('cache');
+        setEtatChargement('ok');
+      }
+    }
     const discret = dejaCharge.current;
     setChargement(true);
     if (!discret) setEtatChargement('en_cours');
@@ -795,34 +849,9 @@ export default function EntrainementScreen({
       // sur une seule connexion (`db.donnees_entrainement`).
       const d = await api.donneesEntrainement(moi.id);
       toutReussi = true;
-      const p = d.programmes;
-      const e = d.entrainements;
-      const pl = d.planning;
-      const c = d.cycles;
-      const obj = d.objectifs_series;
-      const grp = d.groupes_exercices;
-      const cib = d.cibles_semaine;
-      if (p) setProgrammes(p);
-      if (e) {
-        // ⚠️ LE SERVEUR N'A PAS TOUT : les séances terminées hors-ligne (ou
-        // dont l'envoi a échoué) n'existent que sur ce téléphone. Écraser la
-        // liste par celle du serveur les effaçait — au moment PRÉCIS où l'on
-        // se reconnectait (correctif du 07/09/2026).
-        const enAttente = await stockageSeance.lireSeancesEnAttente(idLocal);
-        setNbEnAttente(enAttente.length);
-        setEntrainements([...enAttente, ...e]);
-      }
-      if (pl) setPlanning(pl);
-      if (c) setCycles(c);
-      if (obj) setObjectifsSeries(Object.fromEntries(obj.map((o) => [o.groupe, o.series_cibles])));
-      if (grp) setCorrectionsGroupes(Object.fromEntries(grp.map((g) => [g.exercice, g.groupe])));
-      // Les cases corrigées à la main, rangées par la clé que lit le tableau :
-      // « programme | exercice | semaine ».
-      if (cib) {
-        setCiblesSemaine(Object.fromEntries(cib.map((c2) => [
-          `${c2.programme_id}|${c2.exercice}|${c2.semaine}`, c2,
-        ])));
-      }
+      await appliquerDonnees(d);
+      setFraicheur('fraiche');
+      ecrireCacheEntrainement(moi.id, d);
       // Seul l'admin a une liste à voir : celle de SES propres partages, avec
       // leurs codes. Personne d'autre ne peut lister quoi que ce soit.
       if (moi.admin) {
@@ -839,6 +868,13 @@ export default function EntrainementScreen({
       setChargement(false);
     }
     if (toutReussi) dejaCharge.current = true;
+    // Données de la visite précédente et mise à jour impossible : on le dit.
+    if (!toutReussi) {
+      setFraicheur((f) => (f === 'cache' ? 'cache_echec' : f));
+      if (discret) setEchecsMiseAJour((n) => n + 1);
+    } else {
+      setEchecsMiseAJour(0);
+    }
     // Un rechargement DISCRET qui échoue ne cache pas les données affichées :
     // elles restent justes, on réessaiera au prochain retour sur l'onglet.
     if (!(discret && !toutReussi)) setEtatChargement(toutReussi ? 'ok' : 'echec');
@@ -2227,7 +2263,13 @@ export default function EntrainementScreen({
     );
   }
 
-  if (chargement) {
+  // LA ROUE PLEIN ÉCRAN — SEULEMENT AU TOUT PREMIER CHARGEMENT (15/11/2026).
+  // Avant, elle remplaçait l'écran ENTIER à chaque retour sur l'onglet, le
+  // temps que le serveur réponde (2-3 s, plus avec l'ancien APK) — même en
+  // pleine séance. C'était l'essentiel de « l'écran prend du temps à se
+  // charger ». Une fois des données affichées (du serveur ou de la mémoire du
+  // téléphone), la mise à jour se fait en arrière-plan, sans rien cacher.
+  if (chargement && !dejaCharge.current && vue !== 'seance') {
     return (
       <View style={[styles.conteneur, styles.centre]}>
         <ActivityIndicator color={colors.or} />
@@ -2434,6 +2476,21 @@ export default function EntrainementScreen({
           AVANT d'entrer (voir App.js et EcranChargement). */}
       {/* L'état du chargement, dit EN HAUT (bug du 16/09/2026) : un écran vide
           sans explication faisait croire que tout avait été effacé. */}
+      {/* Données de la visite précédente (15/11/2026) : discret pendant la
+          mise à jour, explicite si elle n'a pas pu arriver. */}
+      {fraicheur === 'cache' && chargement ? (
+        <TexteIcone nom="recharger" taille={12} ecart={5} style={styles.miseAJourDiscrete}>
+          Mise à jour…
+        </TexteIcone>
+      ) : null}
+      {fraicheur === 'cache_echec' ? (
+        <View style={styles.bandeauChargement}>
+          <TexteIcone nom="horloge" taille={14} hautAligne style={styles.texteBandeau}>
+            Affiché : tes données de ta dernière visite. La mise à jour n'a pas
+            pu se faire pour l'instant — l'app réessaie toute seule.
+          </TexteIcone>
+        </View>
+      ) : null}
       {donneesIncertaines && (
         <View style={[styles.bandeauChargement, etatChargement === 'echec' && styles.bandeauEchec]}>
           <TexteIcone nom={etatChargement === 'echec' ? 'alerte' : 'horloge'}
