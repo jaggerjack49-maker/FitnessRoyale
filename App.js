@@ -385,12 +385,23 @@ function AppInterne() {
   // Recharge classement + profil depuis le serveur. Appelée périodiquement
   // (ci-dessous) et à la demande — le mode test s'en sert pour voir l'effet
   // d'une action tout de suite, sans attendre le prochain tick.
+  // UN RAFRAÎCHISSEMENT PÉRIMÉ N'ÉCRASE PAS UNE PERF TOUTE NEUVE (15/11/2026).
+  // Retour de Hafiz : la perf qu'il venait d'enregistrer « disparaissait ».
+  // Un rafraîchissement parti JUSTE AVANT l'enregistrement revenait avec
+  // l'ancienne version des perfs et l'affichait par-dessus, pendant 10 s.
+  // Chaque enregistrement de perf fait avancer ce compteur ; un
+  // rafraîchissement qui le trouve changé à son retour ne touche pas aux perfs
+  // (le suivant, 10 s plus tard, apportera la version à jour).
+  const generationPerfs = useRef(0);
+
   async function rechargerDepuisServeur() {
+    const generation = generationPerfs.current;
     const joueursFrais = await api.listerJoueurs().catch(() => null);
     if (joueursFrais) setJoueursServeur(joueursFrais);
     if (moiServeur) {
       try {
         const joueur = await api.monProfil();
+        if (generation !== generationPerfs.current) return; // périmé
         setMoiServeur(joueur);
         setMesPerfs(joueur.performances);
         setMesPoints(joueur.points || 0);
@@ -514,12 +525,15 @@ function AppInterne() {
   // basculer toute l'app en mode hors-ligne : la perf restait à l'écran comme
   // si elle était enregistrée, alors que le serveur ne l'avait jamais reçue.
   async function ajouterPerf(exercice, valeur, statutInitial) {
+    generationPerfs.current += 1; // un rafraîchissement en route est périmé
     setMesPerfs((perfs) => ({ ...perfs, [exercice]: { valeur, statut: statutInitial } }));
     try {
       await api.ajouterPerformance(moiServeur.id, exercice, valeur);
       if (statutInitial !== 'non_verifie') {
         await api.verifierPerformance(moiServeur.id, exercice, statutInitial);
       }
+      // Et un rafraîchissement parti PENDANT l'envoi l'est aussi.
+      generationPerfs.current += 1;
       return null;
     } catch (erreur) {
       await rafraichirMonProfil(); // l'écran remontre ce que le serveur sait

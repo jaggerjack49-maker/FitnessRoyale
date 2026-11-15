@@ -6066,6 +6066,46 @@ immédiat. Aucun débordement.
 ⚠️ NON VÉRIFIÉ : le retour Android (pas de geste retour dans le navigateur) et le
 comportement exact du glissement sur téléphone — à confirmer sur l'APK.
 
+## « Ma perf disparaît avant que je choisisse vidéo ou code » — 15/11/2026
+
+Retour de Hafiz : une perf tout juste enregistrée apparaissait dans « Enregistrées », puis
+« disparaissait » quand il repliait et rouvrait la liste. RIEN N'ÉTAIT PERDU : le serveur en
+ligne avait bien la perf (vérifié sur `/joueurs` : Développé couché 100 kg, déclarée).
+
+### Deux causes cumulées
+
+1. **L'ORDRE DU SERVEUR.** `lire_joueur` et `lire_tous_les_joueurs` lisaient les perfs SANS
+   `ORDER BY`. Sur Postgres, une mise à jour crée une nouvelle version de la ligne : la perf
+   MODIFIÉE revenait EN DERNIER, et glissait tout en bas d'une liste de 15. Invisible en local :
+   SQLite renvoie dans l'ordre des lignes, la liste ne bougeait pas — d'où un premier essai de
+   reproduction qui n'a rien montré.
+2. **UN RAFRAÎCHISSEMENT PÉRIMÉ.** Le rafraîchissement automatique (10 s, App.js) parti JUSTE
+   AVANT l'enregistrement revenait avec l'ancienne version des perfs et l'affichait par-dessus
+   (une perf « vérifiée salle » sans ses boutons Vidéo/Code) jusqu'au tick suivant.
+
+### Les correctifs
+
+- Serveur : `ORDER BY id` sur les deux lectures de perfs (ordre déterministe).
+- App : l'écran ne dépend plus de l'ordre reçu — `ordrePerfs(perfs, ordreBareme, derniere)`
+  (`src/logic/classement.js`) : la perf qu'on VIENT d'enregistrer en tête (marquée « TA
+  DERNIÈRE PERF », fond or voilé), puis l'ordre du barème, puis un exercice hors barème par
+  ordre alphabétique. Testé : `test_ordre_perfs.py` + `harnais/harnais_ordre_perfs.mjs`
+  (7 cas) ; **2 mutations vues échouer** (épinglage retiré, tri retiré).
+- App : `generationPerfs` (App.js) — chaque enregistrement de perf fait avancer un compteur
+  (avant ET après l'envoi) ; un rafraîchissement qui le trouve changé à son retour ne touche
+  pas aux perfs.
+- Après un enregistrement en « Déclaré », la liste « Enregistrées » s'ouvre toute seule, avec
+  le message « Tu peux la faire vérifier juste en dessous (vidéo ou code) ».
+
+### Vérifié
+
+Suite complète : **436 tests, tous OK.** Navigateur (390 px, serveur LOCAL, `SondeTest`) :
+Squat 125 kg enregistré → liste ouverte, « TA DERNIÈRE PERF · Squat » en tête puis
+Développé couché, Curl barre, Dips (ordre du barème), identique après un rafraîchissement
+automatique de 10 s ; « Code » sur la perf épinglée → code affiché. Aucun débordement.
+⚠️ L'ordre Postgres lui-même ne se reproduit pas en local (SQLite) : c'est l'écran qui ne
+dépend plus de lui, et c'est ce qui est testé.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6078,7 +6118,7 @@ comportement exact du glissement sur téléphone — à confirmer sur l'APK.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (435 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (436 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

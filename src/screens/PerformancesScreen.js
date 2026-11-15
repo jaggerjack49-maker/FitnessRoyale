@@ -23,7 +23,7 @@ import { colors, espacement } from '../theme';
 import { da, monospace } from '../designSystem';
 import { baremes, nomsLigues, couleursLigues } from '../data/clubSP';
 import { STATUTS, estVerifiee } from '../data/statuts';
-import { palierExercice, valeurMaxExercice } from '../logic/classement';
+import { ordrePerfs, palierExercice, valeurMaxExercice } from '../logic/classement';
 import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import * as api from '../api';
 
@@ -248,7 +248,10 @@ export default function PerformancesScreen({
     }
 
     if (moi.affilieSalle || parcours === 'non_verifie') {
-      setMessageSaisie(`Perf enregistrée : ${resume}`);
+      // La liste s'ouvre, la perf en tête (15/11/2026) : c'est là qu'on choisit
+      // ensuite sa preuve (vidéo ou code).
+      setEnregistreesOuvertes(true);
+      setMessageSaisie(`Perf enregistrée : ${resume}. Tu peux la faire vérifier juste en dessous (vidéo ou code).`);
       return;
     }
 
@@ -513,14 +516,23 @@ export default function PerformancesScreen({
         </View>
         <Icone nom={enregistreesOuvertes ? 'chevron-haut' : 'chevron-bas'} taille={18} couleur={colors.texteGris} />
       </TouchableOpacity>
-      {enregistreesOuvertes && Object.entries(mesPerfs).map(([exo, perf]) => {
+      {/* ORDRE FIXE (15/11/2026) : la perf qu'on vient d'enregistrer en tête,
+          puis l'ordre du barème — jamais l'ordre reçu du serveur, qui
+          renvoyait la perf modifiée tout en bas (elle semblait disparaître). */}
+      {enregistreesOuvertes && ordrePerfs(mesPerfs, Object.keys(baremes[moi.sexe] || {}), derniereSaisie)
+        .filter((exo) => baremes[moi.sexe] && baremes[moi.sexe][exo])
+        .map((exo) => {
+        const perf = mesPerfs[exo];
         const st = STATUTS[perf.statut];
         const b = baremes[moi.sexe][exo];
         const palier = palierExercice(moi.sexe, exo, perf.valeur);
         const nomPalier = palier === 0 ? 'Aucune' : nomsLigues[palier - 1];
         return (
-          <View key={exo} style={styles.lignePerf}>
+          <View key={exo} style={[styles.lignePerf, exo === derniereSaisie && styles.lignePerfRecente]}>
             <View style={{ flex: 1 }}>
+              {exo === derniereSaisie ? (
+                <Text style={styles.etiquetteRecente}>TA DERNIÈRE PERF</Text>
+              ) : null}
               <Text style={styles.perfNom}>{exo}</Text>
               <Text style={styles.perfValeur}>
                 {b.unite === 'kg' ? `${b.reps} x ${perf.valeur} kg` : `${perf.valeur} reps`}
@@ -851,6 +863,11 @@ const styles = StyleSheet.create({
     marginBottom: espacement.s,
     borderWidth: 1,
     borderColor: colors.bordure,
+  },
+  // La perf qu'on vient d'enregistrer, épinglée en tête (15/11/2026).
+  lignePerfRecente: { borderColor: da.bordureOrDouce, backgroundColor: da.orVoile },
+  etiquetteRecente: {
+    color: colors.or, fontSize: 10, fontWeight: '900', letterSpacing: 1.5, marginBottom: 2,
   },
   perfNom: { color: colors.texte, fontWeight: '600' },
   perfValeur: { color: colors.texteGris, fontSize: 12, marginTop: 2 },

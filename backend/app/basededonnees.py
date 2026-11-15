@@ -1465,7 +1465,11 @@ def lire_joueur(joueur_id: int) -> dict | None:
         joueur["performances"] = {
             p["exercice"]: {"valeur": p["valeur"], "statut": p["statut"]}
             for p in conn.execute(
-                "SELECT * FROM performances WHERE joueur_id = ?", (joueur_id,)
+                # ORDRE FIXE (15/11/2026) : sans ORDER BY, Postgres renvoie une
+                # perf MODIFIÉE en dernier (une mise à jour y crée une nouvelle
+                # version de la ligne) — la perf qu'on venait d'enregistrer
+                # « disparaissait » tout en bas de la liste de l'app.
+                "SELECT * FROM performances WHERE joueur_id = ? ORDER BY id", (joueur_id,)
             )
         }
         # Les titres viennent des défis validés (ex. « Guerrier de la semaine »).
@@ -1500,7 +1504,7 @@ def lire_tous_les_joueurs() -> list:
             joueur["titres"] = []
             joueurs.append(joueur)
             par_id[joueur["id"]] = joueur
-        for perf in conn.execute("SELECT * FROM performances"):
+        for perf in conn.execute("SELECT * FROM performances ORDER BY id"):
             joueur = par_id.get(perf["joueur_id"])
             if joueur is not None:
                 joueur["performances"][perf["exercice"]] = {

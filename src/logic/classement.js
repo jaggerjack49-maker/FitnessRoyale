@@ -213,3 +213,26 @@ export function classerParExercice(joueurs, exercice) {
     }))
     .sort((a, b) => b.palierExo - a.palierExo || (b.points || 0) - (a.points || 0));
 }
+
+// L'ORDRE DE LA LISTE « ENREGISTRÉES » (15/11/2026). Retour de Hafiz : « quand
+// j'enregistre une perf, elle disparaît avant que je puisse choisir vidéo ou
+// code ». Elle ne disparaissait pas : le serveur en ligne renvoyait la perf
+// MODIFIÉE en dernier, et elle glissait tout en bas d'une liste de 15. L'écran
+// ne dépend donc plus de l'ordre reçu :
+// - la perf qu'on VIENT d'enregistrer en tête (c'est d'elle qu'on veut
+//   choisir la preuve) ;
+// - puis l'ordre du BARÈME, le même que partout ailleurs dans l'app ;
+// - enfin un exercice inconnu du barème (ancien nom…), par ordre alphabétique.
+export function ordrePerfs(perfs, ordreBareme, derniere = null) {
+  const noms = Object.keys(perfs && typeof perfs === 'object' ? perfs : {});
+  const bareme = Array.isArray(ordreBareme) ? ordreBareme : [];
+  const rang = (nom) => {
+    const i = bareme.indexOf(nom);
+    return i === -1 ? bareme.length : i;
+  };
+  const tries = [...noms].sort((a, b) => (rang(a) - rang(b)) || a.localeCompare(b));
+  if (derniere && tries.includes(derniere)) {
+    return [derniere, ...tries.filter((n) => n !== derniere)];
+  }
+  return tries;
+}
