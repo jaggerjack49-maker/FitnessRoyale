@@ -3,6 +3,7 @@
 import {
   lundiISO, e1rm, exercicesSuivis, courbeExercice, variation,
   seancesParSemaine, statistiques, volumeLisible, dureeSeanceLisible,
+  dernieresSeancesExercice,
 } from '../../../src/logic/progres.js';
 
 const s = (exercice, poids, reps) => ({ exercice, poids, reps });
@@ -123,6 +124,35 @@ const cas = [
   ['volume : en kg', () => volumeLisible(790), '790 kg'],
   ['volume : milliers séparés', () => volumeLisible(9500), '9 500 kg'],
   ['volume : en tonnes au-delà de 10 000', () => volumeLisible(12450), '12,5 t'],
+
+  // ---- Le journal d'un exercice pendant la séance (15/11/2026) ----
+  ['journal : les séances du Squat, la plus récente en premier',
+    () => dernieresSeancesExercice(historique, 'Squat').map((l) => l.date),
+    ['2026-11-05', '2026-10-20', '2026-10-13', '2026-10-13', '2026-10-06']],
+  ['journal : seulement les séries de CET exercice',
+    () => dernieresSeancesExercice(historique, 'Dips')[0].series,
+    [{ reps: 15, poids: 0, rir: null }, { reps: 10, poids: 0, rir: null }]],
+  ['journal : limité au nombre demandé',
+    () => dernieresSeancesExercice(historique, 'Squat', 2).length, 2],
+  ['journal : deux séances le même jour → la plus récente (id) en premier',
+    () => dernieresSeancesExercice([
+      { id: 3, date: '2026-11-10', series: [s('Squat', 100, 5)] },
+      { id: 9, date: '2026-11-10', series: [s('Squat', 120, 2)] },
+    ], 'Squat').map((l) => l.id), [9, 3]],
+  ['journal : une séance tout juste terminée (id local) passe devant',
+    () => dernieresSeancesExercice([
+      { id: 50, date: '2026-11-10', series: [s('Squat', 100, 5)] },
+      { id: 'local-1', date: '2026-11-10', series: [s('Squat', 120, 2)] },
+    ], 'Squat').map((l) => l.id), ['local-1', 50]],
+  ['journal : le RIR noté est gardé',
+    () => dernieresSeancesExercice([{ id: 1, date: '2026-11-10',
+      series: [{ exercice: 'Squat', poids: 100, reps: 5, rir: 2 }] }], 'Squat')[0].series[0].rir, 2],
+  ['journal : exercice jamais fait → vide', () => dernieresSeancesExercice(historique, 'Fentes'), []],
+  ['journal : données abîmées → pas de plantage',
+    () => dernieresSeancesExercice([null, 3, { date: 5 }, { date: '2026-11-01', series: [null, 'x'] },
+      { id: 1, date: '2026-11-02', series: [s('Squat', 90, 5)] }], 'Squat').length, 1],
+  ['journal : entrées absurdes → vide',
+    () => [dernieresSeancesExercice(null, 'Squat'), dernieresSeancesExercice(historique, null)], [[], []]],
 ];
 
 const resultats = cas.map(([nom, calcul, attendu]) => {

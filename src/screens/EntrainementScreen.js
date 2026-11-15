@@ -40,14 +40,15 @@ import {
 } from '../logic/rattrapage';
 import { objectifDepuisSeries, dureeReelleMinutes, lireRirSaisi } from '../logic/seanceLibre';
 import { brouillonDepuisSeance, correctionDepuisBrouillon } from '../logic/correctionSeance';
-import { reposDe } from '../logic/repos';
+import { reposDe, libelleEtape, prochaineEtape } from '../logic/repos';
+import MinuteurRepos from '../components/MinuteurRepos';
 import { ligneVide, exercicesDepuisLignes, deplacerLigne, detecterRenommages } from '../logic/lignesProgramme';
 import { aujourdhui } from './entrainement/outils';
 import { styles } from './entrainement/styles';
 import { vueDetailSeance } from './entrainement/vueDetailSeance';
 import { vueNouveauProgramme } from './entrainement/vueNouveauProgramme';
 import { vueSeance } from './entrainement/vueSeance';
-import { ConfirmationSuppression } from './entrainement/composantsSeance';
+import { BandeauSeanceEnCours, ConfirmationSuppression } from './entrainement/composantsSeance';
 import { vueProgrammes } from './entrainement/vueProgrammes';
 import { vueBibliotheque } from './entrainement/vueBibliotheque';
 import { vueSuivi } from './entrainement/vueSuivi';
@@ -592,6 +593,20 @@ export default function EntrainementScreen({
   // LE REPOS EN COURS (08/11/2026) : { fin (ms), duree (s), exercice } ou
   // null. Lancé par « + Série », mémorisé avec la séance.
   const [repos, setRepos] = useState(null);
+  // LA SÉANCE PEUT ÊTRE RÉDUITE (15/11/2026, demande de Hafiz : « pouvoir
+  // sortir sans que ça n'annule l'entraînement », pour aller voir son journal
+  // et ajuster la charge). Une séance EN COURS n'est donc plus la même chose
+  // que la VUE de séance : `seanceEnCours` dit qu'elle existe, `vue` dit si on
+  // la regarde. Seuls « Terminer » et « Quitter sans enregistrer » la ferment.
+  const [seanceEnCours, setSeanceEnCours] = useState(false);
+  // « Quitter sans enregistrer » se confirme quand des séries sont notées :
+  // c'était un seul geste qui effaçait tout.
+  const [confirmerAbandon, setConfirmerAbandon] = useState(false);
+  // Démarrer une séance alors qu'une autre est en cours (réduite) : on ne
+  // l'écrase pas en silence, on demande. { programme, dateRattrapee } ou null.
+  const [conflitDemarrage, setConflitDemarrage] = useState(null);
+  // Le journal d'UN exercice déplié pendant la séance (son nom, ou null).
+  const [journalExoOuvert, setJournalExoOuvert] = useState(null);
   // Le programme NÉ de la séance libre en cours (« Créer un programme avec ces
   // exercices ») : la séance lui est rattachée, mais on garde la carte de
   // confirmation à l'écran au lieu de la faire disparaître.
@@ -614,9 +629,12 @@ export default function EntrainementScreen({
   // l'accueil de l'onglet avant de sortir de l'onglet.
   // ⚠️ Toujours JAMAIS la séance en cours ni l'accueil lui-même : le retour
   // passe alors à App.js, qui ramène au Profil.
-  useRetour(actif && (vue === 'historiqueDetail' || vue === 'nouveauProgramme'
+  useRetour(actif && (vue === 'seance' || vue === 'historiqueDetail' || vue === 'nouveauProgramme'
     || vue === 'tableau' || vue === 'programmes' || vue === 'suivi'
     || vue === 'historique' || vue === 'nutrition' || vue === 'bibliotheque'), () => {
+    // Pendant la séance, le retour la RÉDUIT (15/11/2026) — il ne l'annule
+    // jamais : elle reste en cours, un bandeau permet de la reprendre.
+    if (vue === 'seance') { reduireSeance(); return true; }
     if (vue === 'bibliotheque') {
       // La fiche d'un exercice se ferme d'abord, la bibliothèque ensuite :
       // un seul geste ne doit pas sauter deux niveaux.
@@ -735,6 +753,7 @@ export default function EntrainementScreen({
         // Un repos déjà fini pendant que l'app était fermée ne revient pas.
         setRepos(seance.repos && seance.repos.fin > Date.now() ? seance.repos : null);
         setDaterAujourdhui(!!seance.daterAujourdhui);
+        setSeanceEnCours(true);
         setVue('seance');
       }
       setSeanceRestauree(true);
@@ -746,12 +765,12 @@ export default function EntrainementScreen({
   // minuscule ; c'est le seul moyen qu'elle survive à une fermeture
   // brutale de l'app (batterie vide, Android qui récupère la mémoire).
   useEffect(() => {
-    if (!seanceRestauree || vue !== 'seance') return;
+    if (!seanceRestauree || !seanceEnCours) return;
     stockageSeance.ecrireSeanceEnCours(idLocal, {
       programmeActif, exercicesSession, seriesLoggees, champsSaisie, rattrapageDe,
       dateDebut: dateDebutSeance, daterAujourdhui, debutChrono, repos,
     });
-  }, [seanceRestauree, vue, programmeActif, exercicesSession, seriesLoggees,
+  }, [seanceRestauree, seanceEnCours, programmeActif, exercicesSession, seriesLoggees,
       champsSaisie, rattrapageDe, dateDebutSeance, daterAujourdhui, debutChrono, repos, idLocal]);
 
   // RECHARGEMENT DISCRET (13/11/2026, « l'écran Entraînement prend du temps
@@ -1708,6 +1727,20 @@ export default function EntrainementScreen({
   // section « séances à rattraper »). Purement informatif : la séance est
   // enregistrée au jour où on la FAIT, on ne réécrit jamais le calendrier.
   function demarrerSeance(programme, dateRattrapee = null) {
+    // Une séance est déjà en cours (réduite) : on ne l'écrase pas, on demande
+    // (le bandeau du haut pose la question).
+    if (seanceEnCours) {
+      setConflitDemarrage({ programme, dateRattrapee });
+      return;
+    }
+    lancerSeance(programme, dateRattrapee);
+  }
+
+  function lancerSeance(programme, dateRattrapee = null) {
+    setConflitDemarrage(null);
+    setConfirmerAbandon(false);
+    setJournalExoOuvert(null);
+    setSeanceEnCours(true);
     setProgrammeActif(programme);
     setExercicesSession(programme ? programme.exercices.map((e) => e.exercice) : []);
     setSeriesLoggees({});
@@ -1731,6 +1764,11 @@ export default function EntrainementScreen({
   // la fermeture de l'app, l'abandon doit effacer explicitement la mémoire —
   // sinon on serait renvoyé sur cette séance au prochain lancement.
   async function abandonnerSeance() {
+    // D'abord dire qu'elle n'existe plus : sinon la mémoire pourrait être
+    // réécrite pendant qu'on l'efface.
+    setSeanceEnCours(false);
+    setConfirmerAbandon(false);
+    setJournalExoOuvert(null);
     await stockageSeance.effacerSeanceEnCours();
     setRattrapageDe(null);
     setDateDebutSeance(null);
@@ -1740,6 +1778,37 @@ export default function EntrainementScreen({
     setSeriesLoggees({});
     setChampsSaisie({});
     setVue('accueil');
+  }
+
+  // « Quitter sans enregistrer » : immédiat s'il n'y a rien à perdre, sinon
+  // une question d'abord (les séries notées seraient effacées).
+  function demanderAbandon() {
+    if (Object.values(seriesLoggees).some((l) => l && l.length > 0)) {
+      setConfirmerAbandon(true);
+    } else {
+      abandonnerSeance();
+    }
+  }
+
+  // RÉDUIRE la séance (15/11/2026) : on revient à l'accueil de l'onglet, la
+  // séance continue (chrono, séries, repos, mémoire du téléphone).
+  function reduireSeance() {
+    setConfirmerAbandon(false);
+    setSerieEnEdition(null);
+    setVue('accueil');
+  }
+
+  function reprendreSeance() {
+    setConflitDemarrage(null);
+    setVue('seance');
+  }
+
+  // Le conflit « une séance est déjà en cours » : abandonner l'ancienne et
+  // démarrer la nouvelle.
+  async function remplacerSeanceEnCours() {
+    const demande = conflitDemarrage;
+    await abandonnerSeance();
+    if (demande) lancerSeance(demande.programme, demande.dateRattrapee);
   }
 
   function ajouterExerciceLibre() {
@@ -2026,6 +2095,8 @@ export default function EntrainementScreen({
     await stockageSeance.ajouterSeanceEnAttente(idLocal, local);
     // La séance est finie : la mémoire « séance en cours » n'a plus lieu d'être
     // (sinon on serait renvoyé dessus au prochain lancement de l'app).
+    setSeanceEnCours(false);
+    setJournalExoOuvert(null);
     await stockageSeance.effacerSeanceEnCours();
     setNbEnAttente((n) => n + 1);
 
@@ -2093,6 +2164,69 @@ export default function EntrainementScreen({
 
   // ----- Rendu -----
 
+  // LE BANDEAU « SÉANCE EN COURS » (15/11/2026) : tant qu'une séance réduite
+  // existe, il coiffe chaque écran de l'onglet (sauf la séance elle-même),
+  // FIXÉ en haut — la page défile dessous. Il porte aussi la question quand on
+  // veut en démarrer une autre.
+  const nbSeriesSeance = Object.values(seriesLoggees)
+    .reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0);
+  function avecBandeau(ecran) {
+    if (!seanceEnCours || vue === 'seance') return ecran;
+    const nomSeance = programmeActif ? programmeActif.nom : 'Séance libre';
+    return (
+      <View style={{ flex: 1 }}>
+        <BandeauSeanceEnCours
+          nom={nomSeance}
+          debut={debutChrono}
+          nbSeries={nbSeriesSeance}
+          actif={actif}
+          onReprendre={reprendreSeance}
+        />
+        {conflitDemarrage ? (
+          <View style={styles.carteConflitSeance}>
+            <Text style={styles.texteConflitSeance}>
+              « {nomSeance} » est déjà en cours. Termine-la ou reprends-la avant
+              d'en démarrer une autre.
+            </Text>
+            <TouchableOpacity style={styles.boutonModifier} onPress={reprendreSeance}>
+              <LibelleIcone nom="lecture" taille={13} ecart={5} style={styles.boutonModifierTexte}>
+                Reprendre « {nomSeance} »
+              </LibelleIcone>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.boutonRemplacerSeance} onPress={remplacerSeanceEnCours}>
+              <Text style={styles.boutonRemplacerSeanceTexte}>
+                Abandonner « {nomSeance} »{nbSeriesSeance > 0
+                  ? ` (${nbSeriesSeance} série${nbSeriesSeance > 1 ? 's' : ''} perdue${nbSeriesSeance > 1 ? 's' : ''})`
+                  : ''} et démarrer « {conflitDemarrage.programme ? conflitDemarrage.programme.nom : 'Séance libre'} »
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setConflitDemarrage(null)} style={{ minHeight: 40, justifyContent: 'center' }}>
+              <Text style={styles.lienAnnuler}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        <View style={{ flex: 1 }}>{ecran}</View>
+        {/* Le REPOS continue quand la séance est réduite : on réduit souvent
+            ENTRE deux séries, pour regarder son journal — la fin du repos ne
+            doit pas passer inaperçue. Même minuteur que dans la séance. */}
+        <MinuteurRepos
+          repos={repos}
+          actif={actif}
+          etape={repos ? libelleEtape(prochaineEtape(
+            exercicesSession, seriesLoggees,
+            Object.fromEntries((programmeActif?.exercices || [])
+              .map((e) => [e.exercice, e.series_cibles])),
+            repos.exercice,
+          )) : null}
+          onAjuster={ajusterRepos}
+          onPasser={() => setRepos(null)}
+          vibrer={preferences.vibrationRepos}
+          notifier={preferences.notificationRepos}
+        />
+      </View>
+    );
+  }
+
   if (chargement) {
     return (
       <View style={[styles.conteneur, styles.centre]}>
@@ -2105,7 +2239,7 @@ export default function EntrainementScreen({
   // LE TABLEAU DE PROGRESSION — une vue à part entière : la grille a besoin
   // de toute la largeur, elle ne tiendrait pas dans une carte de programme.
   if (vue === 'tableau' && tableauDe) {
-    return (
+    return avecBandeau(
       <TableauProgression
         nom={tableauDe.nom}
         seances={tableauDe.seances}
@@ -2159,15 +2293,17 @@ export default function EntrainementScreen({
     setEntrainementSelectionne, setExerciceARetirer, setExercicesSession,
     setJourEnEdition, setNomProgramme, setNouvelExerciceLibre, setRepos,
     setSerieEnEdition, setVue, supprimerSerie, terminerSeance,
+    reduireSeance, demanderAbandon, confirmerAbandon, setConfirmerAbandon,
+    journalExoOuvert, setJournalExoOuvert,
     correctionSeance, correctionEnCours, erreurCorrection, suppressionSeance,
     setSuppressionSeance, ouvrirCorrection, fermerCorrection, majLigneCorrection,
     retirerLigneCorrection, enregistrerCorrection, supprimerSeanceEnregistree,
     setCorrectionSeance,
   };
 
-  if (vue === 'historiqueDetail' && entrainementSelectionne) return vueDetailSeance(ctx);
+  if (vue === 'historiqueDetail' && entrainementSelectionne) return avecBandeau(vueDetailSeance(ctx));
 
-  if (vue === 'nouveauProgramme') return vueNouveauProgramme(ctx);
+  if (vue === 'nouveauProgramme') return avecBandeau(vueNouveauProgramme(ctx));
 
   if (vue === 'seance') return vueSeance(ctx);
 
@@ -2441,17 +2577,17 @@ export default function EntrainementScreen({
     viderJourSemaine, volumeOuvert,
   };
 
-  if (vue === 'programmes') return vueProgrammes(ctxAccueil);
+  if (vue === 'programmes') return avecBandeau(vueProgrammes(ctxAccueil));
 
-  if (vue === 'bibliotheque') return vueBibliotheque(ctxAccueil);
+  if (vue === 'bibliotheque') return avecBandeau(vueBibliotheque(ctxAccueil));
 
-  if (vue === 'suivi') return vueSuivi(ctxAccueil);
+  if (vue === 'suivi') return avecBandeau(vueSuivi(ctxAccueil));
 
-  if (vue === 'historique') return vueProgres(ctxAccueil);
+  if (vue === 'historique') return avecBandeau(vueProgres(ctxAccueil));
 
   // ================= SOUS-ÉCRAN : NUTRITION =================
   if (vue === 'nutrition') {
-    return (
+    return avecBandeau(
       <ScrollView
         key="nutrition"
         {...placeNutrition}
@@ -2473,7 +2609,7 @@ export default function EntrainementScreen({
   }
 
   // ================= ACCUEIL (voir entrainement/vueAccueil.js) =================
-  return vueAccueil(ctxAccueil);
+  return avecBandeau(vueAccueil(ctxAccueil));
 }
 
 

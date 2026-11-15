@@ -12,7 +12,8 @@ import ChoixExercice from '../../components/ChoixExercice';
 import { ChronoSeance, ConfirmationSuppression, CreerProgrammeDepuisSeance } from './composantsSeance';
 import { Icone, LibelleIcone, TexteIcone } from '../../components/Icones';
 import MinuteurRepos from '../../components/MinuteurRepos';
-import { ZONE_TACTILE, aujourdhui, indicateurProgression, libelleDate, trouverDernieresSeries } from './outils';
+import { ZONE_TACTILE, aujourdhui, dateCourteRecord, indicateurProgression, libelleDate, trouverDernieresSeries } from './outils';
+import { dernieresSeancesExercice } from '../../logic/progres';
 import { bat_le_record, recordPersonnel, suggererProchaineSerie } from '../../logic/surchargeProgressive';
 import { ciblePrevueDansBloc } from '../../logic/bloc';
 import { colors, espacement } from '../../theme';
@@ -38,6 +39,8 @@ export function vueSeance(ctx) {
     seriesDeLaSeance, seriesLoggees, setBiblioSeance, setDaterAujourdhui,
     setExerciceARetirer, setExercicesSession, setNouvelExerciceLibre,
     setRepos, setSerieEnEdition, supprimerSerie, terminerSeance,
+    reduireSeance, demanderAbandon, confirmerAbandon, setConfirmerAbandon,
+    journalExoOuvert, setJournalExoOuvert,
   } = ctx;
 
 
@@ -62,9 +65,23 @@ export function vueSeance(ctx) {
         contentContainerStyle={{ padding: espacement.m, paddingBottom: 340 }}
         keyboardShouldPersistTaps="handled"
       >
-        <TexteIcone nom="entrainement" taille={19} couleur={colors.or} style={styles.titre}>
-          {programmeActif ? programmeActif.nom : 'Séance libre'}
-        </TexteIcone>
+        {/* RÉDUIRE (15/11/2026) : revenir à l'onglet SANS arrêter la séance —
+            pour aller voir son journal, ses records, ses programmes. Un
+            bandeau « Séance en cours » permet de la reprendre de partout. */}
+        <View style={styles.enteteSeance}>
+          <TexteIcone nom="entrainement" taille={19} couleur={colors.or} style={[styles.titre, { flex: 1 }]}>
+            {programmeActif ? programmeActif.nom : 'Séance libre'}
+          </TexteIcone>
+          <TouchableOpacity
+            style={styles.boutonReduire}
+            onPress={reduireSeance}
+            accessibilityLabel="Réduire la séance (elle continue)"
+          >
+            <LibelleIcone nom="chevron-bas" taille={14} ecart={5} style={styles.boutonModifierTexte}>
+              Réduire
+            </LibelleIcone>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.sousTitre}>
           {jourEnregistrement === jour
             ? libelleDate(jour)
@@ -187,7 +204,7 @@ export function vueSeance(ctx) {
               ) : null}
               <Text style={styles.indiceDerniere}>
                 {dernieres
-                  ? `Dernière fois (${dernieres.date}) : ${dernieres.series
+                  ? `Dernière fois (${dateCourteRecord(dernieres.date)}) : ${dernieres.series
                       .map((s) => `${s.poids}kg×${s.reps}`)
                       .join(', ')}`
                   : 'Première fois sur cet exercice'}
@@ -195,6 +212,33 @@ export function vueSeance(ctx) {
                   <Text style={{ color: indicateur.couleur, fontWeight: '800' }}> {indicateur.symbole}</Text>
                 )}
               </Text>
+              {/* LE JOURNAL DE L'EXERCICE (15/11/2026, demande de Hafiz : « avoir
+                  accès au log d'entraînement pendant la séance afin de pouvoir
+                  ajuster le poids ») : ses dernières séances, série par série,
+                  sans quitter l'écran. Seulement s'il a un passé. */}
+              {dernieres ? (
+                <TouchableOpacity
+                  style={styles.lienJournalExo}
+                  onPress={() => setJournalExoOuvert(journalExoOuvert === exercice ? null : exercice)}
+                >
+                  <LibelleIcone nom={journalExoOuvert === exercice ? 'chevron-haut' : 'chevron-bas'}
+                    taille={12} ecart={5} style={styles.lienJournalExoTexte}>
+                    {journalExoOuvert === exercice ? 'Masquer mon journal' : 'Voir mes dernières séances'}
+                  </LibelleIcone>
+                </TouchableOpacity>
+              ) : null}
+              {journalExoOuvert === exercice ? (
+                <View style={styles.journalExo}>
+                  {dernieresSeancesExercice(entrainements, exercice).map((ligne) => (
+                    <View key={`${ligne.id}-${ligne.date}`} style={styles.ligneJournalExo}>
+                      <Text style={styles.dateJournalExo}>{dateCourteRecord(ligne.date)}</Text>
+                      <Text style={styles.seriesJournalExo}>
+                        {ligne.series.map((sj) => libelleSerie(sj)).join('  ·  ')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
 
               {/* Quoi faire aujourd'hui : LE PLAN s'il existe, sinon le calcul */}
               {cibleDuPlan ? (
@@ -435,13 +479,22 @@ export function vueSeance(ctx) {
         </TouchableOpacity>
         {/* Sortir SANS enregistrer. C'était un lien gris discret (« Abandonner »)
             que Hafiz n'a pas trouvé — c'est maintenant un vrai bouton. */}
-        <TouchableOpacity style={styles.boutonSortir} onPress={abandonnerSeance}>
+        {/* « Réduire » garde la séance ; ce bouton-ci l'EFFACE. Depuis le
+            15/11/2026 il se confirme dès que des séries sont notées. */}
+        <TouchableOpacity style={styles.boutonSortir} onPress={demanderAbandon}>
           <LibelleIcone nom="sortie" taille={14} style={styles.boutonSortirTexte}>
             {programmeActif
               ? 'Sortir du programme (sans enregistrer)'
               : 'Quitter la séance (sans enregistrer)'}
           </LibelleIcone>
         </TouchableOpacity>
+        <ConfirmationSuppression
+          actif={confirmerAbandon}
+          question="Quitter SANS enregistrer ? Les séries notées seront effacées. Pour garder la séance et aller voir autre chose, utilise plutôt « Réduire » en haut."
+          libelleConfirmer="Oui, tout effacer"
+          onConfirmer={abandonnerSeance}
+          onAnnuler={() => setConfirmerAbandon(false)}
+        />
       </ScrollView>
       {/* LE MINUTEUR DE REPOS, posé PAR-DESSUS la page (08/11/2026) : on le
           voit où qu'on ait fait défiler. Il annonce la prochaine étape dans

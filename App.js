@@ -16,7 +16,7 @@
 // CE QUI RESTE LOCAL, et n'a rien à voir avec un « mode » : la séance EN COURS
 // et la file des séances terminées pas encore envoyées (src/stockageSeance.js)
 // — un filet contre la perte, pas une app parallèle.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, ScrollView, Dimensions,
   StatusBar as RNStatusBar,
@@ -127,18 +127,64 @@ function AppInterne() {
   // souris), elle expire seule après 1,5 s.
   const defilementAuto = useRef(null);
 
-  function defilerVersPage(index) {
+  function defilerVersPage(index, anime = true) {
+    if (!anime) { recalerPager(); return; }
     const x = index * largeurPage;
     defilementAuto.current = { x, depuis: Date.now() };
     pagerRef.current?.scrollTo({ x, animated: true });
   }
+  // Au DÉMARRAGE (reprise d'une séance), on SAUTE sur la page au lieu de
+  // glisser : personne n'a touché la barre, il n'y a rien à montrer — et un
+  // glissement animé lancé pendant que les pages s'installent peut se perdre.
+  const sautDirect = useRef(false);
   const indexActif = Math.max(0, ONGLETS.findIndex((o) => o.cle === ongletActif));
+
+  // BUG DU 15/11/2026 — « on revient sur l'écran du Profil alors qu'en bas
+  // l'onglet est sur Entraînement ». Au démarrage, l'app choisit l'onglet
+  // Entraînement s'il y a une séance en cours… PENDANT que l'écran de
+  // chargement est encore affiché : les pages n'existent pas encore, le
+  // glissement vers la bonne page tombe dans le vide, et elles apparaissent
+  // ensuite sur la première (le Profil). La barre, elle, disait vrai.
+  // Même chose après une reconnexion : les pages sont recréées à gauche.
+  // Remède : chaque fois que le défilement des pages APPARAÎT (ou change de
+  // taille), on le recale SANS animation sur l'onglet actif, s'il n'y est pas.
+  const positionPager = useRef(0);
+  const cibleActuelle = useRef({ index: 0, largeur: largeurPage });
+  cibleActuelle.current = { index: indexActif, largeur: largeurPage };
+  // ⚠️ ON VÉRIFIE, ON NE SUPPOSE PAS : un saut demandé avant que les pages
+  // aient leur largeur retombe à 0 sans rien dire. `positionPager` n'est donc
+  // mis à jour QUE par les vrais évènements de défilement, et on réessaie
+  // (8 fois, toutes les 250 ms) tant que la page n'est pas atteinte — sauf si
+  // le doigt a pris la main entre-temps.
+  const essaisRecalage = useRef(null);
+  function recalerPager() {
+    clearTimeout(essaisRecalage.current);
+    let essais = 0;
+    const essai = () => {
+      const { index, largeur } = cibleActuelle.current;
+      const x = index * largeur;
+      if (Math.abs(positionPager.current - x) <= 2) return;
+      if (essais > 0 && !defilementAuto.current) return; // le doigt a pris la main
+      defilementAuto.current = { x, depuis: Date.now() };
+      pagerRef.current?.scrollTo({ x, animated: false });
+      essais += 1;
+      if (essais < 8) essaisRecalage.current = setTimeout(essai, 250);
+    };
+    essai();
+  }
+  // Une ref STABLE : appelée seulement quand le défilement est créé ou
+  // détruit (pas à chaque rendu). Un défilement neuf part de la position 0.
+  const brancherPager = useCallback((r) => {
+    pagerRef.current = r;
+    if (r) positionPager.current = 0;
+  }, []);
 
   // L'onglet actif change — par la barre, par `allerA`, ou par la reprise
   // d'une séance au démarrage : on amène la page correspondante à l'écran.
   useEffect(() => {
     setOngletsVisites((v) => (v.includes(ongletActif) ? v : [...v, ongletActif]));
-    defilerVersPage(indexActif);
+    defilerVersPage(indexActif, !sautDirect.current);
+    sautDirect.current = false;
   }, [indexActif, largeurPage]);
 
   // Le doigt a fait glisser les pages : on attend que le défilement se POSE
@@ -148,6 +194,7 @@ function AppInterne() {
   // « fin d'élan » du défilement n'est pas fiable.
   function surDefilementPages(e) {
     const x = e.nativeEvent.contentOffset.x;
+    positionPager.current = x;
     clearTimeout(minuterieDefilement.current);
     minuterieDefilement.current = setTimeout(() => {
       const auto = defilementAuto.current;
@@ -535,7 +582,14 @@ function AppInterne() {
       const seance = await stockageSeance.lireSeanceEnCours(moiServeur.id);
       // Seulement à la connexion : on ne rapatrie pas l'utilisateur de force
       // s'il vient de quitter la séance pour aller voir autre chose.
-      if (!annule && seance) setOngletActif('entrainement');
+      if (!annule && seance) {
+        // Le saut n'est demandé que si l'onglet CHANGE vraiment : sinon le
+        // drapeau resterait levé et gâcherait le prochain changement d'onglet.
+        setOngletActif((avant) => {
+          if (avant !== 'entrainement') sautDirect.current = true;
+          return 'entrainement';
+        });
+      }
     })();
     return () => { annule = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -689,7 +743,9 @@ function AppInterne() {
         if (hauteur > 0 && hauteur !== hauteurPage) setHauteurPage(hauteur);
       }}>
       <ScrollView
-        ref={pagerRef}
+        ref={brancherPager}
+        onLayout={recalerPager}
+        onContentSizeChange={recalerPager}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}

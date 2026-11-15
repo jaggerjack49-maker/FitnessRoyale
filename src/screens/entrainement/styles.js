@@ -206,6 +206,35 @@ export const styles = StyleSheet.create({
     paddingVertical: 13, paddingHorizontal: 14,
   },
   boutonModifierTexte: { color: colors.or, fontWeight: '800', fontSize: 12 },
+  // « Une séance est déjà en cours » (15/11/2026) : la question posée sous le
+  // bandeau quand on veut en démarrer une autre.
+  carteConflitSeance: {
+    marginHorizontal: espacement.m, marginTop: espacement.s, padding: espacement.m,
+    backgroundColor: colors.carte, borderRadius: 14, borderWidth: 1, borderColor: da.bordureOrDouce,
+    gap: espacement.s,
+  },
+  texteConflitSeance: { color: colors.texte, fontSize: 14, lineHeight: 20 },
+  boutonRemplacerSeance: {
+    borderWidth: 1, borderColor: colors.rouge, borderRadius: 8,
+    paddingVertical: 12, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center',
+  },
+  boutonRemplacerSeanceTexte: { color: colors.rouge, fontWeight: '800', fontSize: 12 },
+  // En-tête de la séance : le titre et « Réduire » sur la même ligne (15/11/2026).
+  enteteSeance: { flexDirection: 'row', alignItems: 'flex-start', gap: espacement.s },
+  boutonReduire: {
+    flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: 12,
+    borderRadius: 10, borderWidth: 1, borderColor: da.bordureOrDouce, backgroundColor: da.orVoile,
+  },
+  // Le journal d'un exercice déplié pendant la séance.
+  lienJournalExo: { minHeight: 36, justifyContent: 'center', alignSelf: 'flex-start' },
+  lienJournalExoTexte: { color: colors.or, fontWeight: '700', fontSize: 12 },
+  journalExo: {
+    backgroundColor: colors.carteClaire, borderRadius: 10, padding: 10,
+    marginBottom: espacement.s, gap: 6,
+  },
+  ligneJournalExo: { flexDirection: 'row', gap: 8 },
+  dateJournalExo: { color: colors.texteGris, fontSize: 12, width: 70, fontWeight: '700' },
+  seriesJournalExo: { color: colors.texte, fontSize: 12, flex: 1, lineHeight: 17 },
   // « Annuler » du renommage d'un programme : neutre, à côté de « Enregistrer » en or.
   boutonAnnulerRenommage: {
     borderWidth: 1, borderColor: colors.bordure, borderRadius: 8,

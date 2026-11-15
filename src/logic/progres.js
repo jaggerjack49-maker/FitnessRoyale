@@ -246,3 +246,38 @@ export function volumeLisible(kg) {
   if (v >= 10000) return `${String(Math.round(v / 100) / 10).replace('.', ',')} t`;
   return `${v.toLocaleString('fr-FR').replace(/ | /g, ' ')} kg`;
 }
+
+// ---------------------------------------------------------------------------
+// LE JOURNAL D'UN EXERCICE PENDANT LA SÉANCE (15/11/2026)
+// ---------------------------------------------------------------------------
+// Demande de Hafiz : « on doit pouvoir avoir accès au log d'entraînement
+// pendant la séance afin de pouvoir ajuster le poids ». Sous chaque exercice
+// de la séance en cours, on peut déplier ses DERNIÈRES séances : date, puis
+// toutes les séries faites ce jour-là.
+// - Même identité d'exercice que « Dernière fois » (le NOM exact) : les deux
+//   lignes ne peuvent pas parler de deux choses différentes.
+// - Du plus récent au plus ancien ; deux séances le même jour restent deux
+//   lignes (la plus récente d'abord, à l'id le plus grand).
+// - Une donnée abîmée est ignorée, jamais une exception : ça s'affiche
+//   PENDANT l'effort (leçon de l'audit du 06/09/2026).
+export function dernieresSeancesExercice(entrainements, exercice, limite = 5) {
+  if (!Array.isArray(entrainements) || typeof exercice !== 'string' || !exercice) return [];
+  const n = Number.isInteger(limite) && limite > 0 ? limite : 5;
+  const lignes = [];
+  for (const e of entrainements) {
+    if (!e || typeof e !== 'object' || typeof e.date !== 'string') continue;
+    const series = (Array.isArray(e.series) ? e.series : [])
+      .filter((s) => s && typeof s === 'object' && s.exercice === exercice)
+      .map((s) => ({ reps: s.reps, poids: s.poids, rir: s.rir ?? null }));
+    if (series.length > 0) lignes.push({ id: e.id, date: e.date, series });
+  }
+  lignes.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    // Même jour : la séance la plus récente d'abord. Un id local (« local-… »)
+    // est une séance tout juste terminée, donc plus récente qu'un id serveur.
+    const local = (x) => String(x).startsWith('local-');
+    if (local(a.id) !== local(b.id)) return local(a.id) ? -1 : 1;
+    return Number(b.id) - Number(a.id) || 0;
+  });
+  return lignes.slice(0, n);
+}

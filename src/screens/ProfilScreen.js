@@ -216,13 +216,20 @@ export default function ProfilScreen({
         </Text>
         {u.titres.length > 0 ? (
           <View style={styles.listeTitres}>
-            {u.titres.map((titre) => (
-              <View key={titre} style={styles.chipTitre}>
-                <LibelleIcone nom="medaille" taille={13} ecart={5} style={styles.chipTitreTexte}>
-                  {titre}
-                </LibelleIcone>
-              </View>
-            ))}
+            {/* Un titre gagné plusieurs fois (le défi de la semaine, chaque
+                semaine) s'affiche UNE fois avec son nombre (15/11/2026) :
+                deux puces identiques portaient la même clé, et la console
+                s'en plaignait à chaque rendu. */}
+            {[...new Set(u.titres)].map((titre) => {
+              const fois = u.titres.filter((t) => t === titre).length;
+              return (
+                <View key={titre} style={styles.chipTitre}>
+                  <LibelleIcone nom="medaille" taille={13} ecart={5} style={styles.chipTitreTexte}>
+                    {fois > 1 ? `${titre} ×${fois}` : titre}
+                  </LibelleIcone>
+                </View>
+              );
+            })}
           </View>
         ) : (
           <Text style={styles.indice}>Aucun titre pour l'instant — termine le défi de la semaine !</Text>

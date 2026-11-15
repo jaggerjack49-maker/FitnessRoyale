@@ -309,3 +309,60 @@ export const stylesConfirmation = StyleSheet.create({
   boutonAnnuler: { paddingVertical: 7, paddingHorizontal: 8 },
   texteAnnuler: { color: colors.texteGris, fontSize: 12 },
 });
+
+// LA SÉANCE RÉDUITE (15/11/2026). Demande de Hafiz : « pouvoir sortir [de
+// l'écran de séance] sans que ça n'annule l'entraînement », pour aller voir
+// son journal et ajuster la charge. Tant qu'une séance est en cours mais pas
+// affichée, ce bandeau reste FIXÉ en haut de chaque écran de l'onglet
+// Entraînement (il ne défile pas avec la page) : on la retrouve d'un geste.
+// Il a sa PROPRE horloge, comme ChronoSeance : sinon c'est tout l'écran
+// Entraînement qui se redessinerait chaque seconde.
+export function BandeauSeanceEnCours({ nom, debut, nbSeries, actif, onReprendre }) {
+  const [maintenant, setMaintenant] = useState(Date.now());
+  useEffect(() => {
+    if (!actif || !debut) return undefined;
+    setMaintenant(Date.now());
+    const minuteur = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(minuteur);
+  }, [actif, debut]);
+  const details = [
+    debut ? chronoLisible(secondesEcoulees(debut, maintenant)) : null,
+    `${nbSeries} série${nbSeries > 1 ? 's' : ''} notée${nbSeries > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ');
+  return (
+    <TouchableOpacity
+      style={stylesBandeauSeance.bandeau}
+      onPress={onReprendre}
+      accessibilityLabel={`Reprendre la séance en cours : ${nom}`}
+    >
+      <View style={stylesBandeauSeance.point} />
+      <View style={{ flex: 1 }}>
+        <Text style={stylesBandeauSeance.surtitre}>SÉANCE EN COURS</Text>
+        <Text style={stylesBandeauSeance.nom} numberOfLines={1}>{nom}</Text>
+        <Text style={stylesBandeauSeance.details}>{details}</Text>
+      </View>
+      <View style={stylesBandeauSeance.bouton}>
+        <LibelleIcone nom="lecture" taille={13} ecart={5} couleur={da.orSombre}
+          style={stylesBandeauSeance.boutonTexte}>REPRENDRE</LibelleIcone>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export const stylesBandeauSeance = StyleSheet.create({
+  bandeau: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: espacement.m, marginTop: espacement.s, marginBottom: 2,
+    padding: 12, borderRadius: 14, minHeight: 56,
+    backgroundColor: da.orVoile, borderWidth: 1, borderColor: colors.or,
+  },
+  point: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.vert },
+  surtitre: { color: colors.or, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  nom: { color: colors.texte, fontWeight: '800', fontSize: 15, marginTop: 1 },
+  details: { color: colors.texteGris, fontSize: 12, fontFamily: monospace, marginTop: 1 },
+  bouton: {
+    backgroundColor: colors.or, borderRadius: 10, minHeight: 40,
+    paddingHorizontal: 12, justifyContent: 'center',
+  },
+  boutonTexte: { color: da.orSombre, fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
+});

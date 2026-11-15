@@ -5982,6 +5982,90 @@ retour à l'historique ; perf 1450 kg au développé couché → « VALEUR TROP 
 intacte. Aucun débordement, cibles ≥ 40 px, zéro erreur console.
 ⚠️ Demande un NOUVEL APK (et le serveur déployé avant : nouvelles routes).
 
+## Réduire la séance, son journal pendant l'effort, et le retour sur la bonne page — 15/11/2026
+
+Trois demandes de Hafiz : « avoir accès au log d'entraînement pendant la séance afin de
+pouvoir ajuster le poids — du coup pouvoir réduire l'écran d'entraînement, sortir sans que ça
+n'annule l'entraînement », et « quand on relance l'app ou le site, on revient sur le Profil
+alors qu'en bas l'onglet est sur Entraînement ».
+
+### 1. Une séance EN COURS n'est plus la même chose que l'ÉCRAN de séance
+
+- Nouvel état `seanceEnCours` (EntrainementScreen) : il dit que la séance EXISTE ; `vue` dit
+  seulement si on la regarde. Seuls « Terminer » et « Quitter sans enregistrer » la ferment.
+  La mémoire du téléphone (`ecrireSeanceEnCours`) suit `seanceEnCours`, plus `vue === 'seance'`
+  — une séance réduite reste donc protégée d'une fermeture brutale.
+- Bouton **« Réduire »** en haut de l'écran de séance (et le RETOUR ANDROID fait la même chose
+  dans la séance — il n'annule jamais). On revient à l'accueil de l'onglet, la séance continue :
+  chrono, séries, repos.
+- **Le bandeau « SÉANCE EN COURS »** (`BandeauSeanceEnCours`, composantsSeance.js) coiffe CHAQUE
+  écran de l'onglet tant que la séance est réduite (accueil, programmes, progrès, nutrition,
+  tableau…) : nom, chrono, nombre de séries, « REPRENDRE ». Il est FIXÉ en haut (la page défile
+  dessous) et a sa propre horloge, comme `ChronoSeance`. Posé par `avecBandeau(ecran)`, qui
+  enveloppe tous les `return` de vue de l'écran SAUF la séance elle-même.
+- **Le minuteur de repos suit** : on réduit souvent ENTRE deux séries pour regarder son journal,
+  la fin du repos ne doit pas passer inaperçue — `MinuteurRepos` est aussi posé dans
+  `avecBandeau`.
+- **Démarrer une autre séance pendant qu'une est réduite ne l'écrase plus** : `demarrerSeance`
+  pose la question sous le bandeau (« Reprendre » / « Abandonner « X » (N séries perdues) et
+  démarrer « Y » » / « Annuler »). Le vrai démarrage vit dans `lancerSeance`.
+- **« Quitter sans enregistrer » se confirme** dès que des séries sont notées (c'était UN seul
+  geste qui effaçait tout) ; la question renvoie vers « Réduire ». Sans série : immédiat.
+- `abandonnerSeance` et `terminerSeance` passent `seanceEnCours` à faux AVANT d'effacer la
+  mémoire, sinon elle pourrait être réécrite pendant l'effacement.
+
+### 2. Le journal d'un exercice, pendant la séance
+
+Sous « Dernière fois », un lien « Voir mes dernières séances » déplie les 5 dernières séances
+de CET exercice, série par série (`dernieresSeancesExercice`, `src/logic/progres.js` : même
+identité d'exercice que « Dernière fois » — le nom exact —, plus récent d'abord, une séance
+tout juste terminée (id `local-…`) passe devant, données abîmées ignorées). Un seul journal
+ouvert à la fois (`journalExoOuvert`). « Dernière fois » affiche aussi sa date en format court
+(« 09/11/26 ») au lieu du format machine.
+Tests : 9 cas dans `harnais_progres.mjs`. **2 mutations vues échouer** (ordre inversé, filtre
+par exercice retiré).
+
+### 3. BUG — le Profil affiché, la barre sur Entraînement
+
+Au démarrage, App.js choisit l'onglet Entraînement s'il trouve une séance en cours… PENDANT que
+l'écran de chargement est encore affiché : les pages n'existent pas, le glissement vers la
+bonne page tombe dans le vide (`pagerRef` nul), et elles apparaissent ensuite sur la PREMIÈRE
+(le Profil). La barre, elle, disait vrai. Même risque à chaque fois que les pages sont
+recréées (reconnexion).
+- `recalerPager()` (App.js) : dès que le défilement des pages apparaît (`onLayout`) ou change
+  de taille (`onContentSizeChange`), il est recalé SANS animation sur l'onglet actif.
+- ⚠️ ON VÉRIFIE, ON NE SUPPOSE PAS : un premier jet notait la page « atteinte » sans le
+  vérifier — un saut demandé avant que les pages aient leur largeur retombe à 0 en silence, et
+  l'app ne réessayait plus. `positionPager` n'est mis à jour QUE par les vrais évènements de
+  défilement, et le recalage réessaie 8 fois (toutes les 250 ms) tant que la page n'est pas
+  atteinte, sauf si le doigt a pris la main.
+- La reprise d'une séance au démarrage SAUTE sur la page (`sautDirect`) au lieu de glisser :
+  personne n'a touché la barre, et un glissement animé lancé pendant que les pages
+  s'installent peut se perdre. Le drapeau n'est levé que si l'onglet change vraiment.
+- Vérifié en REPRODUISANT : séance en cours + rechargement → page 1560 px (Entraînement),
+  quatre rechargements de suite ; en retirant le recalage, on retrouve exactement le bug
+  (page 0 = Profil, barre sur Entraînement).
+
+### Au passage
+
+`ProfilScreen` : un titre gagné plusieurs fois (« Guerrier de la semaine », chaque semaine)
+s'affichait en double avec la même clé React (erreur en console à chaque rendu). Il s'affiche
+maintenant une fois, « Guerrier de la semaine ×2 ».
+
+### Vérifié
+
+Suite complète : **435 tests, tous OK** (le journal est dans le harnais Progrès).
+Navigateur (390 px, serveur LOCAL, `SondeTest`) : séance libre « developpe couche » → journal
+déplié (09/11, 06/10, 15/09, 07/09 avec leurs séries) ; série + « Réduire » en plein repos →
+accueil avec le bandeau « Séance libre · 4:32 · 2 séries notées » ET le minuteur de repos ;
+« Séance libre » touchée → la question « déjà en cours » (cibles 40 à 58 px) ; Progrès ouvert
+avec le bandeau ; « REPRENDRE » → la séance intacte ; « Quitter sans enregistrer » → question,
+annulée ; « Terminer » → séance enregistrée au serveur (107,5 × 8 et × 7), bandeau parti,
+mémoire effacée ; « Abandonner … et démarrer » → nouvelle séance ; quitter une séance VIDE →
+immédiat. Aucun débordement.
+⚠️ NON VÉRIFIÉ : le retour Android (pas de geste retour dans le navigateur) et le
+comportement exact du glissement sur téléphone — à confirmer sur l'APK.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
