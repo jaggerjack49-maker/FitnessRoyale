@@ -41,9 +41,9 @@
     home_gym: 'Home gym',
     poids_du_corps: 'Poids du corps',
     autre: 'Autre matériel',
-    programme: 'Programme sur mesure',
-    suivi: 'Suivi mensuel',
-    suivi_nutrition: 'Suivi + nutrition',
+    programme: 'Programme personnalisé',
+    suivi: 'Programme + coaching',
+    suivi_nutrition: 'Programme + coaching + nutrition',
     je_ne_sais_pas: 'Ne sait pas encore'
   };
 

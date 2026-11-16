@@ -6297,9 +6297,10 @@ vraies personnes le rempliraient et seraient refusées sans comprendre).
 - Un envoi réussi RETIRE le formulaire : le renvoyer serait refusé (une
   demande par 24 h) et on ne laisse pas un bouton qui ne marche plus.
 - ⚠️ **AUCUN TÉMOIGNAGE, AUCUN AVIS CLIENT.** Je n'en invente pas. À ajouter
-  quand de vrais clients en auront écrit. Et **aucun tarif** : les trois
-  formules affichent « Tarif à convenir ensemble » jusqu'à ce que Hafiz les
-  fixe (un commentaire dans le HTML dit où les poser).
+  quand de vrais clients en auront écrit. **LES TARIFS sont posés depuis le
+  16/11/2026**, donnés par Hafiz : programme personnalisé **15 000 FCFA en
+  paiement unique**, programme + coaching **25 000 FCFA/mois**, programme +
+  coaching + nutrition **45 000 FCFA/mois**.
 
 ### Lire les demandes : D'ABORD dans l'app, puis sur le site (16/11/2026)
 
@@ -6368,8 +6369,7 @@ rapport aux deux cartes voisines.
 
 ### Ce qui reste à faire par Hafiz
 
-- **Fixer les tarifs** (trois balises `<p class="prix">` dans
-  `site/index.html`).
+- (Les tarifs sont posés depuis le 16/11/2026.)
 - **Créer le Static Site sur Render** (Publish Directory `site`, Build Command
   vide) — procédure dans `docs/SITE_COACHING.md`.
 - ⚠️ **Déployer le backend AVANT d'annoncer le site** : le formulaire appelle
@@ -6463,6 +6463,54 @@ suivant » → plan neuf en base (105 / 135 / 13 reps en semaine 1, qui remonte 
 correction manuelle à 160 kg effacée, bloc daté d'aujourd'hui, « SEMAINE 1 SUR 3 ». Zéro erreur
 console. ⚠️ `.env` n'est PAS ignoré par Git : le supprimer après chaque vérification locale.
 ⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour `nouveau_bloc_de`).
+
+## Les tarifs du coaching, et un bug de CSS qu'ils ont révélé — 16/11/2026
+
+Hafiz a fixé ses prix, en deux temps (sa première version ne chiffrait que
+deux formules, la seconde les trois) : **programme personnalisé 15 000
+FCFA/mois**, **programme + coaching 25 000**, **programme + coaching +
+nutrition 45 000**. Ils sont écrits en clair dans `site/index.html`
+(`<p class="prix">`).
+Les CARTES ont pris ses mots (« Programme + coaching » au lieu de « Suivi
+mensuel »), et les `<option>` du formulaire avec elles — mais **jamais leurs
+`value`** (`programme`, `suivi`, `suivi_nutrition`), qui sont les clés
+connues du serveur et vérifiées par `test_listes_site_coaching.py`.
+⚠️ **LE PROGRAMME SEUL N'EST PAS MENSUEL.** « / mois » avait d'abord été
+écrit sur les trois (il ne l'avait pas précisé, et les trois formules
+ressemblaient à une échelle de services mensuels) ; l'assomption a été
+SIGNALÉE plutôt que déduite en silence, et Hafiz a répondu « oui, mensuel —
+sauf celui du programme ». Sa carte porte donc « paiement unique », les deux
+autres « / mois ». C'est le `<span class="prix-periode">` qui le dit, jamais
+le nombre : en changeant un tarif, c'est lui qu'il faut relire.
+L'étiquette « LE PLUS COMPLET » a DÉMÉNAGÉ sur la troisième carte : elle
+était sur celle du milieu, alors que la dernière contient les deux autres —
+la page se contredisait.
+Les nombres portent une espace INSÉCABLE (`15 000`) et le suffixe est en
+`nowrap` : sur trois colonnes, la carte est étroite et la barre de « / mois »
+se retrouvait séparée de son mot en fin de ligne.
+
+### ⚠️ `.carte p` ÉCRASAIT TROIS RÈGLES DEPUIS LE DÉBUT
+
+En mesurant le style vraiment appliqué (et pas en regardant l'image), le tarif
+s'affichait **en gris à 16 px**, alors que `.prix` demande de l'or à 22 px.
+Cause : une formule est un `<article class="carte formule">`, et `.carte p`
+(une classe + un élément) l'emporte sur `.prix` (une classe seule). Deux
+autres règles tombaient dans le même piège sans que ça saute aux yeux :
+- `.pour` (la phrase « Pour qui… ») perdait sa couleur et sa taille ;
+- `.etiquette` (« LE PLUS COMPLET ») s'affichait en **gris pâle à 16 px sur
+  son fond doré** au lieu du noir à 11 px — presque illisible — et, comme
+  `.formule` est une colonne flex, elle était ÉTIRÉE sur toute la largeur de
+  la carte au lieu de tenir à son texte (`align-self: flex-start`).
+
+Les trois sont maintenant portées par `.carte` (`.carte .prix`, `.carte .pour`,
+`.carte .etiquette`), ce qui les fait gagner. Ces défauts existaient AVANT ce
+lot : ils étaient invisibles tant que la ligne de prix ne disait qu'une phrase
+grise de remplacement. LEÇON, la même que le 01/10/2026 : on juge l'esthétique
+à l'image, jamais la géométrie ni le style appliqué — ceux-là se MESURENT
+(`getComputedStyle`).
+
+Vérifié en 390 px et en 1024 px : tarif en or 22 px, étiquette noire sur or
+large de 141 px, aucun débordement, et le reste de la page inchangé.
 
 ## La lecture des demandes passe sur le site (`site/admin.html`) — 16/11/2026
 

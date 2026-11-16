@@ -292,13 +292,28 @@ a { color: var(--or); }
   background: var(--or);
   transform: rotate(45deg);
 }
-.prix {
+/* ⚠️ CES DEUX RÈGLES SONT PORTÉES PAR `.carte` EXPRÈS. Une formule est un
+   <article class="carte formule">, et `.carte p` (une classe + un élément)
+   l'emportait sur `.prix` tout seul (une classe) : le tarif s'affichait en
+   gris à 16 px, ni doré ni plus gros, et `.pour` pareil. Trouvé en MESURANT
+   le style appliqué, pas à l'œil. */
+.carte .prix {
   font-family: var(--chasse-fixe);
   color: var(--or);
-  font-size: 15px; font-weight: 700;
-  margin: 4px 0 16px;
+  /* Un tarif est ce qu'on vient lire sur cette carte : il se voit. */
+  font-size: 22px; font-weight: 800;
+  margin: 6px 0 16px;
 }
-.pour {
+.carte .prix-periode {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texte-gris);
+  /* Sur trois colonnes, la carte est étroite : « / mois » comme « paiement
+     unique » doit passer à la ligne ENTIER, jamais se couper en deux
+     (vu à l'écran). */
+  white-space: nowrap;
+}
+.carte .pour {
   margin-top: auto; margin-bottom: 0;
   color: var(--texte-muet);
   font-size: 14px; font-style: italic;
@@ -308,8 +323,14 @@ a { color: var(--or); }
   background: linear-gradient(var(--carte-haute), var(--carte));
   box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
 }
-.etiquette {
+/* Portée par `.carte` pour la même raison que `.prix` (voir plus bas) :
+   sinon `.carte p` l'emporte et l'étiquette s'affiche en gris pâle à 16 px
+   sur son fond doré, au lieu du noir à 11 px prévu. */
+.carte .etiquette {
   display: inline-block;
+  /* `.formule` est une colonne flex : sans ça, l'étiquette est ÉTIRÉE sur
+     toute la largeur de la carte au lieu de tenir à son texte. */
+  align-self: flex-start;
   background: var(--or); color: var(--or-sombre);
   font-size: 11px; font-weight: 800; letter-spacing: 1.5px;
   padding: 4px 10px; border-radius: 6px;

@@ -145,15 +145,19 @@
   </section>
 
   <!-- ============ LES FORMULES ============
-       ⚠️ POUR HAFIZ : AUCUN TARIF N'EST ÉCRIT ICI, exprès — je n'invente pas
-       de prix. Quand tu les auras fixés, remplace le texte de la balise
-       <p class="prix"> de chaque formule (il y en a trois). -->
+       ⚠️ POUR HAFIZ : les tarifs se changent ICI, dans la balise
+       <p class="prix"> de chaque formule. Le programme seul est un PAIEMENT
+       UNIQUE (15 000 FCFA) ; les deux formules de coaching sont
+       MENSUELLES (25 000 et 45 000 FCFA par mois) — c'est le
+       <span class="prix-periode"> de la carte qui le dit, pas le nombre.
+       Les espaces entre « 15 » et « 000 », et avant « FCFA », sont
+       INSÉCABLES : le nombre ne doit jamais se couper en fin de ligne. -->
   <section class="section" id="formules">
     <h2 class="titre-section">LES <b>FORMULES</b></h2>
     <div class="grille trois">
       <article class="carte formule">
-        <h3>Programme sur mesure</h3>
-        <p class="prix">Tarif à convenir ensemble</p>
+        <h3>Programme personnalisé</h3>
+        <p class="prix">15 000 FCFA <span class="prix-periode">paiement unique</span></p>
         <ul>
           <li>Un bloc complet écrit pour toi</li>
           <li>Tes séances, tes jours, tes charges</li>
@@ -162,12 +166,11 @@
         </ul>
         <p class="pour">Pour qui sait s'entraîner seul et veut juste un vrai plan.</p>
       </article>
-      <article class="carte formule formule-vedette">
-        <p class="etiquette">LE PLUS COMPLET</p>
-        <h3>Suivi mensuel</h3>
-        <p class="prix">Tarif à convenir ensemble</p>
+      <article class="carte formule">
+        <h3>Programme + coaching</h3>
+        <p class="prix">25 000 FCFA <span class="prix-periode">/ mois</span></p>
         <ul>
-          <li>Tout le programme sur mesure</li>
+          <li>Tout le programme personnalisé</li>
           <li>Relecture de tes séances chaque semaine</li>
           <li>Ajustements des charges et du volume</li>
           <li>Un nouveau bloc à la fin de chaque cycle</li>
@@ -175,11 +178,12 @@
         </ul>
         <p class="pour">Pour progresser sans avoir à décider à ma place.</p>
       </article>
-      <article class="carte formule">
-        <h3>Suivi + nutrition</h3>
-        <p class="prix">Tarif à convenir ensemble</p>
+      <article class="carte formule formule-vedette">
+        <p class="etiquette">LE PLUS COMPLET</p>
+        <h3>Programme + coaching + nutrition</h3>
+        <p class="prix">45 000 FCFA <span class="prix-periode">/ mois</span></p>
         <ul>
-          <li>Tout le suivi mensuel</li>
+          <li>Tout le programme + coaching</li>
           <li>Objectifs caloriques et protéines</li>
           <li>Relecture de ton journal alimentaire</li>
           <li>Ajustements selon ton poids réel</li>
@@ -188,8 +192,8 @@
       </article>
     </div>
     <p class="note-section">
-      Pas de paiement sur ce site : on convient du tarif ensemble après ta
-      demande, et tu règles comme tu préfères.
+      Pas de paiement sur ce site : tu fais ta demande, on en parle, et tu
+      règles ensuite comme tu préfères.
     </p>
   </section>
 
@@ -343,9 +347,9 @@
           <label for="formule">LA FORMULE QUI T'INTÉRESSE</label>
           <select id="formule" name="formule">
             <option value="je_ne_sais_pas">Je ne sais pas encore</option>
-            <option value="programme">Programme sur mesure</option>
-            <option value="suivi">Suivi mensuel</option>
-            <option value="suivi_nutrition">Suivi + nutrition</option>
+            <option value="programme">Programme personnalisé</option>
+            <option value="suivi">Programme + coaching</option>
+            <option value="suivi_nutrition">Programme + coaching + nutrition</option>
           </select>
         </p>
       </fieldset>

@@ -52,10 +52,28 @@ ailleurs. Il n'y a donc rien à changer entre les deux situations.
 
 ## Changer les TARIFS
 
-Ils ne sont écrits NULLE PART pour l'instant : les trois formules affichent
-« Tarif à convenir ensemble ». Pour les poser, remplacer le texte des trois
-balises `<p class="prix">` dans `site/index.html` (un commentaire les signale
-juste au-dessus de la section).
+Ils sont écrits en clair dans `site/index.html`, dans la balise
+`<p class="prix">` de chaque formule (un commentaire les signale juste
+au-dessus de la section) :
+
+| Formule | Tarif |
+|---|---|
+| Programme personnalisé | 15 000 FCFA, **paiement unique** |
+| Programme + coaching | 25 000 FCFA / mois |
+| Programme + coaching + nutrition | 45 000 FCFA / mois |
+
+Chaque formule contient la précédente. ⚠️ Seules les deux formules de
+coaching sont MENSUELLES : le programme seul se paie une fois. C'est le
+`<span class="prix-periode">` de la carte qui le dit (« paiement unique »
+ou « / mois »), pas le nombre — ne pas l'oublier en changeant un tarif.
+
+⚠️ Les NOMS affichés se changent
+librement, mais pas les `value` des `<option>` du formulaire
+(`programme`, `suivi`, `suivi_nutrition`) : ce sont les clés que le serveur
+connaît, et un test échouerait.
+
+⚠️ L'espace entre « 15 » et « 000 » est une espace INSÉCABLE (U+00A0) :
+sans elle, le nombre peut se couper en fin de ligne.
 
 ## Changer les choix du formulaire
 
