@@ -10,7 +10,7 @@ Documentation interactive automatique : http://localhost:8000/docs
 
 import base64
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timedelta
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -2090,3 +2090,120 @@ def changer_objectifs_nutrition(joueur_id: int, objectifs: ObjectifsNutrition,
     db.definir_objectifs_nutrition(joueur_id, objectifs.kcal, objectifs.proteines,
                                    objectifs.glucides, objectifs.lipides)
     return db.objectifs_nutrition(joueur_id)
+
+
+# ============================================================
+#  COACHING — les demandes venues du SITE WEB (15/11/2026)
+# ============================================================
+# Le dossier `site/` propose un coaching personnalisé et envoie ici son
+# formulaire. La personne qui le remplit n'a PAS de compte — c'est le but :
+# elle en est encore à demander un coaching. `POST /coaching/demandes` est
+# donc la seule route de toute l'API ouverte SANS connexion.
+#
+# ⚠️ EN REVANCHE, LIRE ces demandes est réservé à l'admin : elles portent le
+# contact, l'âge et le poids de vraies personnes. C'est exactement
+# l'asymétrie trouvée par l'audit du 06/09/2026 (l'écriture verrouillée
+# partout, la lecture nulle part) — on ne la refait pas.
+
+# Les listes fermées du formulaire. ⚠️ Elles sont RECOPIÉES dans les <select>
+# de site/index.html : `test_listes_site_coaching.py` compare les deux, sinon
+# une divergence donnerait au visiteur un refus incompréhensible.
+OBJECTIFS_COACHING = ("prise_de_masse", "perte_de_gras", "force",
+                      "remise_en_forme", "competition")
+NIVEAUX_COACHING = ("debutant", "intermediaire", "avance")
+MATERIELS_COACHING = ("salle_complete", "home_gym", "poids_du_corps", "autre")
+FORMULES_COACHING = ("programme", "suivi", "suivi_nutrition", "je_ne_sais_pas")
+
+# Deux demandes du même contact à moins de 24 h : la seconde est refusée.
+HEURES_ENTRE_DEUX_DEMANDES = 24
+
+
+class DemandeCoaching(BaseModel):
+    prenom: str = Field(min_length=2, max_length=40)
+    contact: str = Field(min_length=5, max_length=120)
+    objectif: str
+    niveau: str
+    jours_par_semaine: int = Field(ge=1, le=7)
+    materiel: str
+    formule: str | None = None
+    age: int | None = Field(default=None, ge=12, le=100)
+    poids: float | None = Field(default=None, gt=30, lt=300)
+    taille: int | None = Field(default=None, ge=100, le=250)
+    limitations: str | None = Field(default=None, max_length=1000)
+    message: str | None = Field(default=None, max_length=2000)
+    # Champ PIÈGE, caché en CSS : toujours vide chez un humain, qui ne le voit
+    # même pas. Un robot qui remplit tout le formulaire le remplit aussi, et
+    # se fait refuser. Le piège le plus simple qui marche, sans rien demander
+    # au visiteur (contrairement à un CAPTCHA).
+    piege: str | None = None
+
+
+class StatutDemande(BaseModel):
+    statut: str
+
+
+@app.post("/coaching/demandes", status_code=201)
+def deposer_demande_coaching(demande: DemandeCoaching):
+    """Reçoit une demande de coaching depuis le site. SANS CONNEXION."""
+    if demande.piege:
+        raise HTTPException(400, "Demande refusée.")
+
+    for valeur, autorisees, quoi in (
+        (demande.objectif, OBJECTIFS_COACHING, "Objectif"),
+        (demande.niveau, NIVEAUX_COACHING, "Niveau"),
+        (demande.materiel, MATERIELS_COACHING, "Matériel"),
+    ):
+        if valeur not in autorisees:
+            raise HTTPException(400, f"{quoi} inconnu : {valeur}")
+    if demande.formule is not None and demande.formule not in FORMULES_COACHING:
+        raise HTTPException(400, f"Formule inconnue : {demande.formule}")
+
+    prenom = demande.prenom.strip()
+    contact = demande.contact.strip()
+    if not prenom or not contact:
+        raise HTTPException(400, "Il manque ton prénom ou ton contact.")
+
+    maintenant = datetime.now()
+    depuis = (maintenant - timedelta(hours=HEURES_ENTRE_DEUX_DEMANDES)).isoformat(
+        timespec="milliseconds")
+    if db.demande_coaching_recente(contact, depuis):
+        raise HTTPException(409, "Tu as déjà envoyé une demande il y a moins de "
+                                 "24 h — je te réponds très vite, promis.")
+
+    identifiant = db.creer_demande_coaching(
+        maintenant.isoformat(timespec="milliseconds"),
+        {
+            "prenom": prenom,
+            "contact": contact,
+            "objectif": demande.objectif,
+            "niveau": demande.niveau,
+            "jours_par_semaine": demande.jours_par_semaine,
+            "materiel": demande.materiel,
+            "formule": demande.formule,
+            "age": demande.age,
+            "poids": demande.poids,
+            "taille": demande.taille,
+            # Un champ laissé vide vaut « rien à signaler », pas une chaîne vide.
+            "limitations": (demande.limitations or "").strip() or None,
+            "message": (demande.message or "").strip() or None,
+        },
+    )
+    return {"id": identifiant}
+
+
+@app.get("/admin/coaching/demandes")
+def lister_demandes_coaching(courant: dict = Depends(auth.utilisateur_admin)):
+    """Les demandes reçues, la plus récente d'abord. RÉSERVÉ À L'ADMIN."""
+    return db.demandes_coaching()
+
+
+@app.put("/admin/coaching/demandes/{demande_id}/statut")
+def changer_statut_demande_coaching(
+        demande_id: int, corps: StatutDemande,
+        courant: dict = Depends(auth.utilisateur_admin)):
+    """Marque une demande comme en cours, acceptée ou refusée. ADMIN."""
+    if corps.statut not in db.STATUTS_DEMANDE:
+        raise HTTPException(400, f"Statut inconnu : {corps.statut}")
+    if not db.changer_statut_demande(demande_id, corps.statut):
+        raise HTTPException(404, "Demande introuvable.")
+    return {"statut": corps.statut}

@@ -1,0 +1,514 @@
+/* =========================================================
+   Fitness Royale — Coaching
+   LA PALETTE VIENT DE src/designSystem.js, à l'identique : c'est la même
+   marque que l'application, l'or y pilote l'arène, les ligues, l'avatar et
+   le classement. Aucune couleur ne doit être inventée ici.
+   ========================================================= */
+
+:root {
+  --fond: #0c0b0f;
+  --fond-haut: #111016;
+  --carte: #17161d;
+  --carte-haute: #1b1a22;
+  --surface: #26242e;
+
+  --or: #e8b23a;
+  --or-clair: #f2c95c;
+  --or-sombre: #141319;   /* le texte qu'on pose SUR de l'or */
+
+  --texte: #f2f0ea;
+  --texte-doux: #c9c5bb;
+  --texte-gris: #9a97a0;
+  --texte-muet: #75727c;
+
+  --bordure: rgba(255, 255, 255, .07);
+  --bordure-or: rgba(232, 178, 58, .4);
+  --or-voile: rgba(232, 178, 58, .08);
+  --or-voile-fort: rgba(232, 178, 58, .14);
+
+  /* Une page web assume une colonne plus large que l'app (560 px) : on lit
+     sur un écran, pas sur un téléphone tenu à bout de bras. */
+  --colonne: 760px;
+  --colonne-texte: 680px;
+
+  --police: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --chasse-fixe: "JetBrains Mono", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  background: var(--fond);
+  color: var(--texte);
+  font-family: var(--police);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.2; margin: 0; }
+p { margin: 0 0 1em; }
+b { color: var(--or); font-weight: 800; }
+
+a { color: var(--or); }
+
+/* Le lien d'évitement, visible seulement au clavier. */
+.saut-contenu {
+  position: absolute;
+  left: -9999px;
+}
+.saut-contenu:focus {
+  left: 12px; top: 12px;
+  z-index: 100;
+  background: var(--or); color: var(--or-sombre);
+  padding: 10px 16px; border-radius: 8px;
+  font-weight: 800; text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--or);
+  outline-offset: 3px;
+}
+
+/* ---------- Le losange, motif de marque ---------- */
+.losange {
+  display: inline-block;
+  width: 7px; height: 7px;
+  background: var(--or);
+  transform: rotate(45deg);
+  vertical-align: middle;
+  margin: 0 10px;
+}
+
+/* ---------- En-tête ---------- */
+.entete {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(12, 11, 15, .92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--bordure);
+}
+.bande {
+  max-width: var(--colonne);
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+/* 44 px au minimum sur tout ce qui se touche (44 pt iOS / 48 dp Android) —
+   la même règle que dans l'application, mesurée et non estimée. */
+.marque {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--texte);
+  min-height: 44px;
+}
+.marque img { border-radius: 8px; display: block; }
+.marque-texte {
+  font-size: 15px; font-weight: 900;
+  letter-spacing: 1.5px;
+}
+.nav {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+.nav a {
+  color: var(--texte-doux);
+  text-decoration: none;
+  font-size: 14px; font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 8px;
+  min-height: 44px;
+  display: flex; align-items: center;
+}
+.nav a:hover { color: var(--texte); background: rgba(255, 255, 255, .04); }
+.nav .nav-action {
+  color: var(--or);
+  border: 1px solid var(--bordure-or);
+  background: var(--or-voile);
+}
+.nav .nav-action:hover { background: var(--or-voile-fort); color: var(--or-clair); }
+
+/* ---------- Accroche ---------- */
+.accroche {
+  max-width: var(--colonne);
+  margin: 0 auto;
+  padding: 72px 20px 56px;
+  text-align: center;
+  /* Une lueur dorée derrière le titre, comme l'aura de la carte d'arène. */
+  background:
+    radial-gradient(60% 55% at 50% 0%, rgba(232, 178, 58, .13), transparent 70%),
+    linear-gradient(var(--fond-haut), var(--fond));
+}
+.surtitre {
+  font-size: 12px; font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--texte-gris);
+  margin-bottom: 20px;
+}
+.accroche h1 {
+  font-size: clamp(32px, 7vw, 52px);
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin-bottom: 20px;
+}
+.chapeau {
+  max-width: var(--colonne-texte);
+  margin: 0 auto 28px;
+  color: var(--texte-doux);
+  font-size: 18px;
+}
+.chapeau-gauche { margin-left: 0; text-align: left; }
+
+.actions {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+.bouton-or, .bouton-bordé {
+  display: inline-block;
+  padding: 15px 28px;
+  border-radius: 12px;
+  font-weight: 800; font-size: 15px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  min-height: 52px;
+}
+.bouton-or {
+  background: var(--or);
+  color: var(--or-sombre);
+  box-shadow: 0 6px 22px rgba(232, 178, 58, .22);
+}
+.bouton-or:hover { background: var(--or-clair); }
+.bouton-bordé {
+  background: var(--or-voile);
+  color: var(--or);
+  border-color: var(--bordure-or);
+}
+.bouton-bordé:hover { background: var(--or-voile-fort); }
+.bouton-large {
+  display: block; width: 100%;
+  font-family: var(--police); font-size: 16px;
+}
+.bouton-or[disabled] {
+  opacity: .6; cursor: progress; box-shadow: none;
+}
+
+.slogan {
+  font-family: var(--chasse-fixe);
+  font-size: 13px; letter-spacing: 5px;
+  color: var(--texte-muet);
+  margin: 0;
+}
+
+/* ---------- Sections ---------- */
+.section {
+  max-width: var(--colonne);
+  margin: 0 auto;
+  padding: 56px 20px;
+  border-top: 1px solid var(--bordure);
+}
+.titre-section {
+  font-size: 13px; font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--texte-gris);
+  margin-bottom: 28px;
+}
+.titre-section b { color: var(--or); }
+.note-section {
+  color: var(--texte-muet);
+  font-size: 14px;
+  margin-top: 24px; margin-bottom: 0;
+}
+
+/* ---------- Cartes ---------- */
+.grille { display: grid; gap: 16px; }
+.grille.deux { grid-template-columns: 1fr; }
+.grille.trois { grid-template-columns: 1fr; }
+
+.carte {
+  background: var(--carte);
+  border: 1px solid var(--bordure);
+  border-radius: 16px;
+  padding: 22px;
+}
+.carte h3 {
+  font-size: 18px; font-weight: 800;
+  margin-bottom: 10px;
+}
+.carte p { color: var(--texte-doux); font-size: 16px; margin-bottom: 0; }
+.carte-or { border-color: var(--bordure-or); background: var(--carte-haute); }
+.carte-or h3 { color: var(--or); }
+
+/* ---------- Étapes ---------- */
+.etapes { list-style: none; margin: 0; padding: 0; }
+.etapes li {
+  display: flex; gap: 18px;
+  padding: 0 0 26px;
+  position: relative;
+}
+/* Le fil qui relie les étapes, sauf après la dernière. */
+.etapes li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 21px; top: 48px; bottom: 6px;
+  width: 1px;
+  background: var(--bordure-or);
+}
+.num {
+  flex: 0 0 44px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--or-voile);
+  border: 1px solid var(--bordure-or);
+  color: var(--or);
+  font-family: var(--chasse-fixe); font-weight: 700; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+.etapes h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.etapes p { color: var(--texte-doux); margin-bottom: 0; }
+
+/* ---------- Formules ---------- */
+.formule { display: flex; flex-direction: column; }
+.formule ul {
+  list-style: none; margin: 0 0 16px; padding: 0;
+  color: var(--texte-doux);
+}
+.formule li {
+  padding: 7px 0 7px 24px;
+  position: relative;
+  font-size: 15px;
+  border-bottom: 1px solid var(--bordure);
+}
+.formule li:last-child { border-bottom: 0; }
+.formule li::before {
+  content: "";
+  position: absolute; left: 4px; top: 16px;
+  width: 6px; height: 6px;
+  background: var(--or);
+  transform: rotate(45deg);
+}
+.prix {
+  font-family: var(--chasse-fixe);
+  color: var(--or);
+  font-size: 15px; font-weight: 700;
+  margin: 4px 0 16px;
+}
+.pour {
+  margin-top: auto; margin-bottom: 0;
+  color: var(--texte-muet);
+  font-size: 14px; font-style: italic;
+}
+.formule-vedette {
+  border-color: var(--or);
+  background: linear-gradient(var(--carte-haute), var(--carte));
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+}
+.etiquette {
+  display: inline-block;
+  background: var(--or); color: var(--or-sombre);
+  font-size: 11px; font-weight: 800; letter-spacing: 1.5px;
+  padding: 4px 10px; border-radius: 6px;
+  margin: 0 0 10px;
+  /* Sans ça l'étiquette passe à la ligne dans une colonne étroite et décale
+     le titre de la carte vedette par rapport à ses deux voisines. */
+  white-space: nowrap;
+}
+
+/* ---------- Liste à points ---------- */
+.liste-points { list-style: none; margin: 0; padding: 0; }
+.liste-points li {
+  position: relative;
+  padding: 14px 0 14px 26px;
+  border-bottom: 1px solid var(--bordure);
+  color: var(--texte-doux);
+}
+.liste-points li:last-child { border-bottom: 0; }
+.liste-points li::before {
+  content: "";
+  position: absolute; left: 4px; top: 23px;
+  width: 7px; height: 7px;
+  background: var(--or);
+  transform: rotate(45deg);
+}
+
+/* ---------- FAQ ---------- */
+.faq details {
+  border: 1px solid var(--bordure);
+  border-radius: 12px;
+  background: var(--carte);
+  margin-bottom: 10px;
+}
+.faq summary {
+  padding: 16px 18px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+";
+  color: var(--or);
+  font-size: 22px; font-weight: 400;
+  flex: 0 0 auto;
+}
+.faq details[open] summary::after { content: "−"; }
+.faq details[open] summary { color: var(--or); }
+.faq p {
+  margin: 0; padding: 0 18px 18px;
+  color: var(--texte-doux);
+}
+
+/* ---------- Formulaire ---------- */
+.section-demande { padding-bottom: 72px; }
+.formulaire {
+  background: var(--carte);
+  border: 1px solid var(--bordure-or);
+  border-radius: 18px;
+  padding: 24px 20px;
+}
+fieldset {
+  border: 0; padding: 0;
+  margin: 0 0 26px;
+}
+legend {
+  padding: 0 0 14px;
+  font-size: 12px; font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--or);
+  text-transform: uppercase;
+}
+.champ { margin: 0 0 16px; }
+.champ label {
+  display: block;
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--texte-gris);
+  margin-bottom: 7px;
+}
+.etoile { color: var(--or); }
+
+input, select, textarea {
+  width: 100%;
+  background: var(--fond);
+  color: var(--texte);
+  border: 1px solid var(--surface);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font-family: var(--police);
+  font-size: 16px;   /* 16 px au minimum : en dessous, iOS zoome à la frappe. */
+  min-height: 50px;
+}
+input[type="number"] { font-family: var(--chasse-fixe); }
+textarea { min-height: 88px; resize: vertical; line-height: 1.5; }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--or);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--or-voile);
+}
+input.faux, select.faux, textarea.faux {
+  border-color: #ff5470;
+}
+select {
+  appearance: none;
+  /* La flèche est dessinée en CSS : pas d'image à charger. */
+  background-image: linear-gradient(45deg, transparent 50%, var(--or) 50%),
+                    linear-gradient(135deg, var(--or) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 22px, calc(100% - 14px) 22px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 40px;
+}
+
+.paire { display: grid; gap: 0; }
+
+/* Le champ piège : invisible, hors du flux et hors du parcours clavier. */
+.piege {
+  position: absolute;
+  left: -9999px;
+  width: 1px; height: 1px;
+  overflow: hidden;
+}
+
+.message-envoi {
+  margin: 16px 0 0;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--texte-doux);
+}
+.message-envoi:empty { display: none; }
+.message-envoi.ok {
+  background: var(--or-voile);
+  border: 1px solid var(--bordure-or);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--texte);
+}
+.message-envoi.ok b { display: block; margin-bottom: 4px; }
+.message-envoi.erreur {
+  background: rgba(255, 84, 112, .1);
+  border: 1px solid rgba(255, 84, 112, .4);
+  border-radius: 12px;
+  padding: 14px;
+  color: #ffb3c0;
+}
+.message-envoi.attente { color: var(--or); }
+
+.note-vie-privee {
+  margin: 18px 0 0;
+  font-size: 13px;
+  color: var(--texte-muet);
+}
+
+/* ---------- Pied ---------- */
+.pied {
+  border-top: 1px solid var(--bordure);
+  background: var(--fond-haut);
+  padding: 40px 20px;
+  text-align: center;
+}
+.pied .marque-texte { display: block; margin-bottom: 6px; }
+.slogan-pied {
+  font-family: var(--chasse-fixe);
+  font-size: 12px; letter-spacing: 5px;
+  color: var(--or);
+  margin-bottom: 20px;
+}
+.mentions {
+  max-width: var(--colonne-texte);
+  margin: 0 auto;
+  font-size: 13px;
+  color: var(--texte-muet);
+}
+
+/* ---------- Petits écrans ----------
+   ⚠️ MESURÉ À L'ÉCRAN, pas deviné : avec ses quatre liens, l'en-tête collant
+   passait à la ligne et occupait 169 px sur un téléphone de 390 px de large,
+   soit un cinquième de la hauteur visible, EN PERMANENCE. On ne garde donc
+   que la marque et l'action : la page est une seule colonne qu'on fait
+   défiler, les ancres de section n'y servent presque à rien. */
+@media (max-width: 719px) {
+  .nav a:not(.nav-action) { display: none; }
+  .bande { flex-wrap: nowrap; padding: 10px 16px; }
+  .nav .nav-action { font-size: 13px; padding: 10px; }
+  .marque-texte { font-size: 13px; }
+}
+
+/* ---------- Grands écrans ---------- */
+@media (min-width: 720px) {
+  .grille.deux { grid-template-columns: 1fr 1fr; }
+  .grille.trois { grid-template-columns: repeat(3, 1fr); }
+  .paire { grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .paire.trois-champs { grid-template-columns: repeat(3, 1fr); }
+  .formulaire { padding: 32px; }
+  .accroche { padding: 96px 20px 72px; }
+  .section { padding: 72px 20px; }
+}

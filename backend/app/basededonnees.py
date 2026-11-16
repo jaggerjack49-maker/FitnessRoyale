@@ -775,6 +775,34 @@ def initialiser():
         # gardent NULL (ils passent en fin de liste).
         if not _colonne_existe(conn, "duels", "cree_le"):
             conn.execute("ALTER TABLE duels ADD COLUMN cree_le TEXT")
+        # ---- COACHING (15/11/2026) : les demandes venues du SITE WEB.
+        # Ce ne sont PAS des joueurs : la personne qui remplit le formulaire
+        # n'a pas de compte — c'est justement le but, elle en est encore à
+        # demander un coaching. D'où une table à part, sans `joueur_id`.
+        # `contact` est un e-mail OU un téléphone, tel qu'il a été saisi. Il
+        # sert à reconnaître une demande en double, donc toute comparaison
+        # passe par LOWER(TRIM(...)), jamais par une égalité brute : c'est la
+        # leçon déjà payée quatre fois (nom d'exercice, salle, pseudo).
+        _executer_creation_table(conn, """
+            CREATE TABLE IF NOT EXISTS demandes_coaching (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                cree_le           TEXT NOT NULL,
+                prenom            TEXT NOT NULL,
+                contact           TEXT NOT NULL,
+                objectif          TEXT NOT NULL,
+                niveau            TEXT NOT NULL,
+                jours_par_semaine INTEGER NOT NULL,
+                materiel          TEXT NOT NULL,
+                formule           TEXT,
+                age               INTEGER,
+                poids             REAL,
+                taille            INTEGER,
+                limitations       TEXT,
+                message           TEXT,
+                statut            TEXT NOT NULL DEFAULT 'nouvelle'
+            )
+        """)
+
 
 
 # ----- Bilan et historique des duels (13/11/2026) -----
@@ -2654,3 +2682,65 @@ def donnees_entrainement(joueur_id: int) -> dict:
             "groupes_exercices": groupes_exercices_du_joueur(joueur_id, conn),
             "cibles_semaine": cibles_semaine_du_joueur(joueur_id, conn),
         }
+
+
+# ----- Coaching : les demandes venues du site web (15/11/2026) -----
+
+# Les quatre états d'une demande, de sa réception à son traitement.
+STATUTS_DEMANDE = ("nouvelle", "en_cours", "acceptee", "refusee")
+
+# Les colonnes qu'une demande porte, dans l'ordre où on les écrit.
+_CHAMPS_DEMANDE = (
+    "prenom", "contact", "objectif", "niveau", "jours_par_semaine",
+    "materiel", "formule", "age", "poids", "taille", "limitations", "message",
+)
+
+
+def creer_demande_coaching(cree_le: str, champs: dict) -> int:
+    """Enregistre une demande de coaching et renvoie son numéro."""
+    colonnes = ", ".join(_CHAMPS_DEMANDE)
+    trous = ", ".join("?" for _ in _CHAMPS_DEMANDE)
+    valeurs = [champs.get(nom) for nom in _CHAMPS_DEMANDE]
+    with connexion() as conn:
+        curseur = conn.execute(
+            f"INSERT INTO demandes_coaching (cree_le, {colonnes}) "
+            f"VALUES (?, {trous}) RETURNING id",
+            (cree_le, *valeurs),
+        )
+        return curseur.lastrowid
+
+
+def demande_coaching_recente(contact: str, depuis: str) -> bool:
+    """Ce contact a-t-il DÉJÀ écrit depuis `depuis` (un horodatage ISO) ?
+
+    Comparaison NORMALISÉE (LOWER + TRIM, qui existent à l'identique sur
+    SQLite et Postgres) : « Jean@Mail.com » et « jean@mail.com » sont la même
+    personne. Sans ça, le garde-fou anti-doublon se contournerait avec une
+    simple majuscule.
+    """
+    with connexion() as conn:
+        ligne = conn.execute(
+            "SELECT id FROM demandes_coaching "
+            "WHERE LOWER(TRIM(contact)) = LOWER(TRIM(?)) AND cree_le >= ? "
+            "LIMIT 1",
+            (contact, depuis),
+        ).fetchone()
+        return ligne is not None
+
+
+def demandes_coaching() -> list:
+    """Toutes les demandes, la plus récente d'abord. UNE seule requête."""
+    with connexion() as conn:
+        return [dict(ligne) for ligne in conn.execute(
+            "SELECT * FROM demandes_coaching ORDER BY cree_le DESC, id DESC"
+        )]
+
+
+def changer_statut_demande(demande_id: int, statut: str) -> bool:
+    """Passe une demande à un autre état. Faux si elle n'existe pas."""
+    with connexion() as conn:
+        curseur = conn.execute(
+            "UPDATE demandes_coaching SET statut = ? WHERE id = ? RETURNING id",
+            (statut, demande_id),
+        )
+        return curseur.lastrowid is not None

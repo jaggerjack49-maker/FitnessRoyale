@@ -6208,6 +6208,167 @@ ligne « Pectoraux + Triceps », Triceps passe à 4 séries, le total reste « 8
 semaine », et le serveur a `groupes_en_plus: ["Triceps"]`.
 ⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour la colonne).
 
+## Site web de coaching personnalisé (`site/`) — 15/11/2026
+
+Demande de Hafiz : « je veux qu'on travaille également sur un site web fitness
+royale qui va proposer du coaching personnalisé ».
+
+Axe ENTIÈREMENT NEUF : vérifié avant d'écrire quoi que ce soit, le mot
+« coach » n'apparaissait nulle part dans le dépôt — ni code, ni
+`docs/CONTEXTE.md`, ni `docs/VISION_ARENA_PASS.md`. Le mode d'emploi du site
+(lancer en local, changer les tarifs, déployer) vit dans
+`docs/SITE_COACHING.md` ; ici, les décisions et les pièges.
+
+### Les quatre décisions, prises SANS Hafiz
+
+Un panneau de questions lui a été proposé, il l'a fermé. Les choix sont donc
+les miens, annoncés en clair et validés après coup (« Oui, continue ») :
+
+1. **Le coach, c'est Hafiz.** Le site vend SON travail ; la personne remplit
+   un questionnaire, il écrit le programme. PAS d'IA qui génère le programme :
+   ça coûterait à chaque appel (comme la nutrition) et « personnalisé par un
+   coach » cesserait d'être vrai, or c'est tout l'argument.
+2. **Vitrine + demande, rien de plus.** Pas de compte client web, pas d'espace
+   coach, pas de messagerie — c'est plusieurs semaines avant le premier
+   client. Le suivi se fait dans l'app, qui sait déjà tout faire.
+3. **Un dossier `site/` dans CE dépôt**, en HTML/CSS/JS simple, zéro
+   dépendance, zéro étape de construction. PAS dans l'app Expo : son bundle
+   fait 1,1 Mo et est quasi invisible pour Google, rédhibitoire pour une page
+   censée attirer des clients. PAS un dépôt séparé : deux dépôts à tenir et la
+   DA à recopier.
+4. **Aucun paiement en ligne.** Stripe demanderait un compte, des CGV et une
+   gestion des remboursements avant d'avoir le moindre client.
+
+### ⚠️ LA SEULE ROUTE DE TOUTE L'API OUVERTE SANS CONNEXION
+
+`POST /coaching/demandes` n'exige aucun jeton, et c'est voulu : la personne
+qui demande un coaching n'a pas de compte — c'est précisément pour ça qu'elle
+écrit. **En revanche la LECTURE est réservée à l'admin**
+(`GET /admin/coaching/demandes`, `PUT /admin/coaching/demandes/{id}/statut`) :
+une demande porte le contact, l'âge et le poids de quelqu'un de réel. C'est
+exactement l'asymétrie trouvée par l'audit du 06/09/2026 (« l'écriture
+verrouillée partout, la lecture nulle part »), prise dans le bon sens cette
+fois.
+
+### Ce qui protège la route publique
+
+- **Un champ PIÈGE** (`piege`), caché en CSS hors de l'écran et hors du
+  parcours clavier : toujours vide chez un humain, rempli par un robot qui
+  remplit tout. Refus en 400. C'est le garde-fou le plus simple qui marche
+  sans rien demander au visiteur, contrairement à un CAPTCHA.
+- **Une demande par contact et par 24 h** (409). ⚠️ La comparaison est
+  NORMALISÉE — `LOWER(TRIM(contact))`, identique sur SQLite et Postgres —
+  sinon une majuscule suffirait à contourner le garde-fou. C'est la CINQUIÈME
+  fois que ce projet rencontre « une saisie libre sert d'identifiant » (nom
+  d'exercice et salle le 04/09, pseudo le 06/09, poids de corps le 13/11) :
+  cette fois la fonction de comparaison a été écrite AVANT la première ligne
+  qui l'utilise, comme la leçon le demandait.
+- **Trois listes fermées** validées côté serveur (objectif, niveau, matériel,
+  plus la formule facultative), et des bornes sur l'âge, le poids, la taille
+  et les jours par semaine.
+
+### ⚠️ LES LISTES SONT RECOPIÉES ENTRE LE SITE ET LE SERVEUR
+
+Les `<option>` de `site/index.html` doublent `OBJECTIFS_COACHING`,
+`NIVEAUX_COACHING`, `MATERIELS_COACHING` et `FORMULES_COACHING` de `main.py`.
+Une divergence donnerait au visiteur un refus incompréhensible sur un choix
+que le site lui a lui-même proposé — le risque documenté le 03/09/2026.
+`backend/tests/test_listes_site_coaching.py` compare les deux (et vérifie en
+plus que le champ piège existe ET reste hors de l'écran : devenu visible, de
+vraies personnes le rempliraient et seraient refusées sans comprendre).
+
+### Le site
+
+- **La DA vient de `src/designSystem.js`**, valeur par valeur, recopiée en
+  variables CSS : même fond `#0c0b0f`, même or `#e8b23a`, même losange de
+  marque, même slogan. Une page web assume une colonne plus large que l'app
+  (760 px contre 560) : on lit sur un écran, pas sur un téléphone tenu à bout
+  de bras.
+- `script.js` vise `localhost:8000` quand la page est servie depuis
+  `localhost`, l'adresse en ligne partout ailleurs — rien à changer entre le
+  développement et la production.
+- ⚠️ **LE DÉLAI D'ENVOI EST DE 70 SECONDES, ET C'EST VOULU.** L'hébergement
+  gratuit met la machine en veille ; la première demande de la journée peut
+  mettre près d'une minute. Couper au bout de quelques secondes perdrait la
+  demande d'une vraie personne. Au bout de 4 s, la page EXPLIQUE l'attente
+  (« la première demande de la journée peut prendre jusqu'à une minute, c'est
+  normal ») au lieu de laisser tourner en silence — même raisonnement que
+  l'écran de réveil de l'app, pour un visiteur bien moins patient.
+- Un envoi réussi RETIRE le formulaire : le renvoyer serait refusé (une
+  demande par 24 h) et on ne laisse pas un bouton qui ne marche plus.
+- ⚠️ **AUCUN TÉMOIGNAGE, AUCUN AVIS CLIENT.** Je n'en invente pas. À ajouter
+  quand de vrais clients en auront écrit. Et **aucun tarif** : les trois
+  formules affichent « Tarif à convenir ensemble » jusqu'à ce que Hafiz les
+  fixe (un commentaire dans le HTML dit où les poser).
+
+### Lire les demandes dans l'app
+
+`src/components/DemandesCoaching.js`, carte repliable en bas du Profil,
+affichée seulement sur un compte admin (`u.admin ? … : null` dans
+`ProfilScreen` — **jamais `&&` avec une valeur de la base**, qui renvoie 0/1
+et ferait afficher un `0` nu, bug du 01/10/2026). Un résumé chiffré reste
+visible sans déplier (« 1 demande reçue · 1 à traiter »), et chaque demande
+s'ouvre sur ses champs en français puis quatre boutons d'état. Le changement
+d'état est optimiste, et un échec RECHARGE la vérité au lieu de laisser
+l'écran mentir (règle du 04/09/2026).
+
+### ⚠️ UN PIÈGE DE VÉRIFICATION CONTOURNÉ : `app.config.js` lit `API_URL` D'ABORD
+
+Pour vérifier l'écran admin contre le backend LOCAL, la méthode documentée
+est de mettre `expo.extra.apiUrl` à `null` dans app.json — ce qui a déjà
+provoqué deux incidents (24/09 et 07/11 : le fichier commité dans cet état
+aurait fait appeler `localhost` à tout le monde).
+Or `app.config.js` fait `process.env.API_URL || config.extra?.apiUrl` : un
+simple fichier `.env` contenant `API_URL=http://127.0.0.1:8000` prend donc le
+dessus **sans toucher à app.json**. Vérifié avec `npx expo config --type
+public` avant de lancer, et `git diff app.json` vide après. C'est désormais la
+façon de faire : `.env` temporaire, supprimé après la vérification.
+À NOTER AUSSI : un touchable qui porte `accessibilityRole="button"` rend bien
+un `<button role="button">` sur react-native-web — `closest('[role="button"]')`
+fonctionne, contrairement à ce que dit la note du 06/10/2026 (qui parlait de
+touchables SANS ce rôle).
+
+### Vérifié
+
+Tests : `backend/tests/test_api_coaching.py` (17 cas) et
+`test_listes_site_coaching.py` (6 cas). **Sept mutations vues échouer**,
+chacune sur son cas : comparaison du contact non normalisée, piège désarmé,
+listes fermées non vérifiées, lecture ouverte à un compte ordinaire, une
+connexion par demande (le motif N+1), une liste du site désaccordée du
+serveur, et — contre-épreuve — exiger une connexion pour déposer une demande,
+qui casse tout, comme attendu. Suite complète : **469 tests, tous OK.**
+
+DANS LE NAVIGATEUR (site servi en local, backend local) : demande complète
+envoyée → enregistrée avec tous ses champs, accents intacts et horodatage à
+la milliseconde ; le même contact renvoyé en « ` hafiz.test@exemple.fr `»
+(casse et espaces changés) est reconnu comme la même personne et reçoit le
+message amical, pas une erreur ; un champ obligatoire vide dit lequel et
+rougit le champ ; une coupure réseau simulée affiche « pas de connexion
+internet », rend le bouton et GARDE la saisie. En 390 px : aucun débordement,
+toutes les cibles à 44 px ou plus. En 1024 px : colonne de 720 px centrée,
+grilles à trois colonnes, zéro erreur console applicative.
+DANS L'APP (420 px, compte admin réel) : la carte affiche « 1 demande reçue ·
+1 à traiter », la demande se déplie sur tous ses champs en français
+(« Prise de masse · Intermédiaire · 4 j/sem », « Salle complète », « 29 ans ·
+78.5 kg · 181 cm »), et « En cours » change l'état en base et met le résumé à
+jour. Zéro erreur console.
+
+DEUX DÉFAUTS TROUVÉS À L'ÉCRAN, pas dans le code : l'en-tête collant occupait
+**169 px** sur un téléphone de 390 px — un cinquième de la hauteur, en
+permanence — à cause de ses quatre liens qui passaient à la ligne (réduit à
+64 px en ne gardant que la marque et l'action) ; et l'étiquette « LE PLUS
+COMPLET » de la formule vedette passait à la ligne, décalant son titre par
+rapport aux deux cartes voisines.
+
+### Ce qui reste à faire par Hafiz
+
+- **Fixer les tarifs** (trois balises `<p class="prix">` dans
+  `site/index.html`).
+- **Créer le Static Site sur Render** (Publish Directory `site`, Build Command
+  vide) — procédure dans `docs/SITE_COACHING.md`.
+- ⚠️ **Déployer le backend AVANT d'annoncer le site** : le formulaire appelle
+  une route qui n'existe que depuis ce lot.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6220,7 +6381,7 @@ semaine », et le serveur a `groupes_en_plus: ["Triceps"]`.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (446 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (469 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

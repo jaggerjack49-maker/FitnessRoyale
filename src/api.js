@@ -835,3 +835,19 @@ export async function changerObjectifsNutrition(joueurId, objectifs) {
     method: 'PUT', body: JSON.stringify(objectifs),
   });
 }
+
+// ----- Coaching : les demandes venues du site web (15/11/2026) -----
+// Le DÉPÔT d'une demande se fait depuis `site/`, jamais depuis l'app : la
+// personne qui demande un coaching n'a pas encore de compte. L'app ne fait
+// que LIRE ces demandes et les faire avancer — et seul un compte
+// administrateur en a le droit (403 sinon).
+
+export async function demandesCoaching() {
+  return get('/admin/coaching/demandes');
+}
+
+export async function changerStatutDemande(demandeId, statut) {
+  return appel(`/admin/coaching/demandes/${demandeId}/statut`, {
+    method: 'PUT', body: JSON.stringify({ statut }),
+  });
+}
