@@ -511,6 +511,41 @@ export default function EntrainementScreen({
     }
   }
 
+  // ENCHAÎNER LE BLOC SUIVANT (16/11/2026), depuis le bilan d'un bloc terminé.
+  // Même programme, même durée ; le plan repart de l'historique RÉEL et
+  // REMPLACE l'ancien en entier (corrections manuelles comprises : elles
+  // portaient sur les semaines de l'ancien bloc). Le serveur efface et écrit
+  // dans la même transaction (`nouveau_bloc_de`).
+  async function enchainerBloc(dateISO, cases) {
+    const cible = tableauDe?.cible;
+    if (!cible) return;
+    if (!cases || cases.length === 0) {
+      setErreur("Rien à enchaîner : aucun exercice de ce programme n'a été fait.");
+      return;
+    }
+    const ids = (tableauDe.seances || []).map((s) => s.id).filter((id) => Number.isInteger(id));
+    setErreur('');
+    setBlocOccupe(true);
+    try {
+      await api.definirCiblesLot(moi.id, cases, ids);
+      if (cible.type === 'cycle') {
+        await api.definirBlocCycle(cible.id, semainesTableau, dechargeTableau, dateISO);
+      } else {
+        await api.definirBlocProgramme(cible.id, semainesTableau, dechargeTableau, dateISO);
+      }
+      await chargerTout();
+      setTableauDe((t) => (t ? { ...t, cible: { ...t.cible, date_debut: dateISO } } : t));
+    } catch (err) {
+      setErreur(
+        `Le bloc suivant n'a pas démarré : ${err.message || 'la connexion a échoué'}. `
+        + 'Tu peux réessayer.'
+      );
+      await chargerTout();
+    } finally {
+      setBlocOccupe(false);
+    }
+  }
+
   // ARRÊTER le bloc : on efface sa date de début, SANS toucher aux cases.
   // Le plan reste donc écrit — on peut le relire, et le redémarrer plus tard.
   async function arreterBloc() {
@@ -2336,6 +2371,7 @@ export default function EntrainementScreen({
         onDemarrer={demarrerBloc}
         onArreter={arreterBloc}
         onRecalculer={recalculerLaSuite}
+        onEnchainer={enchainerBloc}
         occupe={blocOccupe}
         erreur={erreur}
       />

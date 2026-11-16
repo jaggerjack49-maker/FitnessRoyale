@@ -20,6 +20,8 @@
 // se rattrape ») : on COMPARE ce qui a été fait à ce qui était prévu, on le
 // DIT, et on propose de recalculer la suite. On ne recalcule jamais dans son dos.
 import { planificationProgramme } from './rattrapage';
+import { suggestionPourExercice } from './surchargeProgressive';
+import { e1rm } from './progres';
 
 // ⚠️ TOUT LE CALCUL DE DATES EST EN UTC, VOLONTAIREMENT. Une date ISO
 // (« 2026-10-05 ») est un JOUR, pas un instant : la convertir en heure locale
@@ -66,6 +68,19 @@ export function semaineDuBloc(programme, dateISO) {
 // Le bloc est-il commencé et pas encore fini ?
 export function blocEnCours(programme, dateISO) {
   return semaineDuBloc(programme, dateISO) !== null;
+}
+
+// OÙ EN EST LE BLOC : 'a_venir', 'en_cours', 'termine' (null sans date).
+// ⚠️ `semaineDuBloc` répond null AVANT comme APRÈS le bloc : le panneau
+// affichait donc « BLOC TERMINÉ » pour un bloc posé au lundi prochain
+// (trouvé le 16/11/2026 en écrivant le bilan). Les deux cas se distinguent ici.
+export function etatDuBloc(programme, dateISO) {
+  if (!programme || !programme.date_debut || !programme.duree_semaines) return null;
+  const debut = enJours(programme.date_debut);
+  const jour = enJours(dateISO);
+  if (debut === null || jour === null) return null;
+  if (jour < debut) return 'a_venir';
+  return semaineDuBloc(programme, dateISO) === null ? 'termine' : 'en_cours';
 }
 
 // La dernière date couverte par le bloc (décharge comprise) — pour l'afficher.
@@ -291,6 +306,101 @@ export function semainesARecalculer(bloc, idsSeances, entrainements, aujourdhuiI
   }
   if (bloc.avec_deload && !estFaite('decharge')) semaines.push('decharge');
   return semaines;
+}
+
+// LE BILAN D'UN BLOC (16/11/2026, demande de Hafiz : le coach plus
+// intelligent — « ce qui a progressé, ce qui a calé, le bloc suivant proposé »).
+//
+// Pour chaque exercice du programme : la meilleure série de la PREMIÈRE
+// séance du bloc et celle de la DERNIÈRE, comparées au 1RM estimé (Epley, la
+// même formule que l'écran Progrès). Comparer le 1RM et pas la charge seule,
+// c'est ce qui permet de juger « 100 kg × 8 → 102,5 kg × 5 » : plus lourd,
+// mais en réalité moins fort.
+// ⚠️ LA SEMAINE DE DÉCHARGE N'ENTRE PAS DANS LA COMPARAISON : elle est
+// volontairement plus légère, la compter ferait passer tout le monde en recul.
+// Un exercice au poids du corps se compare aux reps.
+//
+// Verdicts : 'progres' / 'stable' (moins de 1 % d'écart) / 'recul',
+// 'une_seance' (impossible de juger sur une seule fois), 'absent' (jamais fait
+// pendant le bloc). Et pour chaque exercice, le DÉPART PROPOSÉ du bloc
+// suivant : la suggestion habituelle (`suggestionPourExercice`), qui allège
+// déjà d'elle-même un exercice bloqué. Aucune règle de plus.
+export const TOLERANCE_STABLE = 0.01;
+
+function teteDeSeance(seance, exercice) {
+  let tete = null;
+  (Array.isArray(seance.series) ? seance.series : []).forEach((s) => {
+    if (!s || s.exercice !== exercice) return;
+    const reps = Number(s.reps);
+    const poids = Math.max(0, Number(s.poids) || 0);
+    if (!Number.isFinite(reps) || reps <= 0) return;
+    if (!tete || poids > tete.poids || (poids === tete.poids && reps > tete.reps)) {
+      tete = { date: seance.date, poids, reps };
+    }
+  });
+  return tete;
+}
+
+function verdictEntre(debut, fin) {
+  const auPoidsDuCorps = debut.poids <= 0 && fin.poids <= 0;
+  const avant = auPoidsDuCorps ? debut.reps : e1rm(debut.poids, debut.reps);
+  const apres = auPoidsDuCorps ? fin.reps : e1rm(fin.poids, fin.reps);
+  if (!(avant > 0)) return apres > 0 ? 'progres' : 'stable';
+  const ecart = (apres - avant) / avant;
+  if (ecart > TOLERANCE_STABLE) return 'progres';
+  if (ecart < -TOLERANCE_STABLE) return 'recul';
+  return 'stable';
+}
+
+export function bilanDuBloc(bloc, seances, entrainements) {
+  const vide = { semainesPrevues: 0, semainesEntrainees: 0, seancesFaites: 0,
+    exercices: [], compte: { progres: 0, stable: 0, recul: 0, une_seance: 0, absent: 0 } };
+  if (!bloc || !bloc.date_debut || !bloc.duree_semaines) return vide;
+  const listeSeances = (Array.isArray(seances) ? seances : []).filter(Boolean);
+  const ids = listeSeances.map((s) => s.id);
+  const parSemaine = seancesParSemaine(bloc, ids, entrainements);
+
+  // Toutes les séances du bloc, dans l'ordre des dates ; la décharge à part.
+  const toutes = [];
+  Object.entries(parSemaine).forEach(([semaine, liste]) => {
+    liste.forEach((e) => toutes.push({ semaine, e }));
+  });
+  toutes.sort((a, b) => (a.e.date < b.e.date ? -1 : a.e.date > b.e.date ? 1 : 0));
+  const comparables = toutes.filter((x) => x.semaine !== 'decharge').map((x) => x.e);
+
+  // Les exercices du programme, une fois chacun (un « Push » le lundi ET le
+  // jeudi ne doit pas compter deux fois le développé couché).
+  const exercices = [];
+  listeSeances.forEach((seance) => (Array.isArray(seance.exercices) ? seance.exercices : [])
+    .forEach((exo) => {
+      if (exo && typeof exo.exercice === 'string'
+        && !exercices.some((x) => x.exercice === exo.exercice)) exercices.push(exo);
+    }));
+
+  const compte = { ...vide.compte };
+  const lignes = exercices.map((exo) => {
+    const tetes = comparables.map((e) => teteDeSeance(e, exo.exercice)).filter(Boolean);
+    let verdict = 'absent';
+    if (tetes.length === 1) verdict = 'une_seance';
+    if (tetes.length >= 2) verdict = verdictEntre(tetes[0], tetes[tetes.length - 1]);
+    compte[verdict] += 1;
+    return {
+      exercice: exo.exercice,
+      verdict,
+      debut: tetes[0] || null,
+      fin: tetes.length >= 2 ? tetes[tetes.length - 1] : null,
+      seances: tetes.length,
+      suivant: suggestionPourExercice(entrainements, exo),
+    };
+  });
+
+  return {
+    semainesPrevues: bloc.duree_semaines + (bloc.avec_deload ? 1 : 0),
+    semainesEntrainees: Object.keys(parSemaine).length,
+    seancesFaites: toutes.length,
+    exercices: lignes,
+    compte,
+  };
 }
 
 // Réexporté pour que l'écran n'ait pas à connaître deux modules pour la même

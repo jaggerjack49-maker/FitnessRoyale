@@ -6369,6 +6369,95 @@ rapport aux deux cartes voisines.
 - ⚠️ **Déployer le backend AVANT d'annoncer le site** : le formulaire appelle
   une route qui n'existe que depuis ce lot.
 
+## Le coach de progression : RIR, décharge, bilan de bloc — 16/11/2026
+
+Demande de Hafiz : « le 3 » de la liste des grands chantiers — utiliser le RIR qu'il note, proposer
+une décharge quand il cale, et un bilan de fin de bloc (ce qui a progressé, ce qui a calé, le bloc
+suivant proposé). Tout est CÔTÉ APP, dans la règle existante : aucune seconde définition.
+
+### 1. Le RIR noté pilote la charge (`suggererProchaineSerie`, surchargeProgressive.js)
+
+- LA RÉSERVE de la dernière séance = le PLUS PETIT RIR noté sur les séries faites à la charge la
+  plus lourde (`reserveDerniereSeance`) — la série la plus dure dit la vérité. Un RIR noté
+  seulement à l'échauffement ne compte pas ; aucun RIR noté = comportement d'avant, à l'identique.
+- LE SEUIL = le RIR VISÉ du programme (`rir_cible`), sinon `RIR_VISE_PAR_DEFAUT = 1` : une série à
+  l'échec (RIR 0) ne prouve pas qu'on est prêt à charger.
+- Objectifs tenus mais réserve SOUS le seuil → on REFAIT la charge (« tu étais à RIR 0 (visé : 1)
+  — refais 105 kg avant de charger »). Un programme à RIR visé 0 charge normalement.
+- Grande réserve (≥ seuil + `RESERVE_LARGE` = 3) → DEUX crans d'un coup (+5 kg au lieu de 2,5).
+- Objectif de reps pas tenu → toujours une rep de plus, quel que soit le RIR.
+
+### 2. La décharge quand on cale
+
+- BLOQUÉ = les 3 dernières séances à EXACTEMENT la même charge, sans une rep gagnée sur la plus
+  ancienne, ET la règle ne chargerait pas (objectifs pas tenus, ou réserve trop basse). Objectifs
+  tenus sans RIR noté = « pas encore chargé », pas un blocage.
+- Alors : −10 % (`ALLEGEMENT_DECHARGE`), arrondi au cran de charge, toujours strictement plus
+  léger, à l'objectif de reps ; `decharge: true` ; « bloqué à 150 kg depuis 3 séances : allège à
+  135 kg pour repartir ». Jamais au poids du corps.
+- ⚠️ « EXACTEMENT la même charge », pas « pas plus lourde » : sinon, revenu à 100 kg après une
+  décharge, deux séances difficiles suffiraient à en reproposer une (la décharge plus légère
+  comptant comme la 3e). Il faut 3 NOUVELLES séances. Le tableau, qui rejoue cette règle, en
+  dépend : un exercice bloqué y donne 90 → 92,5 → 95 → 97,5, jamais une spirale.
+- `detecterStagnation` (l'ancienne alerte retirée le 08/11/2026) reste inutilisée.
+
+### 3. ⚠️ UNE INCOHÉRENCE CORRIGÉE EN CHEMIN : la fourchette de reps
+
+La séance (« Aujourd'hui ») et les « Attendu » passaient `reps_cibles` — le BAS d'une fourchette
+« 8 - 12 » — pendant que le tableau visait le HAUT (`cibleDeReps`). Deux réponses pour un même
+exercice dès qu'il avait une fourchette ; la promesse « semaine 1 du tableau = Attendu » n'avait
+été vérifiée que sans fourchette. `suggestionPourExercice(entrainements, exo)` est désormais la
+SEULE façon de lire les objectifs d'un exercice de programme (fourchette + séries + RIR visé),
+utilisée par `LigneExercicePrevu`, la séance et le bilan ; le tableau passe les mêmes options.
+`cibleDeReps` a déménagé dans surchargeProgressive.js (projectionProgramme.js la réexporte).
+Un exercice ajouté à la volée en séance garde la suggestion sans objectif.
+
+### 4. Le bilan d'un bloc (`bilanDuBloc`, `etatDuBloc` — src/logic/bloc.js)
+
+- Par exercice du programme (une fois chacun, même présent dans plusieurs séances) : la meilleure
+  série de la PREMIÈRE et de la DERNIÈRE séance du bloc, comparées au 1RM estimé (`e1rm`, la
+  formule de l'écran Progrès) — « 100 × 8 → 102,5 × 5 » est un RECUL. Poids du corps : aux reps.
+  Verdicts : progrès / stable (±1 %, `TOLERANCE_STABLE`) / recul / une seule séance / pas fait.
+  LA SEMAINE DE DÉCHARGE N'EST PAS COMPARÉE (volontairement plus légère). Seules les séances
+  rattachées au programme comptent (pas les séances libres).
+- `suivant` = le départ du bloc suivant = `suggestionPourExercice` sur l'historique réel — donc
+  déjà allégé pour un exercice bloqué, et la raison s'affiche (la même phrase que la séance).
+- ÉCRAN (TableauProgression, `BilanBloc`) : bloc TERMINÉ → « BILAN DU BLOC », puis
+  « ENCHAÎNER LE BLOC SUIVANT » (Aujourd'hui / Lundi prochain → « Démarrer le bloc suivant ») et
+  « Clore ce bloc sans en démarrer un autre ». Dernière semaine ou décharge → « BILAN PROVISOIRE »
+  sous le panneau. Rien n'est lancé tout seul.
+- BUG CORRIGÉ AU PASSAGE : `semaineDuBloc` répond null AVANT comme APRÈS le bloc, et le panneau
+  affichait « BLOC TERMINÉ » pour un bloc posé au lundi prochain. `etatDuBloc` distingue
+  'a_venir' / 'en_cours' / 'termine' ; un bloc à venir affiche « BLOC PROGRAMMÉ » et
+  « Annuler ce bloc ».
+
+### 5. Enchaîner un bloc : l'ancien plan est remplacé EN ENTIER (serveur)
+
+`PUT /joueurs/{id}/cibles-semaine/lot` accepte `nouveau_bloc_de: [ids]` : les cases de ces
+programmes sont EFFACÉES (corrections manuelles comprises — elles portaient sur les semaines de
+l'ancien bloc) avant d'écrire le nouveau plan, dans la même transaction, une requête de plus.
+Programmes vérifiés à soi (403 sinon). Sans ce champ, rien ne change : démarrer ou recalculer la
+suite préserve toujours les corrections. Côté app : `enchainerBloc` (EntrainementScreen) envoie
+les ids de toutes les séances du programme, puis la nouvelle date ; le plan vient de la
+projection avec `cibles: {}` (l'historique réel, comme un recalcul).
+
+### Vérifié
+
+`test_coach.py` + `harnais/harnais_coach.mjs` (39 cas : RIR, décharge, lecture unique des
+objectifs, la promesse tableau = Attendu avec fourchette + RIR, état et bilan, données abîmées) et
+4 tests de plus dans `test_api_bloc.py` (nouveau bloc qui efface tout, contre-épreuve sans le
+champ, autres programmes intacts, 403 sur le plan d'un autre). **11 mutations vues échouer**
+(9 côté app, 2 côté serveur) — dont une ratée au premier passage (« pas plus lourde » au lieu de
+« même charge »), qui a demandé un cas de plus. Suite complète : **474 tests, tous OK.**
+Navigateur (390 px, serveur LOCAL via un `.env` temporaire, `SondeTest`) : programme « Coach
+test » au bloc terminé → « 3 semaines entraînées sur 3 · 3 séances · 2 en progrès · 1 stable »,
+squat « 105 kg × 8 · tu étais à RIR 0 (visé : 1) — refais 105 kg », presse « 135 kg × 10 ·
+bloqué à 150 kg depuis 3 séances », dips « 13 reps », curl « Pas fait » ; « Démarrer le bloc
+suivant » → plan neuf en base (105 / 135 / 13 reps en semaine 1, qui remonte ensuite), la vieille
+correction manuelle à 160 kg effacée, bloc daté d'aujourd'hui, « SEMAINE 1 SUR 3 ». Zéro erreur
+console. ⚠️ `.env` n'est PAS ignoré par Git : le supprimer après chaque vérification locale.
+⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour `nouveau_bloc_de`).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6381,7 +6470,7 @@ rapport aux deux cartes voisines.
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (469 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (474 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

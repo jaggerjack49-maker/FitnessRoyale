@@ -406,9 +406,13 @@ export async function effacerCibleSemaine(joueurId, programmeId, exercice, semai
 // fait 60 cases, et 60 requêtes dépasseraient le délai d'attente de l'app
 // (le motif qui a fait disparaître l'onglet Entraînement le 23/09/2026).
 // Le serveur préserve les cases corrigées à la main, l'app n'a pas à les trier.
-export async function definirCiblesLot(joueurId, cases) {
+// `nouveauBlocDe` (16/11/2026) : les programmes dont l'ANCIEN plan est effacé
+// avant d'écrire celui-ci (enchaîner un nouveau bloc). Omis = les corrections
+// manuelles sont préservées, comme avant.
+export async function definirCiblesLot(joueurId, cases, nouveauBlocDe = null) {
+  const corps = nouveauBlocDe ? { cases, nouveau_bloc_de: nouveauBlocDe } : { cases };
   return appel(`/joueurs/${joueurId}/cibles-semaine/lot`, {
-    method: 'PUT', body: JSON.stringify({ cases }),
+    method: 'PUT', body: JSON.stringify(corps),
   });
 }
 

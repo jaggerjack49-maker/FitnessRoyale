@@ -397,5 +397,72 @@ class TestBlocServeur(unittest.TestCase):
         self.assertEqual({c["exercice"] for c in cases}, {"bench press"})
 
 
+    # -------------------------------- enchaîner un NOUVEAU bloc (16/11/2026)
+
+    def test_un_nouveau_bloc_efface_l_ancien_plan_corrections_comprises(self):
+        """Le bilan propose d'enchaîner : l'ancien plan doit disparaître ENTIER.
+
+        Une correction manuelle de la « semaine 3 » de l'ancien bloc n'a aucun
+        sens dans le nouveau — la garder ferait réapparaître une vieille charge."""
+        h, jid = self._inscrire("NouveauBloc")
+        p = self._programme(h, jid)
+        self.client.put(f"/joueurs/{jid}/cibles-semaine/lot",
+                        json={"cases": self._cases(p["id"], 4)}, headers=h)
+        self.client.put(f"/joueurs/{jid}/cibles-semaine", json={
+            "programme_id": p["id"], "exercice": "developpe couche", "semaine": "3",
+            "series": 3, "reps": 8, "poids": 150,
+        }, headers=h)
+        r = self.client.put(f"/joueurs/{jid}/cibles-semaine/lot", json={
+            "cases": [{"programme_id": p["id"], "exercice": "developpe couche",
+                       "semaine": "1", "series": 3, "reps": 8, "poids": 112.5}],
+            "nouveau_bloc_de": [p["id"]],
+        }, headers=h)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json(), {"ecrites": 1, "preservees": 0})
+        cases = self.client.get(f"/joueurs/{jid}/cibles-semaine", headers=h).json()
+        self.assertEqual([(c["semaine"], c["poids"], c["origine"]) for c in cases],
+                         [("1", 112.5, "plan")])
+
+    def test_sans_nouveau_bloc_les_corrections_restent_protegees(self):
+        """La contre-épreuve : recalculer la suite ne doit RIEN effacer."""
+        h, jid = self._inscrire("PasNouveau")
+        p = self._programme(h, jid)
+        self.client.put(f"/joueurs/{jid}/cibles-semaine", json={
+            "programme_id": p["id"], "exercice": "developpe couche", "semaine": "2",
+            "series": 3, "reps": 8, "poids": 150,
+        }, headers=h)
+        self.client.put(f"/joueurs/{jid}/cibles-semaine/lot",
+                        json={"cases": self._cases(p["id"], 3)}, headers=h)
+        cases = {c["semaine"]: c for c in
+                 self.client.get(f"/joueurs/{jid}/cibles-semaine", headers=h).json()}
+        self.assertEqual(cases["2"]["poids"], 150)
+        self.assertEqual(len(cases), 3)
+
+    def test_un_nouveau_bloc_ne_touche_pas_aux_autres_programmes(self):
+        h, jid = self._inscrire("AutreProgramme")
+        p1 = self._programme(h, jid, nom="Push")
+        p2 = self._programme(h, jid, nom="Pull")
+        self.client.put(f"/joueurs/{jid}/cibles-semaine/lot", json={
+            "cases": self._cases(p1["id"], 2) + self._cases(p2["id"], 2)}, headers=h)
+        self.client.put(f"/joueurs/{jid}/cibles-semaine/lot", json={
+            "cases": self._cases(p1["id"], 1), "nouveau_bloc_de": [p1["id"]]}, headers=h)
+        cases = self.client.get(f"/joueurs/{jid}/cibles-semaine", headers=h).json()
+        self.assertEqual(sorted((c["programme_id"] == p1["id"], c["semaine"]) for c in cases),
+                         [(False, "1"), (False, "2"), (True, "1")])
+
+    def test_on_ne_peut_pas_effacer_le_plan_d_un_autre(self):
+        h1, j1 = self._inscrire("Proprio")
+        h2, j2 = self._inscrire("Intrus")
+        p1 = self._programme(h1, j1)
+        p2 = self._programme(h2, j2)
+        self.client.put(f"/joueurs/{j1}/cibles-semaine/lot",
+                        json={"cases": self._cases(p1["id"], 2)}, headers=h1)
+        r = self.client.put(f"/joueurs/{j2}/cibles-semaine/lot", json={
+            "cases": self._cases(p2["id"], 1), "nouveau_bloc_de": [p1["id"]]}, headers=h2)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(len(self.client.get(f"/joueurs/{j1}/cibles-semaine",
+                                             headers=h1).json()), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

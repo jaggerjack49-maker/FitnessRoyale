@@ -896,6 +896,11 @@ class PlanDuBloc(BaseModel):
     23/09/2026. Le maximum protège aussi la base d'un envoi absurde.
     """
     cases: list[CibleSemaine] = Field(min_length=1, max_length=400)
+    # ENCHAÎNER UN NOUVEAU BLOC (16/11/2026) : les programmes dont l'ANCIEN
+    # plan est effacé avant d'écrire le nouveau, corrections comprises. Vide =
+    # comportement d'avant (démarrer ou recalculer la suite : les corrections
+    # manuelles sont préservées).
+    nouveau_bloc_de: list[int] = Field(default_factory=list, max_length=50)
 
 
 class BlocProgramme(BaseModel):
@@ -958,7 +963,7 @@ def definir_cibles_lot(joueur_id: int, plan: PlanDuBloc,
     auth.verifier_proprietaire(courant, joueur_id)
     # Les programmes concernés doivent TOUS être à moi : sans cette
     # vérification, un seul appel pourrait réécrire le plan de n'importe qui.
-    for programme_id in {c.programme_id for c in plan.cases}:
+    for programme_id in {c.programme_id for c in plan.cases} | set(plan.nouveau_bloc_de):
         programme = db.lire_programme(programme_id)
         if programme is None or programme["joueur_id"] != joueur_id:
             raise HTTPException(403, "Ce programme n'est pas le tien.")
@@ -968,7 +973,8 @@ def definir_cibles_lot(joueur_id: int, plan: PlanDuBloc,
          "poids": c.poids, "origine": "plan"}
         for c in plan.cases
     ]
-    return db.definir_cibles_lot(joueur_id, cases)
+    return db.definir_cibles_lot(joueur_id, cases,
+                                 effacer_programmes=plan.nouveau_bloc_de or None)
 
 
 @app.delete("/joueurs/{joueur_id}/cibles-semaine")

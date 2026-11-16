@@ -42,6 +42,84 @@ function incrementCharge(poids) {
   return 2.5;
 }
 
+// ---- LE COACH (16/11/2026) : le RIR noté et la décharge ----
+// Demande de Hafiz (« le 3 » de la liste des grands chantiers) : utiliser le
+// RIR qu'il note à chaque série, et proposer une décharge quand il cale.
+//
+// LE RIR (« reps in reserve ») = les répétitions qu'on avait encore en
+// réserve. Le seuil vient du programme (`rir_cible`, l'effort VISÉ) ; sans
+// objectif fixé, on vise RIR 1 : une série menée jusqu'à l'échec (RIR 0) ne
+// dit pas qu'on est prêt à charger, elle dit qu'on était au maximum.
+export const RIR_VISE_PAR_DEFAUT = 1;
+// Une réserve d'au moins 3 reps AU-DESSUS du seuil = la charge était trop
+// légère : on saute d'un cran de plus.
+export const RESERVE_LARGE = 3;
+// Combien de séances au même poids, sans une rep gagnée, avant de parler de
+// blocage. Et de combien on allège : 10 %, arrondi au cran de charge.
+export const SEANCES_BLOCAGE = 3;
+export const ALLEGEMENT_DECHARGE = 0.1;
+
+// L'OBJECTIF DE REPS QUAND C'EST UNE FOURCHETTE (« 5 - 10 ») : on vise le
+// HAUT. C'est la double progression classique — on grimpe dans la fourchette
+// à charge égale, et on ne monte la charge qu'une fois le haut tenu.
+// (Déplacée ici le 16/11/2026 depuis projectionProgramme.js, qui la réexporte :
+// la séance et les « Attendu » visaient le BAS de la fourchette pendant que le
+// tableau visait le haut — deux réponses pour un même exercice.)
+export function cibleDeReps(repsCibles, repsCiblesMax) {
+  const bas = Number(repsCibles);
+  const haut = Number(repsCiblesMax);
+  if (Number.isFinite(haut) && haut > 0) {
+    return Number.isFinite(bas) && bas > haut ? bas : haut;
+  }
+  return Number.isFinite(bas) && bas > 0 ? bas : null;
+}
+
+// Un RIR lisible (entier de 0 à 10), sinon null : une valeur absente ou
+// abîmée ne doit RIEN changer à la suggestion.
+function rirValide(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') return null;
+  const n = Number(valeur);
+  return Number.isInteger(n) && n >= 0 && n <= 10 ? n : null;
+}
+
+// LA RÉSERVE de la dernière séance : le PLUS PETIT RIR noté sur les séries
+// faites à la charge la plus lourde — la série la plus dure dit la vérité.
+// null si aucun RIR n'a été noté à cette charge (on ne suppose rien).
+export function reserveDerniereSeance(series, poids) {
+  const notes = (Array.isArray(series) ? series : [])
+    .filter((s) => s && Number(s.poids) === Number(poids))
+    .map((s) => rirValide(s.rir))
+    .filter((r) => r !== null);
+  return notes.length > 0 ? Math.min(...notes) : null;
+}
+
+// BLOQUÉ ? Sur les `SEANCES_BLOCAGE` dernières séances de l'exercice, la
+// charge la plus lourde est EXACTEMENT la même, et la plus récente n'a pas
+// gagné une seule rep sur la plus ancienne.
+// ⚠️ « Exactement la même charge » et pas « pas plus lourde » : une séance de
+// décharge (plus légère) casse la série. Sans ça, à peine revenu à 100 kg
+// après une décharge, deux séances difficiles suffiraient à en reproposer une
+// (la décharge, plus légère, compterait comme la 3e) : on descendrait sans
+// fin. Il faut 3 NOUVELLES séances à la même charge.
+function estBloque(precedentes, exercice) {
+  const dernieres = precedentes.slice(0, SEANCES_BLOCAGE);
+  if (dernieres.length < SEANCES_BLOCAGE) return false;
+  const tetes = dernieres.map((e) => meilleureSerie(
+    e.series.filter((s) => s && s.exercice === exercice)));
+  if (tetes.some((t) => !t || !(Number(t.poids) > 0))) return false;
+  if (tetes.some((t) => Number(t.poids) !== Number(tetes[0].poids))) return false;
+  return Number(tetes[0].reps) <= Number(tetes[tetes.length - 1].reps);
+}
+
+// La charge d'une décharge : 10 % de moins, arrondie au cran de charge, et
+// toujours STRICTEMENT plus légère (sinon ce ne serait pas une décharge).
+function chargeAllegee(poids) {
+  const cran = incrementCharge(poids) || 1;
+  let allegee = Math.round((poids * (1 - ALLEGEMENT_DECHARGE)) / cran) * cran;
+  if (allegee >= poids) allegee = poids - cran;
+  return Math.max(0, Math.round(allegee * 100) / 100);
+}
+
 // SUGGESTION pour la séance du jour, en double progression :
 // tant que l'objectif de reps n'est pas atteint, on ajoute une rep ;
 // une fois atteint, on monte la charge et on repart à l'objectif de reps.
@@ -74,7 +152,7 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, opti
   // Rétrocompatibilité : le 4e paramètre était autrefois `avantDate`.
   const reglages = typeof options === 'string' || options === null
     ? { avantDate: options } : (options || {});
-  const { avantDate = null, modes, seriesCibles = null } = reglages;
+  const { avantDate = null, modes, seriesCibles = null, rirCible = null } = reglages;
   const axes = axesValides(modes);
 
   const precedentes = seancesAvec(entrainements, exercice, avantDate);
@@ -95,6 +173,43 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, opti
   const series = axes.includes('series') ? seriesFaites : null;
   const base = { poids: meilleure.poids, reps: meilleure.reps, series };
 
+  // ---- LE RIR (16/11/2026) ----
+  const seuilRir = rirValide(rirCible) ?? RIR_VISE_PAR_DEFAUT;
+  const reserve = reserveDerniereSeance(seriesExercice, meilleure.poids);
+  // La charge devrait monter (objectifs tenus)… mais la dernière séance était
+  // plus dure que l'effort visé : on refait la même charge.
+  const objectifsTenus = (!axes.includes('series') || cibleSeries === null
+    || seriesFaites >= cibleSeries)
+    && (!axes.includes('reps') || meilleure.reps >= cible);
+  const tropDur = reserve !== null && reserve < seuilRir;
+
+  // ---- LA DÉCHARGE (16/11/2026) : bloqué, ET la règle ne chargerait pas ----
+  // Si les objectifs sont tenus et que l'effort le permet, on n'est pas
+  // « bloqué » : on n'a juste pas encore chargé — la règle normale s'en
+  // occupe. On ne propose d'alléger que quand on ne PASSE plus.
+  if (peutCharger && (!objectifsTenus || tropDur)
+    && estBloque(precedentes, exercice)) {
+    const allegee = chargeAllegee(meilleure.poids);
+    return {
+      poids: allegee,
+      reps: axes.includes('reps') ? cible : meilleure.reps,
+      series,
+      decharge: true,
+      raison: `bloqué à ${meilleure.poids} kg depuis ${SEANCES_BLOCAGE} séances : `
+        + `allège à ${allegee} kg pour repartir`,
+    };
+  }
+
+  // Objectifs tenus mais effort trop dur : on CONSOLIDE la charge.
+  if (peutCharger && objectifsTenus && tropDur) {
+    return {
+      ...base,
+      series: axes.includes('series') ? (cibleSeries || seriesFaites) : null,
+      raison: `tu étais à RIR ${reserve} (visé : ${seuilRir}) — `
+        + `refais ${meilleure.poids} kg avant de charger`,
+    };
+  }
+
   // 1) Une série de plus, à charge et reps égales.
   if (axes.includes('series') && (cibleSeries === null || seriesFaites < cibleSeries)) {
     return {
@@ -114,6 +229,16 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, opti
   }
 
   // 3) Plus lourd — et on repart de l'objectif de reps (et de séries).
+  // Une GRANDE réserve (16/11/2026) : la charge était trop légère, on saute
+  // d'un cran de plus — en le disant.
+  if (peutCharger && reserve !== null && reserve >= seuilRir + RESERVE_LARGE) {
+    return {
+      poids: meilleure.poids + 2 * increment,
+      reps: axes.includes('reps') ? cible : meilleure.reps,
+      series: axes.includes('series') ? (cibleSeries || seriesFaites) : null,
+      raison: `il te restait ${reserve} reps en réserve : +${2 * increment} kg`,
+    };
+  }
   if (peutCharger) {
     return {
       poids: meilleure.poids + increment,
@@ -139,6 +264,20 @@ export function suggererProchaineSerie(entrainements, exercice, repsCibles, opti
     ...base,
     raison: `objectifs tenus : ${seriesFaites} × ${meilleure.reps} reps à ${meilleure.poids} kg`,
   };
+}
+
+// LA SUGGESTION D'UN EXERCICE DE PROGRAMME — UNE SEULE façon de lire ses
+// objectifs (16/11/2026). Avant, la séance et les « Attendu » visaient le BAS
+// d'une fourchette de reps pendant que le tableau visait le HAUT, et aucun ne
+// connaissait le RIR visé. Tous les écrans passent maintenant par ici.
+export function suggestionPourExercice(entrainements, exo, options = {}) {
+  if (!exo || typeof exo.exercice !== 'string') return null;
+  return suggererProchaineSerie(entrainements, exo.exercice,
+    cibleDeReps(exo.reps_cibles, exo.reps_cibles_max), {
+      seriesCibles: exo.series_cibles,
+      rirCible: exo.rir_cible,
+      ...options,
+    });
 }
 
 // RECORD PERSONNEL : la série la plus lourde jamais faite sur cet exercice.

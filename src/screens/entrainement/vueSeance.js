@@ -14,7 +14,9 @@ import { Icone, LibelleIcone, TexteIcone } from '../../components/Icones';
 import MinuteurRepos from '../../components/MinuteurRepos';
 import { ZONE_TACTILE, aujourdhui, dateCourteRecord, indicateurProgression, libelleDate, trouverDernieresSeries } from './outils';
 import { dernieresSeancesExercice } from '../../logic/progres';
-import { bat_le_record, recordPersonnel, suggererProchaineSerie } from '../../logic/surchargeProgressive';
+import {
+  bat_le_record, recordPersonnel, suggererProchaineSerie, suggestionPourExercice,
+} from '../../logic/surchargeProgressive';
 import { ciblePrevueDansBloc } from '../../logic/bloc';
 import { colors, espacement } from '../../theme';
 import { da } from '../../designSystem';
@@ -155,9 +157,12 @@ export function vueSeance(ctx) {
           // Et si une séance a déjà été loggée aujourd'hui, elle compte bien.
           const cibleExo = programmeActif?.exercices?.find((e) => e.exercice === exercice);
           const dansLeProgramme = !!cibleExo;
-          const suggestion = suggererProchaineSerie(entrainements, exercice, cibleExo?.reps_cibles, {
-            seriesCibles: cibleExo?.series_cibles,
-          });
+          // Un exercice du programme lit SES objectifs (fourchette, RIR visé)
+          // comme le tableau et les « Attendu » ; un exercice ajouté à la
+          // volée n'a que son historique.
+          const suggestion = cibleExo
+            ? suggestionPourExercice(entrainements, cibleExo)
+            : suggererProchaineSerie(entrainements, exercice, null);
           const reglages = resumeReglages(cibleExo);
           // ---- LE PLAN DU BLOC (05/10/2026) ----
           // Si un bloc est en cours, c'est SON plan qui dit quoi faire — pas

@@ -1186,7 +1186,8 @@ def _ecrire_case(conn, joueur_id, programme_id, exercice, semaine,
 
 
 def definir_cibles_lot(joueur_id: int, cases: list,
-                       respecter_les_corrections: bool = True) -> dict:
+                       respecter_les_corrections: bool = True,
+                       effacer_programmes: list | None = None) -> dict:
     """Écrit TOUT UN PLAN d'un coup — UNE SEULE connexion, quel que soit le
     nombre de cases (figer un bloc de 6 semaines x 10 exercices en fait 60).
 
@@ -1198,8 +1199,21 @@ def definir_cibles_lot(joueur_id: int, cases: list,
     if not cases:
         return {"ecrites": 0, "preservees": 0}
     with connexion() as conn:
+        # UN NOUVEAU BLOC (16/11/2026) : l'ancien plan de ces programmes est
+        # EFFACÉ d'abord — corrections manuelles comprises. Elles portaient sur
+        # les semaines de l'ANCIEN bloc (« semaine 2 » d'avant n'est pas la
+        # semaine 2 d'après) : les garder ferait réapparaître de vieilles
+        # charges dans le nouveau plan. Une requête, dans la même transaction.
+        if effacer_programmes:
+            ids = sorted({int(i) for i in effacer_programmes})
+            trous = ", ".join("?" for _ in ids)
+            conn.execute(
+                "DELETE FROM cibles_semaine WHERE joueur_id = ? "
+                "AND programme_id IN (" + trous + ")",
+                (joueur_id, *ids),
+            )
         manuelles = set()
-        if respecter_les_corrections:
+        if respecter_les_corrections and not effacer_programmes:
             programmes = sorted({int(c["programme_id"]) for c in cases})
             trous = ", ".join("?" for _ in programmes)
             requete = (

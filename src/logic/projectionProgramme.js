@@ -11,7 +11,11 @@
 //
 // Tout se calcule CÔTÉ APP, depuis l'historique déjà chargé : aucun appel au
 // serveur, donc le tableau s'affiche aussi vite que le reste de l'onglet.
-import { suggererProchaineSerie } from './surchargeProgressive';
+import { suggererProchaineSerie, cibleDeReps } from './surchargeProgressive';
+
+// `cibleDeReps` vit désormais avec la règle de progression (16/11/2026) :
+// réexportée ici pour ne rien casser chez ceux qui l'importaient d'ici.
+export { cibleDeReps };
 
 export const SEMAINES_PAR_DEFAUT = 4;
 // Borne haute : au-delà, la projection n'a plus de sens (elle suppose que
@@ -24,18 +28,6 @@ export const SEMAINES_MAX = 12;
 // ne regarde que la plus récente.
 function dateProjetee(index) {
   return `9000-01-${String(index + 1).padStart(2, '0')}`;
-}
-
-// L'OBJECTIF DE REPS QUAND C'EST UNE FOURCHETTE (« 5 - 10 ») : on vise le
-// HAUT. C'est la double progression classique — on grimpe dans la fourchette
-// à charge égale, et on ne monte la charge qu'une fois le haut tenu.
-export function cibleDeReps(repsCibles, repsCiblesMax) {
-  const bas = Number(repsCibles);
-  const haut = Number(repsCiblesMax);
-  if (Number.isFinite(haut) && haut > 0) {
-    return Number.isFinite(bas) && bas > haut ? bas : haut;
-  }
-  return Number.isFinite(bas) && bas > 0 ? bas : null;
 }
 
 // Comment s'écrit l'objectif de reps dans le tableau : « 10 » ou « 5 - 10 ».
@@ -81,7 +73,7 @@ export function decharge(premiere) {
 // (01/09/2026) — mieux vaut une case vide qu'une charge sortie de nulle part.
 export function projeterExercice(entrainements, exercice, options = {}) {
   const {
-    repsCibles = null, repsCiblesMax = null, seriesCibles = null,
+    repsCibles = null, repsCiblesMax = null, seriesCibles = null, rirCible = null,
     modes, nbSemaines = SEMAINES_PAR_DEFAUT, avecDeload = false,
   } = options || {};
 
@@ -94,7 +86,7 @@ export function projeterExercice(entrainements, exercice, options = {}) {
 
   for (let i = 0; i < semaines; i++) {
     const suggestion = suggererProchaineSerie(histoire, exercice, cible, {
-      modes, seriesCibles,
+      modes, seriesCibles, rirCible,
     });
     // Jamais fait (ou historique abîmé) : rien à projeter, et surtout rien à
     // inventer. On s'arrête là plutôt que de remplir le tableau de faux.
@@ -151,6 +143,7 @@ export function projeterProgramme(seances, entrainements, options = {}) {
         repsCibles: exo.reps_cibles,
         repsCiblesMax: exo.reps_cibles_max,
         seriesCibles: exo.series_cibles,
+        rirCible: exo.rir_cible,
         modes: progressions[exo.exercice],
         nbSemaines,
         avecDeload,

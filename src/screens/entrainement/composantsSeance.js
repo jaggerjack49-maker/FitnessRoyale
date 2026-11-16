@@ -11,7 +11,7 @@ import { colors, espacement } from '../../theme';
 import { da, monospace } from '../../designSystem';
 import { resumeReglages } from '../../logic/lignesProgramme';
 import { styles } from './styles';
-import { suggererProchaineSerie } from '../../logic/surchargeProgressive';
+import { suggestionPourExercice } from '../../logic/surchargeProgressive';
 import { typeDeSeance } from './outils';
 
 // UNE LIGNE D'EXERCICE PRÉVU, avec la PERFORMANCE ATTENDUE à la prochaine
@@ -34,9 +34,9 @@ import { typeDeSeance } from './outils';
 // ne l'appelle.
 export function LigneExercicePrevu({ exo, entrainements, numero }) {
   // Même calcul que pendant la séance : les deux ne peuvent pas se contredire.
-  const suggestion = suggererProchaineSerie(entrainements, exo.exercice, exo.reps_cibles, {
-    seriesCibles: exo.series_cibles,
-  });
+  // Même calcul que la séance et le tableau (fourchette, RIR visé) : une
+  // seule fonction, `suggestionPourExercice`.
+  const suggestion = suggestionPourExercice(entrainements, exo);
   // L'ORDRE se voit (« 1. », « 2. »…) et le repos / RIR fixés aussi
   // (08/11/2026) : c'est ce qu'on relit avant d'aller à la salle.
   const reglages = resumeReglages(exo);
@@ -51,6 +51,7 @@ export function LigneExercicePrevu({ exo, entrainements, numero }) {
         <TexteIcone nom="cible" taille={12} ecart={5} style={styles.attenduDetailJour}>
           Attendu : {suggestion.series ? `${suggestion.series} × ` : ''}
           {suggestion.reps} reps{suggestion.poids > 0 ? ` à ${suggestion.poids} kg` : ''}
+          {suggestion.decharge ? ' — allégé, tu cales depuis 3 séances' : ''}
         </TexteIcone>
       )}
     </View>

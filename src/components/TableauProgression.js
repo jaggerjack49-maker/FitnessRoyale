@@ -45,6 +45,7 @@ import { Icone, TexteIcone, LibelleIcone } from './Icones';
 import { projeterProgramme, SEMAINES_MAX } from '../logic/projectionProgramme';
 import {
   semaineDuBloc, finDuBloc, blocADerive, realiseDuBloc, comparaisonAuPlan, cleCase,
+  etatDuBloc, bilanDuBloc,
 } from '../logic/bloc';
 
 const LARGEUR_CASE = 54;    // une colonne de valeur (séries / reps / charge)
@@ -130,6 +131,111 @@ function casesDuTableau(tableau) {
   return cases;
 }
 
+// « 100 kg × 8 » (ou « 12 reps » au poids du corps) : une meilleure série.
+function resumeTete(t) {
+  if (!t) return '';
+  return t.poids > 0 ? `${String(t.poids).replace('.', ',')} kg × ${t.reps}` : `${t.reps} reps`;
+}
+
+// Le départ proposé du bloc suivant pour un exercice, en clair :
+// « 105 kg × 8 » (ou « 13 reps » au poids du corps).
+function resumeSuivant(s) {
+  if (!s) return null;
+  return s.poids > 0 ? `${String(s.poids).replace('.', ',')} kg × ${s.reps}` : `${s.reps} reps`;
+}
+
+const VERDICTS = {
+  progres: { libelle: 'En progrès', couleur: colors.vert, icone: 'valide' },
+  stable: { libelle: 'Stable', couleur: colors.texteGris, icone: 'repere' },
+  recul: { libelle: 'En recul', couleur: colors.rouge, icone: 'alerte' },
+  une_seance: { libelle: 'Une seule séance', couleur: colors.texteGris, icone: 'question' },
+  absent: { libelle: 'Pas fait', couleur: colors.texteGris, icone: 'croix' },
+};
+
+// LE BILAN D'UN BLOC (16/11/2026) — calcul : `bilanDuBloc` (src/logic/bloc.js).
+// Ce qui a progressé, ce qui a calé, et d'où repartirait le bloc suivant.
+// Le verdict compare le 1RM estimé (pas la charge seule), et l'écran le dit.
+function BilanBloc({ bilan, provisoire }) {
+  if (!bilan || bilan.exercices.length === 0) return null;
+  const { compte } = bilan;
+  const morceaux = [
+    compte.progres ? `${compte.progres} en progrès` : null,
+    compte.stable ? `${compte.stable} stable${compte.stable > 1 ? 's' : ''}` : null,
+    compte.recul ? `${compte.recul} en recul` : null,
+  ].filter(Boolean);
+  return (
+    <View style={styles.bilan}>
+      <TexteIcone nom="perfs" taille={14} style={styles.panneauTitre}>
+        {provisoire ? 'BILAN PROVISOIRE' : 'BILAN DU BLOC'}
+      </TexteIcone>
+      <Text style={styles.panneauTexte}>
+        {bilan.semainesEntrainees} semaine{bilan.semainesEntrainees > 1 ? 's' : ''} entraînée
+        {bilan.semainesEntrainees > 1 ? 's' : ''} sur {bilan.semainesPrevues}
+        {' · '}{bilan.seancesFaites} séance{bilan.seancesFaites > 1 ? 's' : ''}
+        {morceaux.length ? ` · ${morceaux.join(' · ')}` : ''}
+      </Text>
+      {bilan.exercices.map((ligne) => {
+        const v = VERDICTS[ligne.verdict] || VERDICTS.absent;
+        const suivant = resumeSuivant(ligne.suivant);
+        return (
+          <View key={ligne.exercice} style={styles.ligneBilan}>
+            <View style={styles.enteteBilan}>
+              <Text style={styles.nomBilan}>{ligne.exercice}</Text>
+              <LibelleIcone nom={v.icone} taille={12} ecart={4} couleur={v.couleur}
+                style={[styles.verdictBilan, { color: v.couleur }]}>
+                {v.libelle}
+              </LibelleIcone>
+            </View>
+            {ligne.debut && ligne.fin ? (
+              <Text style={styles.detailBilan}>
+                {resumeTete(ligne.debut)} → {resumeTete(ligne.fin)}
+              </Text>
+            ) : ligne.debut ? (
+              <Text style={styles.detailBilan}>{resumeTete(ligne.debut)}, une seule fois</Text>
+            ) : null}
+            {suivant ? (
+              <Text style={styles.suivantBilan}>
+                Bloc suivant : {suivant}
+                {/* POURQUOI ce départ — la même phrase que la séance. */}
+                <Text style={styles.raisonBilan}>{`  ·  ${ligne.suivant.raison}`}</Text>
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+      <Text style={styles.aideBilan}>
+        Le verdict compare ta force estimée (1RM) entre la première et la dernière
+        séance du bloc — plus lourd avec beaucoup moins de reps peut être un recul.
+        La semaine de décharge n'est pas comptée.
+      </Text>
+    </View>
+  );
+}
+
+// Choisir la date de départ d'un bloc : aujourd'hui, ou lundi prochain.
+function ChoixDate({ aujourdhui, dateChoisie, onChoisir }) {
+  const lundi = prochainLundi(aujourdhui);
+  const propositions = lundi === aujourdhui
+    ? [{ date: aujourdhui, libelle: "Aujourd'hui" }]
+    : [{ date: aujourdhui, libelle: "Aujourd'hui" },
+       { date: lundi, libelle: 'Lundi prochain' }];
+  return (
+    <View style={styles.panneauChoix}>
+      {propositions.map((p) => (
+        <TouchableOpacity
+          key={p.date}
+          style={[styles.puce, dateChoisie === p.date && styles.puceActive]}
+          onPress={() => onChoisir(p.date)}
+        >
+          <Text style={[styles.puceTexte, dateChoisie === p.date && styles.puceTexteActif]}>
+            {p.libelle}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 // LE PANNEAU DU BLOC — trois états, jamais deux à la fois :
 //  - pas démarré : on propose de FIGER le plan à une date ;
 //  - en cours    : on dit où on en est (« semaine 2 sur 4 ») ;
@@ -137,19 +243,15 @@ function casesDuTableau(tableau) {
 //    la suite (choix de Hafiz : « le plan, mais qui se rattrape »).
 function PanneauBloc({
   dateDebut, nbSemaines, avecDeload, aujourdhui, ecarts,
-  onDemarrer, onArreter, onRecalculer, occupe,
+  onDemarrer, onArreter, onRecalculer, onEnchainer, occupe, bilan,
 }) {
   const [dateChoisie, setDateChoisie] = useState(null);
   const programme = { id: 0, date_debut: dateDebut, duree_semaines: nbSemaines,
     avec_deload: avecDeload };
   const semaine = dateDebut ? semaineDuBloc(programme, aujourdhui) : null;
+  const etat = dateDebut ? etatDuBloc(programme, aujourdhui) : null;
 
   if (!dateDebut) {
-    const lundi = prochainLundi(aujourdhui);
-    const propositions = lundi === aujourdhui
-      ? [{ date: aujourdhui, libelle: "Aujourd'hui" }]
-      : [{ date: aujourdhui, libelle: "Aujourd'hui" },
-         { date: lundi, libelle: 'Lundi prochain' }];
     return (
       <View style={styles.panneauBloc}>
         <TexteIcone nom="lecture" taille={14} style={styles.panneauTitre}>DÉMARRER CE BLOC</TexteIcone>
@@ -159,19 +261,7 @@ function PanneauBloc({
           {' '}{nbSemaines} semaines : elles deviennent ton plan, ta séance saura
           en quelle semaine tu es, et tu pourras toujours corriger une case.
         </Text>
-        <View style={styles.panneauChoix}>
-          {propositions.map((p) => (
-            <TouchableOpacity
-              key={p.date}
-              style={[styles.puce, dateChoisie === p.date && styles.puceActive]}
-              onPress={() => setDateChoisie(p.date)}
-            >
-              <Text style={[styles.puceTexte, dateChoisie === p.date && styles.puceTexteActif]}>
-                {p.libelle}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <ChoixDate aujourdhui={aujourdhui} dateChoisie={dateChoisie} onChoisir={setDateChoisie} />
         <TouchableOpacity
           style={[styles.boutonDemarrer, !dateChoisie && styles.boutonEteint]}
           disabled={!dateChoisie || occupe}
@@ -187,6 +277,68 @@ function PanneauBloc({
     );
   }
 
+  // PAS ENCORE COMMENCÉ (posé au lundi prochain) : avant le 16/11/2026, le
+  // panneau disait « BLOC TERMINÉ », `semaineDuBloc` répondant null avant
+  // comme après le bloc.
+  if (etat === 'a_venir') {
+    return (
+      <View style={styles.panneauBloc}>
+        <TexteIcone nom="calendrier" taille={16} style={styles.panneauTitre}>BLOC PROGRAMMÉ</TexteIcone>
+        <Text style={styles.panneauTexte}>
+          Il commence le {libelleJour(dateDebut)} et finit le{' '}
+          {libelleJour(finDuBloc(programme))}. Ta séance lira la semaine 1 de ce
+          plan à partir de ce jour-là.
+        </Text>
+        <TouchableOpacity onPress={onArreter} disabled={occupe}>
+          <Text style={styles.lienArreter}>Annuler ce bloc (le plan reste écrit)</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // TERMINÉ (16/11/2026) : le bilan, puis le bloc suivant — proposé, jamais
+  // lancé tout seul (« on ne recalcule jamais dans son dos »).
+  if (etat === 'termine') {
+    return (
+      <View style={styles.panneauBloc}>
+        <TexteIcone nom="drapeau" taille={16} style={styles.panneauTitre}>BLOC TERMINÉ</TexteIcone>
+        <Text style={styles.panneauTexte}>
+          Du {libelleJour(dateDebut)} au {libelleJour(finDuBloc(programme))}.
+        </Text>
+        <BilanBloc bilan={bilan} />
+        {onEnchainer ? (
+          <View>
+            <TexteIcone nom="lecture" taille={14} style={[styles.panneauTitre, { marginTop: espacement.m }]}>
+              ENCHAÎNER LE BLOC SUIVANT
+            </TexteIcone>
+            <Text style={styles.panneauTexte}>
+              Même programme, {nbSemaines} semaines{avecDeload ? ' + décharge' : ''}, en
+              repartant de ce que tu as VRAIMENT soulevé (les départs ci-dessus).
+              L'ancien plan est remplacé, tes corrections de ce bloc comprises.
+            </Text>
+            <ChoixDate aujourdhui={aujourdhui} dateChoisie={dateChoisie} onChoisir={setDateChoisie} />
+            <TouchableOpacity
+              style={[styles.boutonDemarrer, !dateChoisie && styles.boutonEteint]}
+              disabled={!dateChoisie || occupe}
+              onPress={() => onEnchainer(dateChoisie)}
+            >
+              <Text style={styles.boutonDemarrerTexte}>
+                {occupe ? 'Enregistrement…'
+                  : dateChoisie ? `Démarrer le bloc suivant le ${libelleJour(dateChoisie)}`
+                    : "Choisis d'abord une date de début"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        <TouchableOpacity onPress={onArreter} disabled={occupe}>
+          <Text style={styles.lienArreter}>Clore ce bloc sans en démarrer un autre</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // La dernière semaine (ou la décharge) : le bilan se lit déjà, provisoire.
+  const finProche = semaine === 'decharge' || semaine === nbSemaines;
   const derive = blocADerive(ecarts);
   return (
     <View style={[styles.panneauBloc, derive && styles.panneauAlerte]}>
@@ -245,6 +397,8 @@ function PanneauBloc({
           chose que prévu, l'app te le dira ici.
         </Text>
       )}
+
+      {finProche ? <BilanBloc bilan={bilan} provisoire /> : null}
 
       <TouchableOpacity onPress={onArreter} disabled={occupe}>
         <Text style={styles.lienArreter}>Arrêter ce bloc (le plan reste écrit)</Text>
@@ -331,6 +485,8 @@ export default function TableauProgression({
   nbSemaines, avecDeload, onChangerSemaines, onBasculerDecharge, onCorriger, onFermer,
   // Le BLOC (05/10/2026) : sa date de début, l'état constaté, et les actions.
   dateDebut, aujourdhui, ecarts, onDemarrer, onArreter, onRecalculer, occupe,
+  // Enchaîner un NOUVEAU bloc depuis le bilan (16/11/2026).
+  onEnchainer,
   // Le message d'échec d'un démarrage ou d'un recalcul (10/11/2026) : il
   // s'affichait au bas de « Mes programmes », donc hors de vue du tableau où
   // l'on venait de toucher le bouton.
@@ -437,6 +593,13 @@ export default function TableauProgression({
           ecarts={ecarts}
           onDemarrer={(date) => onDemarrer(date, casesDuTableau(tableau))}
           onArreter={onArreter}
+          bilan={blocActuel ? bilanDuBloc(blocActuel, seances, entrainements) : null}
+          // Le bloc suivant repart de l'historique RÉEL, comme un recalcul :
+          // `cibles: {}`, sinon on rejouerait l'ancien plan.
+          onEnchainer={onEnchainer ? (date) => onEnchainer(date, casesDuTableau(projeterProgramme(
+            seances, entrainements,
+            { progressions, cibles: {}, nbSemaines, avecDeload },
+          ))) : null}
           // ⚠️ RECALCULER IGNORE LE PLAN EN PLACE (`cibles: {}`) et repart de
           // l'historique RÉEL. Sans ça, on rejouerait le plan figé sur
           // lui-même et le « recalcul » ne changerait jamais rien — tout
@@ -729,6 +892,27 @@ const styles = StyleSheet.create({
     color: '#1a1408', fontSize: 13, fontWeight: '800', letterSpacing: 0.5,
   },
   boutonEteint: { opacity: 0.45 },
+  // ---- Le bilan du bloc (16/11/2026) ----
+  bilan: {
+    borderTopWidth: 1, borderTopColor: colors.bordure,
+    paddingTop: espacement.m, marginTop: espacement.s,
+  },
+  ligneBilan: {
+    paddingVertical: espacement.s, borderBottomWidth: 1, borderBottomColor: colors.bordure,
+  },
+  enteteBilan: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexWrap: 'wrap', gap: 6,
+  },
+  nomBilan: { color: colors.texte, fontSize: 14, fontWeight: '700', flexShrink: 1 },
+  verdictBilan: { fontSize: 12, fontWeight: '800' },
+  detailBilan: { color: colors.texte, fontSize: 13, marginTop: 2, fontFamily: monospace },
+  suivantBilan: { color: colors.or, fontSize: 12, fontWeight: '700', marginTop: 2, lineHeight: 17 },
+  raisonBilan: { color: colors.texteGris, fontWeight: '500' },
+  aideBilan: {
+    color: colors.texteGris, fontSize: 11, lineHeight: 16, fontStyle: 'italic',
+    marginTop: espacement.s,
+  },
   boutonRecalculer: {
     borderWidth: 1, borderColor: colors.or, borderRadius: 12,
     paddingVertical: 13, alignItems: 'center', marginTop: espacement.xs,
