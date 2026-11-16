@@ -29,7 +29,6 @@ import { areneDeLaLigue } from '../data/arenes';
 import { mesTitresDExercice, titresAPortee, couleurMedaille } from '../logic/titres';
 import { Icone, TexteIcone, LibelleIcone } from '../components/Icones';
 import PanneauModeTest from '../components/PanneauModeTest';
-import DemandesCoaching from '../components/DemandesCoaching';
 import Parametres from '../components/Parametres';
 import useRetour from '../useRetour';
 
@@ -379,9 +378,6 @@ export default function ProfilScreen({
 
       {/* MODE TEST — n'apparaît que sur un compte administrateur (drapeau
           `admin` renvoyé par le serveur, activable uniquement en base). */}
-      {/* LES DEMANDES DE COACHING venues du site web — admin uniquement,
-          comme le mode test juste en dessous. */}
-      {u.admin ? <DemandesCoaching /> : null}
       {u.admin ? <PanneauModeTest onChangement={rafraichir} /> : null}
     </ScrollView>
 

@@ -6301,16 +6301,22 @@ vraies personnes le rempliraient et seraient refusées sans comprendre).
   formules affichent « Tarif à convenir ensemble » jusqu'à ce que Hafiz les
   fixe (un commentaire dans le HTML dit où les poser).
 
-### Lire les demandes dans l'app
+### Lire les demandes : D'ABORD dans l'app, puis sur le site (16/11/2026)
 
-`src/components/DemandesCoaching.js`, carte repliable en bas du Profil,
-affichée seulement sur un compte admin (`u.admin ? … : null` dans
-`ProfilScreen` — **jamais `&&` avec une valeur de la base**, qui renvoie 0/1
-et ferait afficher un `0` nu, bug du 01/10/2026). Un résumé chiffré reste
-visible sans déplier (« 1 demande reçue · 1 à traiter »), et chaque demande
-s'ouvre sur ses champs en français puis quatre boutons d'état. Le changement
-d'état est optimiste, et un échec RECHARGE la vérité au lieu de laisser
-l'écran mentir (règle du 04/09/2026).
+La première version mettait la lecture dans l'APPLICATION
+(`src/components/DemandesCoaching.js`, carte repliable en bas du Profil,
+visible seulement sur un compte admin). Raison du choix : l'app sait déjà qui
+est connecté et gère déjà le compte administrateur, alors qu'une page de
+lecture sur le site demandait d'y poser un formulaire de connexion.
+
+HAFIZ A TRANCHÉ AUTREMENT : « on parle d'un site web donc je ne comprends pas
+l'apk », puis « oui mets la lecture des demandes sur le site ». Et il avait
+raison sur le fond : la lecture dans l'app obligeait à un NOUVEL APK à chaque
+retouche de cet écran, pour une fonctionnalité qui n'a rien à voir avec
+l'entraînement. La carte de l'app a donc été SUPPRIMÉE — pas doublée : deux
+écrans pour la même chose finissent toujours par diverger. Les deux fonctions
+de `src/api.js` sont parties avec elle, et
+`backend/tests/test_site_admin.py` verrouille cette absence.
 
 ### ⚠️ UN PIÈGE DE VÉRIFICATION CONTOURNÉ : `app.config.js` lit `API_URL` D'ABORD
 
@@ -6458,6 +6464,96 @@ correction manuelle à 160 kg effacée, bloc daté d'aujourd'hui, « SEMAINE 1 S
 console. ⚠️ `.env` n'est PAS ignoré par Git : le supprimer après chaque vérification locale.
 ⚠️ Demande un NOUVEL APK (et le serveur déployé avant, pour `nouveau_bloc_de`).
 
+## La lecture des demandes passe sur le site (`site/admin.html`) — 16/11/2026
+
+Demande de Hafiz, le lendemain du site : « oui mets la lecture des demandes
+sur le site ». Jusque-là elles se lisaient dans l'app (voir la section
+précédente), ce qui mêlait deux choses sans rapport et demandait un APK pour
+corriger un écran d'administration.
+
+### Ce qui protège une page de connexion posée sur un site public
+
+- **LA PAGE N'A AUCUN POUVOIR PROPRE.** C'est le serveur qui refuse : 401 sans
+  jeton, 403 pour un compte ordinaire. Copiée telle quelle ailleurs, elle ne
+  montrerait rien à personne. Aucun endpoint n'a été ouvert ni assoupli pour
+  elle : elle appelle `/auth/connexion` et les deux routes `/admin/coaching/*`
+  qui existaient déjà.
+- **`noindex` + aucun lien depuis la page publique.** Un formulaire de
+  connexion référencé par Google attire les robots qui essaient des mots de
+  passe. Ce n'est PAS ce qui protège les demandes — c'est une porte qu'on ne
+  montre pas, rien de plus, et c'est écrit tel quel dans le code pour que
+  personne ne s'y fie.
+- **Un compte non administrateur est refusé à la connexion**, et le jeton
+  qu'on vient d'obtenir pour lui est RENDU tout de suite
+  (`POST /auth/deconnexion`) : on ne garde pas un jeton qui ne sert à rien.
+- **« Se déconnecter » détruit la session côté serveur**, il ne se contente
+  pas d'oublier le jeton ici. Vérifié : le même jeton répond 401 juste après.
+
+### ⚠️ LE VRAI DANGER ÉTAIT L'INVERSE DE CELUI QU'ON CROIT
+
+Le risque n'est pas qu'un inconnu lise les demandes (le serveur l'en empêche) :
+c'est qu'une DEMANDE lise la page. N'importe qui peut écrire ce qu'il veut dans
+le formulaire public ; si ce texte était posé dans la page d'administration
+avec `innerHTML`, il suffirait d'envoyer une demande contenant une balise de
+script pour qu'elle s'exécute DANS la page où vit le jeton — et le voler.
+
+Tout passe donc par `createElement` + `textContent`, et
+`test_site_admin.py` interdit `innerHTML`, `outerHTML`, `insertAdjacentHTML`
+et `document.write` dans les trois fichiers JS du site.
+VÉRIFIÉ POUR DE VRAI, pas seulement par un test de texte : une demande
+contenant `<script>window.PIEGE=1</script>` dans le prénom, une balise `img`
+à `onerror` dans le contact et un script dans le message a été déposée, puis
+dépliée dans la page → `window.PIEGE` reste `undefined`, zéro balise créée,
+tout s'affiche en toutes lettres.
+
+**UN TROU LATENT TROUVÉ AU PASSAGE, dans la page PUBLIQUE** : `script.js`
+affichait ses messages avec `innerHTML`, et un de ceux-là RECOPIE la valeur
+envoyée (« Objectif inconnu : … »). Un visiteur pouvait donc se faire renvoyer
+une balise — contre lui-même seulement, mais c'était une vraie brèche. Les
+messages passent maintenant par `textContent` (le gras du message de réussite
+est construit en DOM). Vérifié en forçant un objectif piégé : le texte
+s'affiche littéralement, rien ne s'exécute.
+
+### `site/commun.js` : l'adresse de l'API n'est écrite qu'une fois
+
+La page de lecture avait besoin des mêmes choses que le formulaire (adresse,
+délai de 70 s, lecture des erreurs). Les recopier aurait créé une SECONDE
+définition de l'adresse — exactement ce qui a fait appeler `localhost` à tout
+le monde le 21/09/2026. Elles vivent donc dans un fichier partagé, et un test
+vérifie qu'un seul fichier du site porte l'adresse en ligne.
+
+### La page
+
+Deux vues dans un seul fichier (connexion / liste), basculées par `hidden`.
+La liste donne un résumé chiffré, des filtres par état avec leurs effectifs,
+et une carte dépliable par demande : tous ses champs en français, la date, et
+quatre boutons d'état. Le contact devient un lien `mailto:` ou `tel:` quand on
+le reconnaît sans ambiguïté — **le schéma vient de nous, jamais de la saisie**,
+sinon un contact pourrait porter un `javascript:`. Le changement d'état est
+optimiste et RECHARGE la vérité en cas d'échec (règle du 04/09/2026). La DA
+est celle du site, donc celle de l'app.
+
+### Vérifié
+
+Tests : `backend/tests/test_site_admin.py` (7 cas). Suite complète :
+**481 tests, tous OK.** **Cinq mutations vues échouer**, chacune sur son cas : `noindex` retiré, `innerHTML` réintroduit,
+lien vers la page admin posé sur la page publique, appel réintroduit dans
+l'app, adresse de l'API recopiée dans `admin.js`.
+
+DANS LE NAVIGATEUR (site + backend LOCAUX, 390 px puis 1024 px, quatre
+demandes dont une piégée) : un compte ordinaire est refusé et son jeton rendu
+(`POST /auth/deconnexion` vu dans le panneau réseau) ; le compte admin ouvre
+la liste (« 4 demandes reçues · 3 à traiter »), les filtres comptent juste,
+une demande se déplie sur tous ses champs en français avec son contact en
+`mailto:` et un autre en `tel:+33612345678` ; passer Léa à « Acceptée » est
+bien enregistré en base et les compteurs suivent ; un jeton inventé est oublié
+avec « Ta session a expiré » ; « Se déconnecter » rend le jeton inutilisable
+(401) ; la session survit à un rechargement. Aucun débordement, toutes les
+cibles à 44 px (le bouton « Se déconnecter », mesuré à 39, a été corrigé), et
+sur grand écran la colonne fait 680 px centrés. Le formulaire PUBLIC a été
+rejoué après le partage de `commun.js` : demande envoyée, enregistrée, message
+de réussite complet.
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et
@@ -6470,7 +6566,7 @@ console. ⚠️ `.env` n'est PAS ignoré par Git : le supprimer après chaque v�
   Note : en dev, `--reload` a semblé se bloquer après plusieurs modifications de fichiers d'affilée
   (le process ne redémarrait plus) — si `/docs` ne reflète pas tes derniers changements, redémarre
   le serveur manuellement (Ctrl+C puis relance) plutôt que de compter sur le rechargement auto.
-- Tests : `cd backend && python -m unittest discover tests` (474 tests, tous OK).
+- Tests : `cd backend && python -m unittest discover tests` (481 tests, tous OK).
 - Défis et séances SONT branchés au front depuis le 24/09/2026 (voir « Lot du 24/09/2026 »).
 
 ## À faire (voir roadmap dans docs/CONTEXTE.md)

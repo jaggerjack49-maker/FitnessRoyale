@@ -2,26 +2,13 @@
    Fitness Royale — Coaching : l'envoi du formulaire.
    Pas de bibliothèque, pas d'étape de construction : ce fichier est servi
    tel quel. Le site est statique, seul ce formulaire parle à l'API.
+
+   L'adresse de l'API, le délai d'attente et la lecture des erreurs vivent
+   dans `commun.js`, partagé avec la page de lecture des demandes.
    ========================================================= */
 
 (function () {
   'use strict';
-
-  // L'ADRESSE DE L'API. En local (vérification dans le navigateur avec le
-  // backend lancé à côté), on tape le backend local ; partout ailleurs,
-  // l'adresse fixe en ligne. C'est le même principe que `obtenirBaseUrl()`
-  // dans src/api.js, en beaucoup plus simple : un site web n'a qu'un hôte.
-  var enLocal = ['localhost', '127.0.0.1', ''].indexOf(location.hostname) !== -1;
-  var API = enLocal ? 'http://localhost:8000' : 'https://fitnessroyale.onrender.com';
-
-  // ⚠️ LE DÉLAI EST LONG, ET C'EST VOULU. L'hébergement gratuit met la
-  // machine en veille après un moment d'inactivité : la toute première
-  // demande de la journée peut mettre près d'une minute à aboutir. Couper au
-  // bout de quelques secondes ferait croire à une panne et perdrait la
-  // demande d'une vraie personne. (Voir « Réveil du serveur » dans CLAUDE.md.)
-  var DELAI_MAX_MS = 70000;
-  // Au bout de ce temps, on explique l'attente au lieu de laisser tourner.
-  var DELAI_EXPLICATION_MS = 4000;
 
   var formulaire = document.getElementById('formulaire');
   var bouton = document.getElementById('envoyer');
@@ -51,20 +38,14 @@
     if (champ) { champ.classList.toggle('faux', fautif); }
   }
 
+  /* ⚠️ `textContent`, JAMAIS `innerHTML` : une partie de ce qu'on affiche ici
+     vient du serveur (le `detail` d'une erreur), et un de ses messages
+     recopie la valeur envoyée (« Objectif inconnu : … »). Posé en HTML, ce
+     texte pourrait porter une balise. Même règle que dans `admin.js`, et
+     `backend/tests/test_site_admin.py` la vérifie sur les deux fichiers. */
   function afficher(texte, genre) {
     message.className = 'message-envoi' + (genre ? ' ' + genre : '');
-    message.innerHTML = texte;
-  }
-
-  /* Transforme la réponse d'erreur de l'API en une phrase lisible.
-     Le `detail` est soit une chaîne (nos propres messages), soit la liste
-     des erreurs de validation — qu'on ne montre jamais telle quelle. */
-  function raisonLisible(corps, code) {
-    if (corps && typeof corps.detail === 'string') { return corps.detail; }
-    if (corps && Array.isArray(corps.detail)) {
-      return 'Un des champs ne convient pas. Vérifie ton âge, ton poids et ta taille.';
-    }
-    return 'Quelque chose a mal tourné (code ' + code + ').';
+    message.textContent = texte;
   }
 
   function construireDemande() {
@@ -100,28 +81,6 @@
     return null;
   }
 
-  function envoyer(demande) {
-    // AbortController fixe nous-mêmes la limite : sans ça, le navigateur
-    // peut abandonner bien plus tôt ou bien plus tard selon la plateforme.
-    var arret = new AbortController();
-    var minuteur = setTimeout(function () { arret.abort(); }, DELAI_MAX_MS);
-
-    return fetch(API + '/coaching/demandes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(demande),
-      signal: arret.signal
-    }).then(function (reponse) {
-      clearTimeout(minuteur);
-      return reponse.json().catch(function () { return {}; }).then(function (corps) {
-        return { ok: reponse.ok, code: reponse.status, corps: corps };
-      });
-    }, function (err) {
-      clearTimeout(minuteur);
-      throw err;
-    });
-  }
-
   function reussite() {
     // Le formulaire disparaît : le renvoyer serait refusé (une demande par
     // contact et par 24 h), et on ne laisse pas un bouton qui ne marche plus.
@@ -129,13 +88,16 @@
       bloc.remove();
     });
     bouton.remove();
-    afficher(
-      '<b>C\'est envoyé, merci.</b>' +
+
+    afficher('', 'ok');
+    var titre = document.createElement('b');
+    titre.textContent = 'C\'est envoyé, merci.';
+    message.appendChild(titre);
+    message.appendChild(document.createTextNode(
       'Je lis ta demande et je te recontacte très vite pour en parler. ' +
       'En attendant, tu peux déjà installer l\'application Fitness Royale et ' +
-      'créer ton compte : c\'est là que ton programme arrivera.',
-      'ok'
-    );
+      'créer ton compte : c\'est là que ton programme arrivera.'
+    ));
     message.scrollIntoView({ block: 'center' });
   }
 
@@ -158,9 +120,12 @@
         'jusqu\'à une minute, c\'est normal. Ne ferme pas la page.',
         'attente'
       );
-    }, DELAI_EXPLICATION_MS);
+    }, window.FR.DELAI_EXPLICATION_MS);
 
-    envoyer(construireDemande()).then(function (resultat) {
+    window.FR.appel('/coaching/demandes', {
+      methode: 'POST',
+      corps: construireDemande()
+    }).then(function (resultat) {
       clearTimeout(explication);
       if (resultat.ok) {
         reussite();
@@ -173,15 +138,13 @@
                  'elle est bien arrivée, je te réponds très vite.', 'ok');
         return;
       }
-      afficher('Demande non envoyée : ' + raisonLisible(resultat.corps, resultat.code) +
+      afficher('Demande non envoyée : ' +
+               window.FR.raisonLisible(resultat.corps, resultat.code) +
                ' Tu peux réessayer.', 'erreur');
     }).catch(function (err) {
       clearTimeout(explication);
       bouton.disabled = false;
-      var raison = (err && err.name === 'AbortError')
-        ? 'la connexion est trop lente'
-        : 'pas de connexion internet';
-      afficher('Demande non envoyée : ' + raison + '. ' +
+      afficher('Demande non envoyée : ' + window.FR.raisonReseau(err) + '. ' +
                'Vérifie ta connexion et réessaie — rien n\'est perdu, ' +
                'ce que tu as écrit est toujours là.', 'erreur');
     });

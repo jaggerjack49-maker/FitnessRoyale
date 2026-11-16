@@ -13,11 +13,19 @@ TRAVAILLER dessus.
 
 | Fichier | Rôle |
 |---|---|
-| `site/index.html` | toute la page (une seule), formulaire compris |
-| `site/styles.css` | la direction artistique, reprise de `src/designSystem.js` |
+| `site/index.html` | la page publique, formulaire compris |
 | `site/script.js` | l'envoi du formulaire, et rien d'autre |
+| `site/admin.html` | la page privée : lire les demandes reçues |
+| `site/admin.js` | la connexion, la liste, les changements d'état |
+| `site/commun.js` | ce que les deux pages partagent — **l'adresse de l'API** |
+| `site/styles.css` | la direction artistique, reprise de `src/designSystem.js` |
+| `site/admin.css` | ce que la page privée ajoute (la liste des demandes) |
 | `site/logo.png` | copie de `assets/logo-connexion.png` (33 ko) |
 | `site/favicon.png` | copie de `assets/favicon.png` |
+
+⚠️ **L'adresse de l'API n'est écrite que dans `commun.js`.** Recopiée ailleurs,
+elle finirait par diverger — et quand elle se trompe, elle pointe sur
+`localhost`, c'est-à-dire sur l'appareil du visiteur. Un test le vérifie.
 
 Aucune dépendance, aucune étape de construction : ce qui est dans le dossier
 est exactement ce qui est servi.
@@ -63,9 +71,28 @@ qu'elles divergent. **Changer les deux, puis lancer les tests.**
 
 ## Lire les demandes reçues
 
-Dans l'application, onglet Profil, carte « DEMANDES DE COACHING » — visible
-uniquement sur un compte administrateur. On y déplie chaque demande et on la
-fait avancer : Nouvelle → En cours → Acceptée ou Refusée.
+Sur le site lui-même, page **`/admin.html`** (en local :
+`http://127.0.0.1:8090/admin.html`). On s'y connecte avec son compte
+**administrateur** Fitness Royale — le même pseudo et le même mot de passe que
+dans l'application. On déplie chaque demande et on la fait avancer :
+Nouvelle → En cours → Acceptée ou Refusée. Le contact devient un lien :
+un clic ouvre le mail ou l'appel.
+
+Trois choses à savoir :
+
+- **La page n'est liée nulle part** et porte un `noindex` : on y va par son
+  adresse. Ce n'est pas ce qui protège les demandes — c'est le serveur, qui
+  refuse (403) tout compte non administrateur, et (401) toute visite sans
+  connexion. C'est juste une porte qu'on ne montre pas.
+- **La connexion est gardée** d'une visite à l'autre, comme dans l'app.
+  « Se déconnecter » détruit vraiment la session côté serveur : à faire sur un
+  ordinateur qui n'est pas le tien.
+- **Un compte ordinaire est refusé tout de suite**, avec un message clair.
+
+⚠️ Cette lecture n'existe plus dans l'application (elle y était jusqu'au
+16/11/2026, carte « DEMANDES DE COACHING » du Profil). Un seul endroit : deux
+écrans pour la même chose finissent toujours par diverger, et celui de l'app
+demandait en plus un nouvel APK à chaque retouche.
 
 ## Le mettre en ligne (à faire par Hafiz — accès au compte Render)
 
@@ -77,6 +104,12 @@ Render → **New +** → **Static Site** → dépôt `jaggerjack49-maker/Fitness
 - Build Command : **vide** (il n'y a rien à construire)
 - Publish Directory : **`site`**
 - Plan Free → Create Static Site
+
+Une fois en ligne, la page de lecture des demandes est à
+`https://<ton-site>/admin.html`. ⚠️ **Ne pas ajouter de règle « Rewrite `/*`
+→ `/index.html` »** dans Redirects/Rewrites : le site a deux pages bien
+réelles, et une règle attrape-tout servirait la page publique à la place de
+la page de lecture.
 
 Deux choses à savoir :
 - un Static Site ne dort jamais et ne consomme pas d'heures de service web

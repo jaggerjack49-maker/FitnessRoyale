@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demandes de coaching — Fitness Royale</title>
+
+<!-- ⚠️ PAS D'INDEXATION. Cette page n'a rien à faire dans Google : elle ne
+     sert qu'à Hafiz, et un formulaire de connexion référencé attire les
+     robots qui essaient des mots de passe au hasard. Elle n'est pas non plus
+     liée depuis la page publique (un test le vérifie) : on y vient par son
+     adresse, qu'on est seul à connaître. Ce n'est pas CE qui protège les
+     demandes — c'est le serveur, qui exige un compte administrateur — c'est
+     juste une porte qu'on ne montre pas. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<header class="entete">
+  <div class="bande">
+    <a class="marque" href="index.html">
+      <img src="logo.png" alt="" width="36" height="36">
+      <span class="marque-texte">FITNESS <b>ROYALE</b></span>
+    </a>
+    <nav class="nav">
+      <span id="qui" class="qui"></span>
+      <button id="deconnexion" class="nav-action bouton-nu" type="button" hidden>
+        Se déconnecter
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main class="section">
+
+  <h1 class="titre-section">DEMANDES DE <b>COACHING</b></h1>
+
+  <noscript>
+    <p class="note-section">Cette page a besoin de JavaScript pour fonctionner.</p>
+  </noscript>
+
+  <!-- ============ 1. SE CONNECTER ============ -->
+  <section id="vue-connexion" hidden>
+    <p class="note-section">
+      Page réservée. Connecte-toi avec ton compte administrateur Fitness
+      Royale — le même que dans l'application.
+    </p>
+
+    <form id="formulaire-connexion" class="formulaire formulaire-etroit">
+      <div class="champ">
+        <label for="pseudo">PSEUDO</label>
+        <input id="pseudo" name="pseudo" type="text" autocomplete="username"
+               autocapitalize="none" spellcheck="false">
+      </div>
+      <div class="champ">
+        <label for="mot_de_passe">MOT DE PASSE</label>
+        <input id="mot_de_passe" name="mot_de_passe" type="password"
+               autocomplete="current-password">
+      </div>
+      <button id="connecter" class="bouton-or bouton-large" type="submit">SE CONNECTER</button>
+      <p id="message-connexion" class="message-envoi" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- ============ 2. LES DEMANDES ============ -->
+  <section id="vue-liste" hidden>
+    <p id="resume" class="note-section"></p>
+
+    <div class="barre-outils">
+      <div id="filtres" class="filtres"></div>
+      <button id="actualiser" class="bouton-bordé bouton-petit" type="button">Actualiser</button>
+    </div>
+
+    <p id="message-liste" class="message-envoi" role="status" aria-live="polite"></p>
+
+    <div id="demandes"></div>
+
+    <p class="note-vie-privee">
+      Ces demandes contiennent les coordonnées de vraies personnes. Elles ne
+      sont visibles que par toi, et ne servent qu'à préparer leur coaching et
+      à leur répondre.
+    </p>
+  </section>
+
+</main>
+
+<footer class="pied">
+  <p class="marque-texte">FITNESS <b>ROYALE</b></p>
+  <p class="slogan-pied">FIGHT FOR IT</p>
+</footer>
+
+<script src="commun.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

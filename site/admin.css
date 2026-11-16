@@ -1,0 +1,262 @@
+/* =========================================================
+   Fitness Royale — Coaching : ce que la page de LECTURE ajoute.
+
+   `styles.css` porte toute la direction artistique et sert les deux pages ;
+   ce fichier-ci n'existe que pour la liste des demandes, que la page publique
+   n'affiche jamais. Elle n'a donc pas à transporter ces règles.
+   LES COULEURS D'ÉTAT viennent de src/theme.js, à l'identique : ce sont
+   celles que l'application emploie déjà pour dire « en cours », « réussi »,
+   « raté ».
+   ========================================================= */
+
+:root {
+  --accent: #55c8f0;   /* colors.accent */
+  --vert: #3ddc84;     /* colors.vert   */
+  --rouge: #ff5470;    /* colors.rouge  */
+}
+
+/* ---------- En-tête ---------- */
+
+.qui {
+  color: var(--texte-gris);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+/* Un bouton qui doit se lire comme un lien de la barre du haut.
+   ⚠️ La hauteur minimale est explicite : les règles de `.nav a` ne
+   s'appliquent pas à un <button>, et MESURÉ À L'ÉCRAN il tombait à 39 px,
+   sous le minimum confortable (44). */
+.bouton-nu {
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---------- Connexion ---------- */
+
+.formulaire-etroit {
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Barre d'outils ---------- */
+
+.barre-outils {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: var(--colonne-texte);
+  margin: 0 auto 16px;
+}
+
+.filtres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.puce-filtre,
+.puce-statut {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--bordure);
+  background: var(--carte);
+  color: var(--texte-doux);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.puce-filtre:hover,
+.puce-statut:hover:not([disabled]) {
+  border-color: var(--bordure-or);
+  color: var(--texte);
+}
+
+.puce-filtre.actif {
+  background: var(--or-voile-fort);
+  border-color: var(--bordure-or);
+  color: var(--or);
+}
+
+.bouton-petit {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* ---------- Une demande ---------- */
+
+.demande {
+  max-width: var(--colonne-texte);
+  margin: 0 auto 10px;
+  background: var(--carte);
+  border: 1px solid var(--bordure);
+  border-left: 3px solid var(--or);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.demande.en_cours { border-left-color: var(--accent); }
+.demande.acceptee { border-left-color: var(--vert); }
+.demande.refusee { border-left-color: var(--rouge); }
+
+.entete-demande {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.entete-demande:hover { background: rgba(255, 255, 255, .03); }
+
+.entete-gauche { flex: 1; min-width: 0; }
+
+.prenom {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--texte);
+}
+
+.resume-demande {
+  display: block;
+  font-size: 13px;
+  color: var(--texte-gris);
+  line-height: 1.4;
+}
+
+.entete-droite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  border: 1px solid var(--or);
+  color: var(--or);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.badge.en_cours { border-color: var(--accent); color: var(--accent); }
+.badge.acceptee { border-color: var(--vert); color: var(--vert); }
+.badge.refusee { border-color: var(--rouge); color: var(--rouge); }
+
+.date-demande {
+  font-family: var(--chasse-fixe);
+  font-size: 11px;
+  color: var(--texte-muet);
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--texte-gris);
+  font-size: 14px;
+  transition: transform .15s ease;
+}
+
+.demande.deplie .chevron { transform: rotate(180deg); }
+
+/* ---------- Le détail déplié ---------- */
+
+.detail-demande {
+  border-top: 1px solid var(--bordure);
+  padding: 4px 14px 14px;
+}
+
+.ligne-detail { margin-top: 12px; }
+
+.etiquette-detail {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: var(--texte-muet);
+}
+
+.etiquette-statuts { margin-top: 20px; }
+
+.valeur-detail {
+  margin: 2px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--texte);
+  /* Un message écrit par quelqu'un peut contenir un mot à rallonge ou une
+     adresse sans espace : il doit se couper plutôt que déborder. */
+  overflow-wrap: anywhere;
+}
+
+.rangee-statuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.puce-statut[disabled] { cursor: default; }
+
+.puce-statut.actif {
+  background: var(--or-voile);
+  border-color: var(--or);
+  color: var(--or);
+}
+
+.puce-statut.actif.en_cours { border-color: var(--accent); color: var(--accent); }
+.puce-statut.actif.acceptee { border-color: var(--vert); color: var(--vert); }
+.puce-statut.actif.refusee { border-color: var(--rouge); color: var(--rouge); }
+
+/* ---------- Liste vide ---------- */
+
+.vide {
+  max-width: var(--colonne-texte);
+  margin: 0 auto;
+  color: var(--texte-muet);
+  font-size: 15px;
+}
+
+/* Les messages de cette page sont centrés sur la colonne, comme le reste. */
+#message-liste,
+#resume {
+  max-width: var(--colonne-texte);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Petits écrans ---------- */
+
+@media (max-width: 519px) {
+  /* Les filtres passent sur plusieurs lignes : « Actualiser » doit descendre
+     SOUS eux, pas se glisser au milieu de la grille de puces (vu à l'écran). */
+  .filtres { flex-basis: 100%; }
+  .entete-droite { align-items: flex-end; }
+  .date-demande { display: none; }  /* la date complète est dans le détail */
+  .qui { display: none; }
+}
