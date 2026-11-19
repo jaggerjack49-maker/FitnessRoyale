@@ -3,7 +3,7 @@
 import {
   lundiISO, e1rm, exercicesSuivis, courbeExercice, variation,
   seancesParSemaine, statistiques, volumeLisible, dureeSeanceLisible,
-  dernieresSeancesExercice,
+  dernieresSeancesExercice, rangerExercicesParGroupe, resumeExercice, GROUPE_AUTRES,
 } from '../../../src/logic/progres.js';
 
 const s = (exercice, poids, reps) => ({ exercice, poids, reps });
@@ -151,6 +151,50 @@ const cas = [
   ['journal : données abîmées → pas de plantage',
     () => dernieresSeancesExercice([null, 3, { date: 5 }, { date: '2026-11-01', series: [null, 'x'] },
       { id: 1, date: '2026-11-02', series: [s('Squat', 90, 5)] }], 'Squat').length, 1],
+  // ---- Les progrès rangés par exercice (19/11/2026) ----
+  ['par groupe : rangés dans l\'ordre des groupes, « Autres » à la fin',
+    () => rangerExercicesParGroupe(historique,
+      (n) => ({ Squat: 'Quadriceps', Dips: 'Pectoraux', Tractions: 'Dos' })[n] || null,
+      ['Pectoraux', 'Dos', 'Quadriceps'])
+      .map((g) => [g.groupe, g.exercices.map((e) => e.exercice)]),
+    [['Pectoraux', ['Dips']], ['Dos', ['Tractions']], ['Quadriceps', ['Squat']],
+      [GROUPE_AUTRES, ['Curl']]]],
+  ['par groupe : un groupe hors de l\'ordre passe avant « Autres »',
+    () => rangerExercicesParGroupe(historique, (n) => (n === 'Curl' ? 'Biceps' : null), ['Dos'])
+      .map((g) => g.groupe), ['Biceps', GROUPE_AUTRES]],
+  ['par groupe : une règle qui plante ne casse rien (tout en « Autres »)',
+    () => rangerExercicesParGroupe(historique, () => { throw new Error('x'); }, [])
+      .map((g) => g.groupe), [GROUPE_AUTRES]],
+  ['par groupe : sans séance → vide', () => rangerExercicesParGroupe(null, () => 'Dos', []), []],
+  ['exercice : nombre de séances, première et dernière fois',
+    () => { const r = resumeExercice(historique, 'Squat');
+      return [r.nbSeances, r.premiere, r.derniere]; }, [5, '2026-10-06', '2026-11-05']],
+  ['exercice : le record est la série la plus lourde, à sa PREMIÈRE date',
+    () => resumeExercice(historique, 'Squat').record, { poids: 110, reps: 5, date: '2026-11-05' }],
+  ['exercice : à égalité, le record reste à la séance où il est né',
+    () => { const r = resumeExercice([
+      { id: 1, date: '2026-10-01', series: [s('Squat', 100, 5)] },
+      { id: 2, date: '2026-10-08', series: [s('Squat', 100, 5)] }], 'Squat');
+      return [r.record.date, r.seances.map((l) => l.estRecord)]; },
+    ['2026-10-01', [false, true]]],
+  ['exercice : chaque séance porte sa meilleure série',
+    () => resumeExercice(historique, 'Squat').seances.map((l) => l.meilleure),
+    [{ poids: 110, reps: 5 }, { poids: 102.5, reps: 8 }, { poids: 105, reps: 6 },
+      { poids: 110, reps: 3 }, { poids: 100, reps: 8 }]],
+  ['exercice : le meilleur 1RM estimé ne vient pas forcément de la série la plus lourde (102,5 × 8 bat 110 × 5)',
+    () => resumeExercice(historique, 'Squat').meilleur1RM,
+    { valeur: 130, date: '2026-10-20' }],
+  ['exercice : au poids du corps, pas de 1RM et le drapeau levé',
+    () => { const r = resumeExercice(historique, 'Dips');
+      return [r.auPoidsDuCorps, r.meilleur1RM, r.record]; },
+    [true, null, { poids: 0, reps: 15, date: '2026-10-20' }]],
+  ['exercice : la séance d\'où il vient est gardée',
+    () => resumeExercice([{ id: 4, date: '2026-11-01', programme_id: 7,
+      series: [s('Squat', 90, 5)] }], 'Squat').seances[0].programme_id, 7],
+  ['exercice : jamais fait ou données abîmées → null, pas de plantage',
+    () => [resumeExercice(historique, 'Fentes'), resumeExercice(null, 'Squat'),
+      resumeExercice([{ id: 1, date: '2026-11-01', series: [s('Squat', 90, 0)] }], 'Squat')],
+    [null, null, null]],
   ['journal : entrées absurdes → vide',
     () => [dernieresSeancesExercice(null, 'Squat'), dernieresSeancesExercice(historique, null)], [[], []]],
 ];

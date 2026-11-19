@@ -269,7 +269,11 @@ export function dernieresSeancesExercice(entrainements, exercice, limite = 5) {
     const series = (Array.isArray(e.series) ? e.series : [])
       .filter((s) => s && typeof s === 'object' && s.exercice === exercice)
       .map((s) => ({ reps: s.reps, poids: s.poids, rir: s.rir ?? null }));
-    if (series.length > 0) lignes.push({ id: e.id, date: e.date, series });
+    // `programme_id` (19/11/2026) : la page d'un exercice dit de quelle
+    // séance venait chaque ligne (« Push », « Séance libre »).
+    if (series.length > 0) {
+      lignes.push({ id: e.id, date: e.date, programme_id: e.programme_id ?? null, series });
+    }
   }
   lignes.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -280,4 +284,93 @@ export function dernieresSeancesExercice(entrainements, exercice, limite = 5) {
     return Number(b.id) - Number(a.id) || 0;
   });
   return lignes.slice(0, n);
+}
+
+// ---------------------------------------------------------------------------
+// LES PROGRÈS RANGÉS PAR EXERCICE (19/11/2026)
+// ---------------------------------------------------------------------------
+// Demande de Hafiz : « ajoute un rangement des progrès par exercice : on clique
+// sur un exercice en particulier et on voit les perfs qu'on a déjà faites ».
+
+// LA LISTE, RANGÉE PAR GROUPE MUSCULAIRE.
+// `groupeDe(nom)` donne le groupe d'un exercice (ou null) : l'écran passe
+// `groupeDeLExercice` avec ses corrections — la MÊME règle que le volume par
+// groupe, donc un exercice n'est jamais rangé ici dans un autre groupe que là.
+// Elle est reçue en paramètre plutôt qu'importée : ce fichier reste sans
+// dépendance, donc testable tel quel.
+// `ordre` = l'ordre des groupes à l'écran ; un groupe inconnu passe après,
+// et les exercices sans groupe ferment la marche sous « Autres ».
+// Dans chaque groupe, l'ordre de `exercicesSuivis` (les plus pratiqués d'abord).
+export const GROUPE_AUTRES = 'Autres';
+
+export function rangerExercicesParGroupe(entrainements, groupeDe, ordre = []) {
+  const parGroupe = new Map();
+  for (const exo of exercicesSuivis(entrainements)) {
+    let groupe = null;
+    try { groupe = typeof groupeDe === 'function' ? groupeDe(exo.exercice) : null; } catch { groupe = null; }
+    const cle = typeof groupe === 'string' && groupe ? groupe : GROUPE_AUTRES;
+    if (!parGroupe.has(cle)) parGroupe.set(cle, []);
+    parGroupe.get(cle).push(exo);
+  }
+  const liste = Array.isArray(ordre) ? ordre : [];
+  const rang = (g) => (g === GROUPE_AUTRES ? Infinity
+    : liste.indexOf(g) >= 0 ? liste.indexOf(g) : liste.length);
+  return [...parGroupe.entries()]
+    .sort(([a], [b]) => rang(a) - rang(b) || a.localeCompare(b))
+    .map(([groupe, exercices]) => ({ groupe, exercices }));
+}
+
+// LA PAGE D'UN EXERCICE : tout ce qu'on a déjà fait dessus.
+//   nbSeances, premiere, derniere (dates) ;
+//   record    — la meilleure série jamais faite (la plus lourde, puis la plus
+//               longue : la règle des records) + sa date ;
+//   meilleur1RM — le meilleur 1RM estimé + sa date (null au poids du corps) ;
+//   auPoidsDuCorps — aucune charge jamais notée ;
+//   seances   — TOUTES les séances, la plus récente d'abord, chacune avec sa
+//               meilleure série (`meilleure`) et `estRecord` sur LA séance du
+//               record (la plus ancienne qui l'a atteint : c'est là qu'il est né).
+// null si l'exercice n'a jamais été fait.
+const PLAFOND_SEANCES = 1000;
+
+function meilleureDe(series) {
+  return series.reduce((m, s) => {
+    const poids = Math.max(0, Number(s.poids) || 0);
+    const reps = Number(s.reps);
+    if (!Number.isFinite(reps) || reps <= 0) return m;
+    if (!m || poids > m.poids || (poids === m.poids && reps > m.reps)) return { poids, reps };
+    return m;
+  }, null);
+}
+
+export function resumeExercice(entrainements, exercice) {
+  const seances = dernieresSeancesExercice(entrainements, exercice, PLAFOND_SEANCES)
+    .filter((l) => enJours(l.date) !== null)
+    .map((l) => ({ ...l, meilleure: meilleureDe(l.series) }))
+    .filter((l) => l.meilleure);
+  if (seances.length === 0) return null;
+
+  let record = null;
+  let meilleur1RM = null;
+  // Du plus ANCIEN au plus récent : à égalité, le record reste à la séance où
+  // il a été atteint la première fois.
+  for (const l of [...seances].reverse()) {
+    const m = l.meilleure;
+    if (!record || m.poids > record.poids || (m.poids === record.poids && m.reps > record.reps)) {
+      record = { ...m, date: l.date, id: l.id };
+    }
+    const estime = Math.max(...l.series.map((s) => e1rm(s.poids, s.reps)));
+    if (estime > 0 && (!meilleur1RM || estime > meilleur1RM.valeur)) {
+      meilleur1RM = { valeur: estime, date: l.date };
+    }
+  }
+  const dates = seances.map((l) => l.date);
+  return {
+    nbSeances: seances.length,
+    premiere: dates[dates.length - 1],
+    derniere: dates[0],
+    record: { poids: record.poids, reps: record.reps, date: record.date },
+    meilleur1RM,
+    auPoidsDuCorps: seances.every((l) => l.series.every((s) => !(Number(s.poids) > 0))),
+    seances: seances.map((l) => ({ ...l, estRecord: l.id === record.id && l.date === record.date })),
+  };
 }

@@ -13,7 +13,9 @@ import { Icone, TexteIcone } from '../../components/Icones';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { aujourdhui, dateCourteRecord, libelleDate, typeDeSeance } from './outils';
 import { colors, espacement } from '../../theme';
-import { courbeExercice, dureeSeanceLisible, exercicesSuivis, seancesParSemaine, statistiques, variation, volumeLisible } from '../../logic/progres';
+import { courbeExercice, dureeSeanceLisible, exercicesSuivis, rangerExercicesParGroupe, seancesParSemaine, statistiques, variation, volumeLisible } from '../../logic/progres';
+import { groupeDeLExercice, groupesMusculaires } from '../../data/groupesMusculaires';
+import { recordPersonnel } from '../../logic/surchargeProgressive';
 import { styles } from './styles';
 
 // ================= SOUS-ÉCRAN : PROGRÈS =================
@@ -30,7 +32,15 @@ export function vueProgres(ctx) {
     mesRecords, mesureCourbe, placeHistorique, programmes, recordsOuverts,
     setEntrainementSelectionne, setExerciceCourbe, setMesureCourbe,
     setRecordsOuverts, setTousExercicesCourbe, setVue, tousExercicesCourbe,
+    correctionsGroupes, setExerciceProgres,
   } = ctx;
+
+  // LA PAGE D'UN EXERCICE (19/11/2026) : ouverte depuis « Mes exercices » ou
+  // un record.
+  const ouvrirExercice = (nom) => { setExerciceProgres(nom); setVue('progresExercice'); };
+  // Rangés par groupe musculaire, avec la MÊME règle que le volume par groupe.
+  const parGroupe = rangerExercicesParGroupe(entrainements,
+    (nom) => groupeDeLExercice(nom, correctionsGroupes), groupesMusculaires);
 
 
   const stats = statistiques(entrainements, aujourdhui());
@@ -89,6 +99,39 @@ export function vueProgres(ctx) {
           <Text style={[stylesHub.libelleSection, styles.libelleProgres]}>ACTIVITÉ — 12 SEMAINES</Text>
           <View style={styles.carteModele}>
             <BarresActivite semaines={semainesActivite} libelleDate={libelleDate} />
+          </View>
+
+          {/* ---- MES EXERCICES (19/11/2026) : les progrès rangés par
+              exercice, eux-mêmes rangés par groupe musculaire. Toucher un
+              exercice ouvre sa page : record, courbe, toutes ses séances. ---- */}
+          <Text style={[stylesHub.libelleSection, styles.libelleProgres]}>
+            MES EXERCICES ({suivis.length})
+          </Text>
+          <View style={styles.carteModele}>
+            {parGroupe.map(({ groupe, exercices }, indexGroupe) => (
+              <View key={groupe} style={indexGroupe > 0 ? { marginTop: espacement.m } : null}>
+                <Text style={stylesListe.groupe}>{groupe.toUpperCase()}</Text>
+                {exercices.map((e) => {
+                  const record = recordPersonnel(entrainements, e.exercice);
+                  return (
+                    <TouchableOpacity key={e.exercice} style={stylesListe.ligne}
+                      onPress={() => ouvrirExercice(e.exercice)}
+                      accessibilityLabel={`Voir mes perfs sur ${e.exercice}`}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={stylesListe.nom} numberOfLines={2}>{e.exercice}</Text>
+                        <Text style={stylesListe.resume}>
+                          {e.nbSeances} séance{e.nbSeances > 1 ? 's' : ''}
+                          {record ? ` · record ${record.poids > 0
+                            ? `${String(record.poids).replace('.', ',')} kg × ${record.reps}`
+                            : `${record.reps} reps`}` : ''}
+                        </Text>
+                      </View>
+                      <Icone nom="chevron-droit" taille={16} couleur={colors.texteGris} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
           </View>
 
           {/* ---- La courbe d'un exercice ---- */}
@@ -175,7 +218,7 @@ export function vueProgres(ctx) {
             <View style={styles.carteModele}>
               <Text style={styles.indice}>
                 Ta série la plus lourde sur chaque exercice, toutes séances
-                confondues. Touche un exercice pour voir sa courbe.
+                confondues. Touche un exercice pour ouvrir sa page.
               </Text>
               {/* LECTURE SEULE (09/09/2026, demande de Hafiz : « au niveau des
                   records on ne doit pas pouvoir renommer les exercices »).
@@ -189,12 +232,9 @@ export function vueProgres(ctx) {
                   (08/11/2026) — toujours sans rien renommer. */}
               {mesRecords.map((r) => (
                 <TouchableOpacity key={r.exercice} style={styles.ligneRecord}
-                  onPress={() => {
-                    setExerciceCourbe(r.exercice);
-                    if (!suivis.slice(0, 6).some((e) => e.exercice === r.exercice)) {
-                      setTousExercicesCourbe(true);
-                    }
-                  }}>
+                  // Depuis le 19/11/2026, un record ouvre la PAGE de son
+                  // exercice (courbe + toutes ses séances).
+                  onPress={() => ouvrirExercice(r.exercice)}>
                   <Text style={[styles.nomRecord, r.exercice === exoCourbe && { color: colors.or }]}
                     numberOfLines={1}>{r.exercice}</Text>
                   <Text style={styles.valeurRecord}>
@@ -242,3 +282,18 @@ export function vueProgres(ctx) {
     </ScrollView>
   );
 }
+
+// La liste « Mes exercices » (19/11/2026). Chaque ligne fait au moins 44 px :
+// c'est une cible qu'on touche.
+const stylesListe = {
+  groupe: {
+    color: colors.texteGris, fontSize: 10, fontWeight: '800', letterSpacing: 1.5,
+    marginBottom: 2,
+  },
+  ligne: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48,
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.bordure,
+  },
+  nom: { color: colors.texte, fontSize: 14, fontWeight: '700' },
+  resume: { color: colors.texteGris, fontSize: 12, marginTop: 1 },
+};

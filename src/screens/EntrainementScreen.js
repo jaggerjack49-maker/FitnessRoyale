@@ -54,6 +54,7 @@ import { vueProgrammes } from './entrainement/vueProgrammes';
 import { vueBibliotheque } from './entrainement/vueBibliotheque';
 import { vueSuivi } from './entrainement/vueSuivi';
 import { vueProgres } from './entrainement/vueProgres';
+import { vueProgresExercice } from './entrainement/vueProgresExercice';
 import { EnteteSousEcran } from './entrainement/sousEcran';
 import { vueAccueil } from './entrainement/vueAccueil';
 
@@ -123,6 +124,7 @@ export default function EntrainementScreen({
   // plus qu'un HUB : les sections lourdes vivent dans leur propre sous-écran.
   // 'accueil' | 'programmes' | 'suivi' | 'historique' | 'nutrition'
   // | 'nouveauProgramme' | 'seance' | 'historiqueDetail' | 'tableau'
+  // | 'progresExercice' (la page d'un exercice, 19/11/2026)
   const [vue, setVue] = useState('accueil');
 
   // ---- Garder sa place dans l'accueil (14/09/2026, demande de Hafiz) ----
@@ -228,6 +230,10 @@ export default function EntrainementScreen({
   const [exerciceCourbe, setExerciceCourbe] = useState(null);
   const [mesureCourbe, setMesureCourbe] = useState('charge');
   const [tousExercicesCourbe, setTousExercicesCourbe] = useState(false);
+  // LA PAGE D'UN EXERCICE (19/11/2026) : son nom, ou null. Tant qu'elle est
+  // ouverte, le détail d'une séance passée REVIENT sur elle (pas à Progrès).
+  const [exerciceProgres, setExerciceProgres] = useState(null);
+  const vueRetourDetail = exerciceProgres ? 'progresExercice' : 'historique';
 
   // ---- Les séances à rattraper que l'utilisateur a MASQUÉES (08/11/2026) ----
   // Une préférence d'AFFICHAGE, propre à ce téléphone : elle vit dans
@@ -677,7 +683,8 @@ export default function EntrainementScreen({
   // passe alors à App.js, qui ramène au Profil.
   useRetour(actif && (vue === 'seance' || vue === 'historiqueDetail' || vue === 'nouveauProgramme'
     || vue === 'tableau' || vue === 'programmes' || vue === 'suivi'
-    || vue === 'historique' || vue === 'nutrition' || vue === 'bibliotheque'), () => {
+    || vue === 'historique' || vue === 'nutrition' || vue === 'bibliotheque'
+    || vue === 'progresExercice'), () => {
     // Pendant la séance, le retour la RÉDUIT (15/11/2026) — il ne l'annule
     // jamais : elle reste en cours, un bandeau permet de la reprendre.
     if (vue === 'seance') { reduireSeance(); return true; }
@@ -694,6 +701,12 @@ export default function EntrainementScreen({
       // Le détail d'une séance s'ouvre DEPUIS l'historique : on y revient,
       // pas à l'accueil.
       setEntrainementSelectionne(null);
+      setVue(vueRetourDetail);
+      return true;
+    }
+    // La page d'un exercice s'ouvre depuis « Progrès » : on y revient.
+    if (vue === 'progresExercice') {
+      setExerciceProgres(null);
       setVue('historique');
       return true;
     }
@@ -1643,7 +1656,7 @@ export default function EntrainementScreen({
       setSuppressionSeance(false);
       setCorrectionSeance(null);
       setEntrainementSelectionne(null);
-      setVue('historique');
+      setVue(vueRetourDetail);
       await rechargerSeances?.();
     } catch (err) {
       setSuppressionSeance(false);
@@ -2406,6 +2419,7 @@ export default function EntrainementScreen({
     setSuppressionSeance, ouvrirCorrection, fermerCorrection, majLigneCorrection,
     retirerLigneCorrection, enregistrerCorrection, supprimerSeanceEnregistree,
     setCorrectionSeance,
+    exerciceProgres, setExerciceProgres, vueRetourDetail,
   };
 
   if (vue === 'historiqueDetail' && entrainementSelectionne) return avecBandeau(vueDetailSeance(ctx));
@@ -2707,6 +2721,10 @@ export default function EntrainementScreen({
   if (vue === 'suivi') return avecBandeau(vueSuivi(ctxAccueil));
 
   if (vue === 'historique') return avecBandeau(vueProgres(ctxAccueil));
+
+  if (vue === 'progresExercice' && exerciceProgres) {
+    return avecBandeau(vueProgresExercice(ctxAccueil));
+  }
 
   // ================= SOUS-ÉCRAN : NUTRITION =================
   if (vue === 'nutrition') {

@@ -6602,6 +6602,41 @@ sur grand écran la colonne fait 680 px centrés. Le formulaire PUBLIC a été
 rejoué après le partage de `commun.js` : demande envoyée, enregistrée, message
 de réussite complet.
 
+## Les progrès rangés par exercice — 19/11/2026
+
+Demande de Hafiz : « ajoute un rangement des progrès par exercice : on clique sur un exercice en
+particulier et on voit les perfs qu'on a déjà faites ».
+
+- **Progrès → « MES EXERCICES (N) »**, juste après l'activité : tous les exercices déjà faits,
+  RANGÉS PAR GROUPE MUSCULAIRE (Pectoraux, Dos…, puis « Autres »), chacun avec « N séances ·
+  record 120 kg × 8 » et un chevron. `rangerExercicesParGroupe(entrainements, groupeDe, ordre)`
+  (`src/logic/progres.js`) — le groupe vient de `groupeDeLExercice` avec les corrections du
+  joueur, la MÊME règle que le volume par groupe : un exercice n'est jamais rangé ici ailleurs
+  que là. La règle est reçue en paramètre (pas importée) pour que progres.js reste sans
+  dépendance et testable ; si elle plante, l'exercice tombe dans « Autres ».
+- **Toucher un exercice ouvre SA PAGE** (`vue === 'progresExercice'`,
+  `src/screens/entrainement/vueProgresExercice.js`, état `exerciceProgres`) : tuiles RECORD,
+  1RM ESTIMÉ (pas au poids du corps), SÉANCES, DERNIÈRE FOIS ; la courbe (mêmes mesures que
+  Progrès) ; puis **TOUTES les séances** de l'exercice, la plus récente d'abord, avec le type de
+  séance, la meilleure série et chaque série (RIR compris). La séance où le record est NÉ porte
+  un badge « RECORD » (à égalité, la plus ancienne). Calcul : `resumeExercice` (progres.js).
+- Toucher une séance ouvre son DÉTAIL, et le retour (lien comme retour Android) ramène sur la
+  page de l'exercice, pas sur Progrès : `vueRetourDetail` = `'progresExercice'` tant qu'un
+  exercice est ouvert. Idem après suppression d'une séance depuis le détail.
+- **Un record de « Mes records » ouvre aussi la page de son exercice** (il ne faisait que
+  changer la courbe). La section « Courbe par exercice » de Progrès est inchangée.
+- `dernieresSeancesExercice` renvoie aussi `programme_id` (pour nommer la séance).
+- Tests : 14 cas de plus dans `harnais_progres.mjs` (rangement, « Autres » à la fin, règle qui
+  plante, record à sa première date, meilleure série par séance, 1RM qui ne vient pas forcément
+  de la série la plus lourde, poids du corps, données abîmées). **4 mutations vues échouer.**
+  Suite complète : **481 tests, tous OK.**
+- Navigateur (390 px, serveur LOCAL via `.env` temporaire, `SondeTest`) : 14 exercices rangés
+  par groupe ; « developpe couche » → record 120 kg × 8 du 6 octobre, 1RM 152 kg, 5 séances
+  listées série par série (virgule décimale), badge RECORD sur le 6 octobre ; séance touchée →
+  détail → « ← Retour à « developpe couche » » ramène sur la page ; un record de « Mes records »
+  ouvre la page de « presse coach ». Aucun débordement, zéro erreur console.
+  ⚠️ Demande un NOUVEL APK (côté app seulement, rien à déployer sur le serveur).
+
 ## Backend (backend/) — Python + FastAPI + SQLite
 
 - `logique.py` = portage exact de classement.js (tests dans test_logique.py). `duels.py` et

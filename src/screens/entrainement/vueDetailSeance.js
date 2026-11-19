@@ -20,7 +20,7 @@ import { styles } from './styles';
 export function vueDetailSeance(ctx) {
   const {
     creerProgrammeDepuisSeance, entrainementSelectionne, programmes,
-    setEntrainementSelectionne, setVue,
+    setEntrainementSelectionne, setVue, exerciceProgres, vueRetourDetail,
     correctionSeance, correctionEnCours, erreurCorrection, suppressionSeance,
     setSuppressionSeance, ouvrirCorrection, fermerCorrection, majLigneCorrection,
     retirerLigneCorrection, enregistrerCorrection, supprimerSeanceEnregistree,
@@ -194,8 +194,12 @@ export function vueDetailSeance(ctx) {
           )}
         />
       ) : null}
-      <TouchableOpacity onPress={() => { setVue('historique'); setEntrainementSelectionne(null); }}>
-        <Text style={styles.lienAnnuler}>← Retour aux progrès</Text>
+      {/* Le retour ramène d'où l'on vient : la page d'un exercice
+          (19/11/2026) ou « Progrès ». */}
+      <TouchableOpacity onPress={() => { setVue(vueRetourDetail); setEntrainementSelectionne(null); }}>
+        <Text style={styles.lienAnnuler}>
+          {exerciceProgres ? `← Retour à « ${exerciceProgres} »` : '← Retour aux progrès'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
